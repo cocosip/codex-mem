@@ -1,6 +1,7 @@
 data/
 bin/
 .gocache/
+logs/
 *.db
 *.db-shm
 *.db-wal

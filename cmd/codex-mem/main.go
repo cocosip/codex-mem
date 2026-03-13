@@ -12,7 +12,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	logger := observability.NewLogger(slog.LevelInfo)
+	logger := observability.NewBootstrapLogger(slog.LevelInfo)
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load("")
@@ -20,7 +20,12 @@ func main() {
 		logger.Error("load config", "err", err)
 		os.Exit(1)
 	}
-	logger = observability.NewLogger(cfg.LogLevel)
+	logger, logCloser, err := observability.NewLogger(cfg)
+	if err != nil {
+		slog.Default().Error("initialize logger", "err", err, "log_file", cfg.LogFilePath)
+		os.Exit(1)
+	}
+	defer logCloser.Close()
 	slog.SetDefault(logger)
 
 	if err := app.Run(ctx, cfg, os.Args[1:], os.Stdout); err != nil {

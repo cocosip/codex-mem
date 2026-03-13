@@ -134,6 +134,7 @@ Immediate next tasks:
 - `AGENTS.md` should remain cache-friendly and stable.
 - The first coding slice should focus on Phase 1 foundation work.
 - Go logging should use `log/slog`.
+- `slog` output should be written to a rotated log file with retention/compression support.
 - If a config file is introduced, it should live under the repository `configs/` directory.
 - The SQLite driver is `modernc.org/sqlite`.
 - Schema migrations are embedded SQL files under `migrations/` and are applied automatically on startup.
