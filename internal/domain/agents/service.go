@@ -1,3 +1,4 @@
+// Package agents installs AGENTS.md guidance files from embedded templates.
 package agents
 
 import (
@@ -19,16 +20,19 @@ const (
 
 var unresolvedPlaceholderPattern = regexp.MustCompile(`<[^>\n]+>`)
 
+// Options configures AGENTS installation behavior.
 type Options struct {
 	HomeDir string
 }
 
+// Service installs global and project AGENTS.md files.
 type Service struct {
 	options         Options
 	globalTemplate  string
 	projectTemplate string
 }
 
+// NewService constructs a Service backed by the embedded AGENTS templates.
 func NewService(options Options) *Service {
 	return &Service{
 		options:         options,
@@ -37,6 +41,7 @@ func NewService(options Options) *Service {
 	}
 }
 
+// Install writes AGENTS.md content for the requested target and mode.
 func (s *Service) Install(ctx context.Context, input InstallInput) (InstallOutput, error) {
 	_ = ctx
 

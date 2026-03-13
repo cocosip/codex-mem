@@ -1,3 +1,4 @@
+// Package scope resolves and validates canonical system/project/workspace identity.
 package scope
 
 import (
@@ -9,19 +10,23 @@ import (
 	"codex-mem/internal/identity"
 )
 
+// Options configures default values used during scope resolution.
 type Options struct {
 	DefaultSystemName string
 }
 
+// Service resolves canonical scope records from local repository context.
 type Service struct {
 	repo    Repository
 	options Options
 }
 
+// NewService constructs a scope resolver service.
 func NewService(repo Repository, options Options) *Service {
 	return &Service{repo: repo, options: options}
 }
 
+// Resolve discovers and persists canonical system, project, and workspace scope records.
 func (s *Service) Resolve(ctx context.Context, input ResolveInput) (ResolveOutput, error) {
 	_ = ctx
 

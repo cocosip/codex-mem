@@ -13,7 +13,7 @@ type fakeRepository struct {
 	created  Handoff
 }
 
-func (f *fakeRepository) FindLatestOpenByTask(ref scope.Ref, task string) (*Handoff, error) {
+func (f *fakeRepository) FindLatestOpenByTask(_ scope.Ref, _ string) (*Handoff, error) {
 	return f.existing, nil
 }
 
@@ -34,7 +34,7 @@ type fixedIDFactory struct {
 	value string
 }
 
-func (f fixedIDFactory) New(prefix string) string {
+func (f fixedIDFactory) New(_ string) string {
 	return f.value
 }
 
@@ -130,3 +130,5 @@ func TestSaveHandoffRejectsPrivateIntent(t *testing.T) {
 		t.Fatal("expected private handoff to be rejected")
 	}
 }
+
+

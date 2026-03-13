@@ -1,3 +1,4 @@
+// Package retrieval assembles bootstrap, recent-history, and search views across durable records.
 package retrieval
 
 import (
@@ -17,14 +18,17 @@ import (
 const defaultBootstrapNotes = 5
 const relatedProjectRelationType = "referenced_by_note"
 
+// ScopeResolver resolves the current workspace and project scope for retrieval operations.
 type ScopeResolver interface {
 	Resolve(ctx context.Context, input scope.ResolveInput) (scope.ResolveOutput, error)
 }
 
+// SessionStarter starts a new session tied to a resolved scope.
 type SessionStarter interface {
 	Start(ctx context.Context, input session.StartInput) (session.StartOutput, error)
 }
 
+// MemoryReader defines the note-reading operations used by retrieval workflows.
 type MemoryReader interface {
 	ListRecentByWorkspace(workspaceID string, limit int, minImportance int) ([]memory.Note, error)
 	ListRecentByProject(projectID string, excludeWorkspaceID string, limit int, minImportance int) ([]memory.Note, error)
@@ -35,6 +39,7 @@ type MemoryReader interface {
 	SearchProjects(systemID string, projectIDs []string, query string, limit int, minImportance int, types []memory.NoteType, states []memory.Status) ([]memory.Note, error)
 }
 
+// HandoffReader defines the handoff-reading operations used by retrieval workflows.
 type HandoffReader interface {
 	FindLatestOpenInWorkspace(workspaceID string) (*handoff.Handoff, error)
 	FindLatestOpenInProject(projectID string, excludeWorkspaceID string) (*handoff.Handoff, error)
@@ -44,6 +49,7 @@ type HandoffReader interface {
 	Search(scope scope.Ref, query string, limit int, states []handoff.Status) ([]handoff.Handoff, error)
 }
 
+// Service coordinates retrieval operations across scope, session, notes, and handoffs.
 type Service struct {
 	scopeResolver  ScopeResolver
 	sessionStarter SessionStarter
@@ -51,6 +57,7 @@ type Service struct {
 	handoffReader  HandoffReader
 }
 
+// NewService constructs a retrieval Service from its collaborating dependencies.
 func NewService(scopeResolver ScopeResolver, sessionStarter SessionStarter, memoryReader MemoryReader, handoffReader HandoffReader) *Service {
 	return &Service{
 		scopeResolver:  scopeResolver,
@@ -60,6 +67,7 @@ func NewService(scopeResolver ScopeResolver, sessionStarter SessionStarter, memo
 	}
 }
 
+// BootstrapInput controls how a new session bootstrap should resolve and hydrate context.
 type BootstrapInput struct {
 	CWD                    string
 	Task                   string
@@ -71,6 +79,7 @@ type BootstrapInput struct {
 	MaxHandoffs            int
 }
 
+// StartupBrief summarizes the most relevant context to resume a task.
 type StartupBrief struct {
 	CurrentTask        string   `json:"current_task,omitempty"`
 	LastKnownState     string   `json:"last_known_state,omitempty"`
@@ -81,6 +90,7 @@ type StartupBrief struct {
 	RelatedContext     []string `json:"related_context,omitempty"`
 }
 
+// BootstrapOutput returns the resolved scope, created session, and bootstrap context.
 type BootstrapOutput struct {
 	Scope         scope.Scope      `json:"scope"`
 	Session       session.Session  `json:"session"`
@@ -91,6 +101,7 @@ type BootstrapOutput struct {
 	Warnings      []common.Warning `json:"warnings"`
 }
 
+// GetRecentInput controls retrieval of recent notes and handoffs.
 type GetRecentInput struct {
 	Scope                  scope.Ref
 	Limit                  int
@@ -99,29 +110,35 @@ type GetRecentInput struct {
 	IncludeRelatedProjects bool
 }
 
+// GetRecentOutput returns recent handoffs, notes, and related warnings.
 type GetRecentOutput struct {
 	Handoffs []handoff.Handoff `json:"handoffs"`
 	Notes    []memory.Note     `json:"notes"`
 	Warnings []common.Warning  `json:"warnings"`
 }
 
+// RecordKind identifies the kind of durable record being requested.
 type RecordKind string
 
+// Supported durable record kinds.
 const (
 	RecordKindNote    RecordKind = "note"
 	RecordKindHandoff RecordKind = "handoff"
 )
 
+// GetRecordInput identifies a single durable record to load.
 type GetRecordInput struct {
 	ID   string
 	Kind RecordKind
 }
 
+// GetRecordOutput returns a single durable record and any warnings.
 type GetRecordOutput struct {
 	Record   any              `json:"record"`
 	Warnings []common.Warning `json:"warnings"`
 }
 
+// SearchInput controls note and handoff search behavior.
 type SearchInput struct {
 	Query                  string
 	Scope                  scope.Ref
@@ -134,6 +151,7 @@ type SearchInput struct {
 	Intent                 string
 }
 
+// SearchResult is a ranked search hit across notes and handoffs.
 type SearchResult struct {
 	Kind         RecordKind `json:"kind"`
 	ID           string     `json:"id"`
@@ -147,11 +165,13 @@ type SearchResult struct {
 	RelationType string     `json:"relation_type,omitempty"`
 }
 
+// SearchOutput returns ranked search results and related warnings.
 type SearchOutput struct {
 	Results  []SearchResult   `json:"results"`
 	Warnings []common.Warning `json:"warnings"`
 }
 
+// BootstrapSession resolves scope, starts a session, and loads bootstrap context.
 func (s *Service) BootstrapSession(ctx context.Context, input BootstrapInput) (BootstrapOutput, error) {
 	resolveOutput, err := s.scopeResolver.Resolve(ctx, scope.ResolveInput{
 		CWD:        input.CWD,
@@ -220,6 +240,7 @@ func (s *Service) BootstrapSession(ctx context.Context, input BootstrapInput) (B
 	}, nil
 }
 
+// GetRecent loads recent notes and handoffs for the current scope and optional related projects.
 func (s *Service) GetRecent(ctx context.Context, input GetRecentInput) (GetRecentOutput, error) {
 	_ = ctx
 
@@ -266,6 +287,7 @@ func (s *Service) GetRecent(ctx context.Context, input GetRecentInput) (GetRecen
 	return output, nil
 }
 
+// GetRecord loads a single note or handoff by kind and identifier.
 func (s *Service) GetRecord(ctx context.Context, input GetRecordInput) (GetRecordOutput, error) {
 	_ = ctx
 
@@ -298,6 +320,7 @@ func (s *Service) GetRecord(ctx context.Context, input GetRecordInput) (GetRecor
 	}
 }
 
+// Search returns ranked note and handoff results for the given scope and filters.
 func (s *Service) Search(ctx context.Context, input SearchInput) (SearchOutput, error) {
 	_ = ctx
 

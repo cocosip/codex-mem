@@ -1,3 +1,4 @@
+// Package db provides SQLite-backed storage for codex-mem.
 package db
 
 import (
@@ -8,11 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
 
 	"codex-mem/internal/domain/common"
 )
 
+// Options configures SQLite database opening and pragmas.
 type Options struct {
 	Path        string
 	DriverName  string
@@ -20,6 +22,7 @@ type Options struct {
 	JournalMode string
 }
 
+// Open opens the SQLite database, applies pragmas, and runs migrations.
 func Open(ctx context.Context, options Options) (*sql.DB, error) {
 	driverName := options.DriverName
 	if driverName == "" {
@@ -42,21 +45,22 @@ func Open(ctx context.Context, options Options) (*sql.DB, error) {
 	}
 
 	if err := HealthCheck(ctx, handle); err != nil {
-		handle.Close()
+		_ = handle.Close()
 		return nil, err
 	}
 	if err := applyPragmas(ctx, handle, options); err != nil {
-		handle.Close()
+		_ = handle.Close()
 		return nil, err
 	}
 	if err := RunMigrations(ctx, handle); err != nil {
-		handle.Close()
+		_ = handle.Close()
 		return nil, err
 	}
 
 	return handle, nil
 }
 
+// HealthCheck verifies the database connection is reachable and usable.
 func HealthCheck(ctx context.Context, handle *sql.DB) error {
 	if err := handle.PingContext(ctx); err != nil {
 		return common.WrapError(common.ErrStorageUnavailable, "ping sqlite database", err)

@@ -13,7 +13,7 @@ type fakeRepository struct {
 	created   Note
 }
 
-func (f *fakeRepository) FindDuplicate(note Note) (*Note, error) {
+func (f *fakeRepository) FindDuplicate(_ Note) (*Note, error) {
 	return f.duplicate, nil
 }
 
@@ -34,7 +34,7 @@ type fixedIDFactory struct {
 	value string
 }
 
-func (f fixedIDFactory) New(prefix string) string {
+func (f fixedIDFactory) New(_ string) string {
 	return f.value
 }
 
@@ -151,3 +151,5 @@ func TestSaveNoteRejectsPrivateIntent(t *testing.T) {
 		t.Fatal("expected private note to be rejected")
 	}
 }
+
+

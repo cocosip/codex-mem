@@ -8,17 +8,25 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// NoteType identifies the durable note category.
 type NoteType string
 
 const (
-	NoteTypeDecision   NoteType = "decision"
-	NoteTypeBugfix     NoteType = "bugfix"
-	NoteTypeDiscovery  NoteType = "discovery"
+	// NoteTypeDecision stores an implementation or product decision.
+	NoteTypeDecision NoteType = "decision"
+	// NoteTypeBugfix stores a reusable bug root-cause or fix insight.
+	NoteTypeBugfix NoteType = "bugfix"
+	// NoteTypeDiscovery stores a reusable technical finding.
+	NoteTypeDiscovery NoteType = "discovery"
+	// NoteTypeConstraint stores an ongoing rule or limitation.
 	NoteTypeConstraint NoteType = "constraint"
+	// NoteTypePreference stores a durable preference.
 	NoteTypePreference NoteType = "preference"
-	NoteTypeTodo       NoteType = "todo"
+	// NoteTypeTodo stores a durable open task worth resurfacing later.
+	NoteTypeTodo NoteType = "todo"
 )
 
+// Validate ensures the note type is supported.
 func (t NoteType) Validate() error {
 	switch t {
 	case NoteTypeDecision, NoteTypeBugfix, NoteTypeDiscovery, NoteTypeConstraint, NoteTypePreference, NoteTypeTodo:
@@ -28,14 +36,19 @@ func (t NoteType) Validate() error {
 	}
 }
 
+// Status identifies the lifecycle state of a note.
 type Status string
 
 const (
-	StatusActive     Status = "active"
-	StatusResolved   Status = "resolved"
+	// StatusActive marks a note as currently relevant.
+	StatusActive Status = "active"
+	// StatusResolved marks a note as resolved but still historically useful.
+	StatusResolved Status = "resolved"
+	// StatusSuperseded marks a note as replaced by a newer conclusion.
 	StatusSuperseded Status = "superseded"
 )
 
+// Validate ensures the note status is supported.
 func (s Status) Validate() error {
 	switch s {
 	case StatusActive, StatusResolved, StatusSuperseded:
@@ -45,15 +58,21 @@ func (s Status) Validate() error {
 	}
 }
 
+// Source identifies how a note entered durable storage.
 type Source string
 
 const (
-	SourceCodexExplicit     Source = "codex_explicit"
-	SourceWatcherImport     Source = "watcher_import"
-	SourceRelayImport       Source = "relay_import"
+	// SourceCodexExplicit marks a note explicitly requested by the user or agent.
+	SourceCodexExplicit Source = "codex_explicit"
+	// SourceWatcherImport marks a note imported by a watcher integration.
+	SourceWatcherImport Source = "watcher_import"
+	// SourceRelayImport marks a note imported through a relay integration.
+	SourceRelayImport Source = "relay_import"
+	// SourceRecoveryGenerated marks a note synthesized during recovery.
 	SourceRecoveryGenerated Source = "recovery_generated"
 )
 
+// Validate ensures the note source is supported.
 func (s Source) Validate() error {
 	switch s {
 	case SourceCodexExplicit, SourceWatcherImport, SourceRelayImport, SourceRecoveryGenerated:
@@ -63,6 +82,7 @@ func (s Source) Validate() error {
 	}
 }
 
+// Note is the durable record returned by note reads and searches.
 type Note struct {
 	ID                string    `json:"note_id"`
 	Scope             scope.Ref `json:"scope"`
@@ -83,6 +103,7 @@ type Note struct {
 	UpdatedAt         time.Time `json:"-"`
 }
 
+// SaveInput is the caller-facing payload for writing a note.
 type SaveInput struct {
 	Scope             scope.Ref
 	SessionID         string
@@ -98,6 +119,7 @@ type SaveInput struct {
 	PrivacyIntent     string
 }
 
+// SaveOutput reports the stored note and any warnings.
 type SaveOutput struct {
 	Note         Note             `json:"note"`
 	StoredAt     time.Time        `json:"stored_at"`
@@ -105,11 +127,13 @@ type SaveOutput struct {
 	Warnings     []common.Warning `json:"warnings"`
 }
 
+// Repository persists and queries durable note records.
 type Repository interface {
 	FindDuplicate(note Note) (*Note, error)
 	Create(note Note) error
 }
 
+// Validate ensures the note has the required fields for durable storage.
 func (n Note) Validate() error {
 	if err := n.Scope.Validate(); err != nil {
 		return err

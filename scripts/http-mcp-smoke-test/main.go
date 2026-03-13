@@ -1,3 +1,4 @@
+// Command http-mcp-smoke-test runs an end-to-end HTTP MCP smoke test against the local source tree.
 package main
 
 import (
@@ -100,7 +101,9 @@ func main() {
 	if err != nil {
 		failf("create temp root: %v", err)
 	}
-	defer os.RemoveAll(tempRoot)
+	defer func() {
+		_ = os.RemoveAll(tempRoot)
+	}()
 
 	tempProject := filepath.Join(tempRoot, "project")
 	if err := os.MkdirAll(tempProject, 0o755); err != nil {
@@ -224,7 +227,9 @@ func reservePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer listener.Close()
+	defer func() {
+		_ = listener.Close()
+	}()
 	addr, ok := listener.Addr().(*net.TCPAddr)
 	if !ok {
 		return 0, fmt.Errorf("unexpected listener address %T", listener.Addr())
@@ -258,7 +263,9 @@ func doNotification(client *http.Client, endpointURL string, request rpcRequest)
 	if err != nil {
 		failf("notification request failed: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if got, want := response.StatusCode, http.StatusAccepted; got != want {
 		failf("notification status mismatch: got %d want %d", got, want)
 	}
@@ -269,7 +276,9 @@ func doRPC(client *http.Client, endpointURL string, wantStatus int, request rpcR
 	if err != nil {
 		failf("rpc request failed: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if got := response.StatusCode; got != wantStatus {
 		failf("rpc status mismatch: got %d want %d", got, wantStatus)
 	}
@@ -317,3 +326,7 @@ func failf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
 }
+
+
+
+

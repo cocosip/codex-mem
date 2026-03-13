@@ -20,6 +20,7 @@ type migrationFile struct {
 	Body    string
 }
 
+// RunMigrations applies embedded schema migrations that have not yet been recorded.
 func RunMigrations(ctx context.Context, handle *sql.DB) error {
 	if _, err := handle.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -50,14 +51,14 @@ func RunMigrations(ctx context.Context, handle *sql.DB) error {
 			return common.WrapError(common.ErrStorageUnavailable, "begin migration transaction", err)
 		}
 		if _, err := tx.ExecContext(ctx, migration.Body); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return common.WrapError(common.ErrWriteFailed, "apply migration "+migration.Name, err)
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO schema_migrations (version, name, applied_at)
 			VALUES (?, ?, ?)
 		`, migration.Version, migration.Name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return common.WrapError(common.ErrWriteFailed, "record migration "+migration.Name, err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -99,12 +100,16 @@ func loadMigrationFiles() ([]migrationFile, error) {
 	return files, nil
 }
 
-func appliedMigrations(ctx context.Context, handle *sql.DB) (map[int]bool, error) {
+func appliedMigrations(ctx context.Context, handle *sql.DB) (_ map[int]bool, err error) {
 	rows, err := handle.QueryContext(ctx, `SELECT version FROM schema_migrations`)
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query applied migrations", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = common.WrapError(common.ErrReadFailed, "close applied migrations rows", closeErr)
+		}
+	}()
 
 	applied := make(map[int]bool)
 	for rows.Next() {

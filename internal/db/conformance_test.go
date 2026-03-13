@@ -23,7 +23,9 @@ func TestConformanceC05CrossProjectIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	defer func() {
+		_ = handle.Close()
+	}()
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	otherProject := seedSameSystemProjectScope(t, handle)
@@ -84,7 +86,9 @@ func TestConformanceC09PrivacyExclusion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	defer func() {
+		_ = handle.Close()
+	}()
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	memoryRepo := NewMemoryRepository(handle)
@@ -175,7 +179,9 @@ func TestConformanceC12IdentityConflictHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	defer func() {
+		_ = handle.Close()
+	}()
 
 	scopeRepo := NewScopeRepository(handle, common.RealClock{})
 	systemA, err := scopeRepo.EnsureSystem(scope.SystemRecord{ID: "sys_a", Name: "system-a", Slug: "system-a"})
@@ -225,3 +231,4 @@ func TestConformanceC12IdentityConflictHandling(t *testing.T) {
 		t.Fatalf("expected workspace scope conflict, got %v", err)
 	}
 }
+

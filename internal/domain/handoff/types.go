@@ -8,14 +8,17 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// Kind identifies the purpose of a persisted handoff.
 type Kind string
 
+// Supported handoff kinds.
 const (
 	KindFinal      Kind = "final"
 	KindCheckpoint Kind = "checkpoint"
 	KindRecovery   Kind = "recovery"
 )
 
+// Validate reports whether k is a supported handoff kind.
 func (k Kind) Validate() error {
 	switch k {
 	case KindFinal, KindCheckpoint, KindRecovery:
@@ -25,14 +28,17 @@ func (k Kind) Validate() error {
 	}
 }
 
+// Status identifies the lifecycle state of a handoff record.
 type Status string
 
+// Supported handoff statuses.
 const (
 	StatusOpen      Status = "open"
 	StatusCompleted Status = "completed"
 	StatusAbandoned Status = "abandoned"
 )
 
+// Validate reports whether s is a supported handoff status.
 func (s Status) Validate() error {
 	switch s {
 	case StatusOpen, StatusCompleted, StatusAbandoned:
@@ -42,6 +48,7 @@ func (s Status) Validate() error {
 	}
 }
 
+// Handoff represents durable continuation context for a task.
 type Handoff struct {
 	ID              string    `json:"handoff_id"`
 	Scope           scope.Ref `json:"scope"`
@@ -62,6 +69,7 @@ type Handoff struct {
 	UpdatedAt       time.Time `json:"-"`
 }
 
+// SaveInput captures the fields required to persist a handoff.
 type SaveInput struct {
 	Scope          scope.Ref
 	SessionID      string
@@ -78,6 +86,7 @@ type SaveInput struct {
 	PrivacyIntent  string
 }
 
+// SaveOutput returns the stored handoff and any non-fatal warnings.
 type SaveOutput struct {
 	Handoff              Handoff          `json:"handoff"`
 	StoredAt             time.Time        `json:"stored_at"`
@@ -85,11 +94,13 @@ type SaveOutput struct {
 	Warnings             []common.Warning `json:"warnings"`
 }
 
+// Repository defines the storage operations required by the handoff service.
 type Repository interface {
 	FindLatestOpenByTask(scope scope.Ref, task string) (*Handoff, error)
 	Create(handoff Handoff) error
 }
 
+// Validate checks that the handoff contains the required persisted fields.
 func (h Handoff) Validate() error {
 	if err := h.Scope.Validate(); err != nil {
 		return err

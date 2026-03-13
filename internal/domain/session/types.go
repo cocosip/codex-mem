@@ -7,8 +7,10 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// Status identifies the lifecycle state of a session.
 type Status string
 
+// Supported session statuses.
 const (
 	StatusActive    Status = "active"
 	StatusPaused    Status = "paused"
@@ -16,6 +18,7 @@ const (
 	StatusRecovered Status = "recovered"
 )
 
+// Validate reports whether s is a supported session status.
 func (s Status) Validate() error {
 	switch s {
 	case StatusActive, StatusPaused, StatusEnded, StatusRecovered:
@@ -25,6 +28,7 @@ func (s Status) Validate() error {
 	}
 }
 
+// Session represents persisted work-session context.
 type Session struct {
 	ID         string     `json:"session_id"`
 	Scope      scope.Ref  `json:"scope"`
@@ -35,17 +39,20 @@ type Session struct {
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 }
 
+// StartInput captures the fields needed to create a new session.
 type StartInput struct {
 	Scope      scope.Scope
 	Task       string
 	BranchName string
 }
 
+// StartOutput returns the created session and any warnings.
 type StartOutput struct {
 	Session  Session          `json:"session"`
 	Warnings []common.Warning `json:"warnings"`
 }
 
+// Repository defines the storage operation required to create sessions.
 type Repository interface {
 	Create(session Session) error
 }

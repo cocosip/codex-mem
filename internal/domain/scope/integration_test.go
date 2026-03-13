@@ -22,7 +22,9 @@ func TestMigrationProjectRenamePreservesProjectID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	defer func() {
+		_ = handle.Close()
+	}()
 
 	scopeRepo := db.NewScopeRepository(handle, common.RealClock{})
 	service := scope.NewService(scopeRepo, scope.Options{DefaultSystemName: "codex-mem"})
@@ -64,7 +66,9 @@ func TestMigrationRemoteURLFormChangePreservesProjectID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	defer func() {
+		_ = handle.Close()
+	}()
 
 	scopeRepo := db.NewScopeRepository(handle, common.RealClock{})
 	service := scope.NewService(scopeRepo, scope.Options{DefaultSystemName: "codex-mem"})
@@ -89,3 +93,4 @@ func TestMigrationRemoteURLFormChangePreservesProjectID(t *testing.T) {
 		t.Fatalf("project id should be preserved across remote normalization: got %q want %q", got, want)
 	}
 }
+

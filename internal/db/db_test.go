@@ -25,7 +25,7 @@ func TestOpenRunsFoundationMigrationsAndPersistsScopeChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	scopeRepo := NewScopeRepository(handle, common.RealClock{})
 	sessionRepo := NewSessionRepository(handle)
@@ -87,7 +87,7 @@ func TestSessionCreateRejectsInconsistentScopeChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	scopeRepo := NewScopeRepository(handle, common.RealClock{})
 	sessionRepo := NewSessionRepository(handle)
@@ -155,7 +155,7 @@ func TestMemoryAndHandoffRepositoriesPersistStructuredRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	memoryRepo := NewMemoryRepository(handle)
@@ -226,7 +226,7 @@ func TestMemoryAndHandoffRepositoriesRejectSessionScopeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	_, sessionID := seedScopeAndSession(t, handle)
 	otherRef := seedAlternateScope(t, handle)
@@ -279,7 +279,7 @@ func TestMemoryAndHandoffRepositoriesSupportRecentAndByIDReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	otherRef := seedSameProjectScope(t, handle)
@@ -388,7 +388,7 @@ func TestMemorySearchUsesFTSAndProjectIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	otherProject := seedSameSystemProjectScope(t, handle)
@@ -476,7 +476,7 @@ func TestMemoryRepositorySupportsRelatedProjectQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	otherProject := seedSameSystemProjectScope(t, handle)
@@ -551,7 +551,7 @@ func TestSearchabilityControlsExcludeRecordsFromRecentAndSearchButNotGetByID(t *
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	memoryRepo := NewMemoryRepository(handle)
@@ -797,4 +797,11 @@ func seedSessionForScope(t *testing.T, handle *sql.DB, sessionID string, ref sco
 		t.Fatalf("Create session for scope: %v", err)
 	}
 	return sessionID
+}
+
+func closeTestHandle(t *testing.T, handle *sql.DB) {
+	t.Helper()
+	if err := handle.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 }

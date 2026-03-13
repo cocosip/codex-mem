@@ -21,7 +21,7 @@ func TestInspectRuntimeReportsMigrationAndSchemaReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	diagnostics, err := InspectRuntime(ctx, handle)
 	if err != nil {
@@ -74,7 +74,7 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer handle.Close()
+	t.Cleanup(func() { closeTestHandle(t, handle) })
 
 	ref, sessionID := seedScopeAndSession(t, handle)
 	memoryRepo := NewMemoryRepository(handle)

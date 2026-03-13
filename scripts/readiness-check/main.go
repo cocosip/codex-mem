@@ -1,3 +1,4 @@
+// Package main runs the local readiness smoke checks for codex-mem.
 package main
 
 import (

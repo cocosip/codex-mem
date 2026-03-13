@@ -17,14 +17,14 @@ type memoryRepoStub struct {
 	findErr   error
 }
 
-func (s *memoryRepoStub) FindDuplicate(note memory.Note) (*memory.Note, error) {
+func (s *memoryRepoStub) FindDuplicate(_ memory.Note) (*memory.Note, error) {
 	if s.findErr != nil {
 		return nil, s.findErr
 	}
 	return s.duplicate, nil
 }
 
-func (s *memoryRepoStub) Create(note memory.Note) error {
+func (s *memoryRepoStub) Create(_ memory.Note) error {
 	return nil
 }
 
@@ -40,7 +40,7 @@ type fixedIDFactory struct {
 	value string
 }
 
-func (f fixedIDFactory) New(prefix string) string {
+func (f fixedIDFactory) New(_ string) string {
 	return f.value
 }
 

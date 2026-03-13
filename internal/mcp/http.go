@@ -14,11 +14,13 @@ import (
 
 const defaultHTTPEndpointPath = "/mcp"
 
+// HTTPOptions configures the HTTP transport wrapper around the MCP server.
 type HTTPOptions struct {
 	EndpointPath   string
 	AllowedOrigins []string
 }
 
+// HTTPHandler adapts the MCP server to the HTTP transport.
 type HTTPHandler struct {
 	server         *Server
 	endpointPath   string
@@ -33,6 +35,7 @@ type rpcEnvelope struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+// NewHTTPHandler constructs an HTTP handler for the MCP server.
 func NewHTTPHandler(server *Server, options HTTPOptions) http.Handler {
 	endpointPath := strings.TrimSpace(options.EndpointPath)
 	if endpointPath == "" {
@@ -228,6 +231,7 @@ func normalizeHost(value string) string {
 	return strings.ToLower(value)
 }
 
+// ServeHTTP runs the HTTP MCP server until shutdown or listener failure.
 func ServeHTTP(ctx context.Context, addr string, handler http.Handler) error {
 	server := &http.Server{
 		Addr:    addr,

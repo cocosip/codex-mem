@@ -1,3 +1,4 @@
+// Package memory stores and validates durable note records.
 package memory
 
 import (
@@ -8,16 +9,19 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+// Options configures time and id generation for note persistence.
 type Options struct {
 	Clock     common.Clock
 	IDFactory common.IDFactory
 }
 
+// Service validates and stores structured durable notes.
 type Service struct {
 	repo    Repository
 	options Options
 }
 
+// NewService constructs a note service with default clock and id generation when omitted.
 func NewService(repo Repository, options Options) *Service {
 	if options.Clock == nil {
 		options.Clock = common.RealClock{}
@@ -28,6 +32,7 @@ func NewService(repo Repository, options Options) *Service {
 	return &Service{repo: repo, options: options}
 }
 
+// SaveNote validates and stores one durable note record.
 func (s *Service) SaveNote(ctx context.Context, input SaveInput) (SaveOutput, error) {
 	_ = ctx
 

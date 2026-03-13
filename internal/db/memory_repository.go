@@ -11,14 +11,17 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// MemoryRepository provides SQLite-backed persistence for memory notes.
 type MemoryRepository struct {
 	db *sql.DB
 }
 
+// NewMemoryRepository constructs a MemoryRepository for the provided database handle.
 func NewMemoryRepository(db *sql.DB) *MemoryRepository {
 	return &MemoryRepository{db: db}
 }
 
+// FindDuplicate returns the latest note with the same scope, type, title, and content.
 func (r *MemoryRepository) FindDuplicate(note memory.Note) (*memory.Note, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -43,6 +46,7 @@ func (r *MemoryRepository) FindDuplicate(note memory.Note) (*memory.Note, error)
 	}
 }
 
+// Create stores a memory note after validating scope and session relationships.
 func (r *MemoryRepository) Create(note memory.Note) error {
 	if err := validateScopeRef(r.db, note.Scope); err != nil {
 		return err
@@ -98,6 +102,7 @@ func (r *MemoryRepository) Create(note memory.Note) error {
 	return nil
 }
 
+// ListRecentByWorkspace lists recent searchable notes for a workspace.
 func (r *MemoryRepository) ListRecentByWorkspace(workspaceID string, limit int, minImportance int) ([]memory.Note, error) {
 	rows, err := r.db.Query(`
 		SELECT
@@ -112,11 +117,14 @@ func (r *MemoryRepository) ListRecentByWorkspace(workspaceID string, limit int, 
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query workspace notes", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanNotes(rows)
 }
 
+// ListRecentByProject lists recent searchable notes from sibling workspaces in a project.
 func (r *MemoryRepository) ListRecentByProject(projectID string, excludeWorkspaceID string, limit int, minImportance int) ([]memory.Note, error) {
 	rows, err := r.db.Query(`
 		SELECT
@@ -131,11 +139,14 @@ func (r *MemoryRepository) ListRecentByProject(projectID string, excludeWorkspac
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query project notes", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanNotes(rows)
 }
 
+// ListRecentByProjects lists recent searchable notes across related projects in the same system.
 func (r *MemoryRepository) ListRecentByProjects(systemID string, projectIDs []string, limit int, minImportance int) ([]memory.Note, error) {
 	if len(projectIDs) == 0 {
 		return nil, nil
@@ -156,11 +167,14 @@ func (r *MemoryRepository) ListRecentByProjects(systemID string, projectIDs []st
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query related project notes", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanNotes(rows)
 }
 
+// GetByID loads a note record by its stable identifier.
 func (r *MemoryRepository) GetByID(id string) (*memory.Note, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -182,6 +196,7 @@ func (r *MemoryRepository) GetByID(id string) (*memory.Note, error) {
 	}
 }
 
+// ListRelatedProjectIDs returns recent distinct related project identifiers referenced by notes.
 func (r *MemoryRepository) ListRelatedProjectIDs(projectID string, limit int) ([]string, error) {
 	rows, err := r.db.Query(`
 		SELECT COALESCE(related_project_ids_json, '[]')
@@ -193,7 +208,9 @@ func (r *MemoryRepository) ListRelatedProjectIDs(projectID string, limit int) ([
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query related project ids", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	seen := make(map[string]struct{})
 	var ids []string
@@ -227,6 +244,7 @@ func (r *MemoryRepository) ListRelatedProjectIDs(projectID string, limit int) ([
 	return ids, nil
 }
 
+// Search finds searchable notes within a project that match the query and filters.
 func (r *MemoryRepository) Search(ref scope.Ref, query string, limit int, minImportance int, types []memory.NoteType, states []memory.Status) ([]memory.Note, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -269,11 +287,14 @@ func (r *MemoryRepository) Search(ref scope.Ref, query string, limit int, minImp
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "search memory notes", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanNotes(rows)
 }
 
+// SearchProjects finds searchable notes across related projects that match the query and filters.
 func (r *MemoryRepository) SearchProjects(systemID string, projectIDs []string, query string, limit int, minImportance int, types []memory.NoteType, states []memory.Status) ([]memory.Note, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -321,7 +342,9 @@ func (r *MemoryRepository) SearchProjects(systemID string, projectIDs []string, 
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "search related project notes", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanNotes(rows)
 }

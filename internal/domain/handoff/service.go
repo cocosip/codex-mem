@@ -1,3 +1,4 @@
+// Package handoff stores durable continuation records for future sessions.
 package handoff
 
 import (
@@ -8,16 +9,19 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+// Options configures handoff persistence dependencies.
 type Options struct {
 	Clock     common.Clock
 	IDFactory common.IDFactory
 }
 
+// Service validates and persists handoff records.
 type Service struct {
 	repo    Repository
 	options Options
 }
 
+// NewService constructs a Service with default clock and ID generation behavior.
 func NewService(repo Repository, options Options) *Service {
 	if options.Clock == nil {
 		options.Clock = common.RealClock{}
@@ -28,6 +32,7 @@ func NewService(repo Repository, options Options) *Service {
 	return &Service{repo: repo, options: options}
 }
 
+// SaveHandoff validates input, stores a handoff, and returns persistence warnings.
 func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput, error) {
 	_ = ctx
 	if isPrivateIntent(input.PrivacyIntent) {

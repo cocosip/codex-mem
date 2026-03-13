@@ -1,3 +1,4 @@
+// Package mcp exposes the codex-mem MCP transport surface.
 package mcp
 
 import (
@@ -13,6 +14,7 @@ import (
 	"codex-mem/internal/domain/session"
 )
 
+// Response is the common success-or-failure envelope returned by MCP handlers.
 type Response[T any] struct {
 	Ok       bool                 `json:"ok"`
 	Data     *T                   `json:"data,omitempty"`
@@ -20,27 +22,32 @@ type Response[T any] struct {
 	Error    *common.ErrorPayload `json:"error,omitempty"`
 }
 
+// ResolveScopeData carries scope-resolution results in MCP responses.
 type ResolveScopeData struct {
 	Scope      scope.Scope `json:"scope"`
 	ResolvedBy string      `json:"resolved_by"`
 }
 
+// StartSessionData carries session-start results in MCP responses.
 type StartSessionData struct {
 	Session session.Session `json:"session"`
 }
 
+// SaveNoteData carries note-persistence results in MCP responses.
 type SaveNoteData struct {
 	Note         memory.Note `json:"note"`
 	StoredAt     time.Time   `json:"stored_at"`
 	Deduplicated bool        `json:"deduplicated"`
 }
 
+// SaveHandoffData carries handoff-persistence results in MCP responses.
 type SaveHandoffData struct {
 	Handoff              handoff.Handoff `json:"handoff"`
 	StoredAt             time.Time       `json:"stored_at"`
 	EligibleForBootstrap bool            `json:"eligible_for_bootstrap"`
 }
 
+// BootstrapSessionData carries bootstrap-session results in MCP responses.
 type BootstrapSessionData struct {
 	Scope         scope.Scope            `json:"scope"`
 	Session       session.Session        `json:"session"`
@@ -50,29 +57,33 @@ type BootstrapSessionData struct {
 	StartupBrief  retrieval.StartupBrief `json:"startup_brief"`
 }
 
+// GetRecentData carries recent note and handoff results in MCP responses.
 type GetRecentData struct {
 	Handoffs []handoff.Handoff `json:"handoffs"`
 	Notes    []memory.Note     `json:"notes"`
 }
 
+// GetRecordData carries a single durable record in MCP responses.
 type GetRecordData struct {
 	Record any `json:"record"`
 }
 
+// SearchData carries ranked retrieval results in MCP responses.
 type SearchData struct {
 	Results []retrieval.SearchResult `json:"results"`
 }
 
+// InstallAgentsData carries AGENTS installation results in MCP responses.
 type InstallAgentsData struct {
 	WrittenFiles []agents.FileChange `json:"written_files"`
 	SkippedFiles []agents.FileChange `json:"skipped_files"`
 }
 
 func success[T any](data T, warnings []common.Warning) Response[T] {
-	copy := data
+	payload := data
 	return Response[T]{
 		Ok:       true,
-		Data:     &copy,
+		Data:     &payload,
 		Warnings: warnings,
 	}
 }
@@ -85,6 +96,7 @@ func failure[T any](err error, fallbackCode string, fallbackMessage string) Resp
 	}
 }
 
+// HandleMemoryResolveScope adapts scope resolution into an MCP response envelope.
 func (h *Handlers) HandleMemoryResolveScope(ctx context.Context, input scope.ResolveInput) Response[ResolveScopeData] {
 	output, err := h.MemoryResolveScope(ctx, input)
 	if err != nil {
@@ -96,6 +108,7 @@ func (h *Handlers) HandleMemoryResolveScope(ctx context.Context, input scope.Res
 	}, output.Warnings)
 }
 
+// HandleMemoryStartSession adapts session start into an MCP response envelope.
 func (h *Handlers) HandleMemoryStartSession(ctx context.Context, input session.StartInput) Response[StartSessionData] {
 	output, err := h.MemoryStartSession(ctx, input)
 	if err != nil {
@@ -106,6 +119,7 @@ func (h *Handlers) HandleMemoryStartSession(ctx context.Context, input session.S
 	}, output.Warnings)
 }
 
+// HandleMemorySaveNote adapts note persistence into an MCP response envelope.
 func (h *Handlers) HandleMemorySaveNote(ctx context.Context, input memory.SaveInput) Response[SaveNoteData] {
 	output, err := h.MemorySaveNote(ctx, input)
 	if err != nil {
@@ -118,6 +132,7 @@ func (h *Handlers) HandleMemorySaveNote(ctx context.Context, input memory.SaveIn
 	}, output.Warnings)
 }
 
+// HandleMemorySaveHandoff adapts handoff persistence into an MCP response envelope.
 func (h *Handlers) HandleMemorySaveHandoff(ctx context.Context, input handoff.SaveInput) Response[SaveHandoffData] {
 	output, err := h.MemorySaveHandoff(ctx, input)
 	if err != nil {
@@ -130,6 +145,7 @@ func (h *Handlers) HandleMemorySaveHandoff(ctx context.Context, input handoff.Sa
 	}, output.Warnings)
 }
 
+// HandleMemoryBootstrapSession adapts bootstrap retrieval into an MCP response envelope.
 func (h *Handlers) HandleMemoryBootstrapSession(ctx context.Context, input retrieval.BootstrapInput) Response[BootstrapSessionData] {
 	output, err := h.MemoryBootstrapSession(ctx, input)
 	if err != nil {
@@ -145,6 +161,7 @@ func (h *Handlers) HandleMemoryBootstrapSession(ctx context.Context, input retri
 	}, output.Warnings)
 }
 
+// HandleMemoryGetRecent adapts recent-record retrieval into an MCP response envelope.
 func (h *Handlers) HandleMemoryGetRecent(ctx context.Context, input retrieval.GetRecentInput) Response[GetRecentData] {
 	output, err := h.MemoryGetRecent(ctx, input)
 	if err != nil {
@@ -156,6 +173,7 @@ func (h *Handlers) HandleMemoryGetRecent(ctx context.Context, input retrieval.Ge
 	}, output.Warnings)
 }
 
+// HandleMemoryGetNote adapts single-record retrieval into an MCP response envelope.
 func (h *Handlers) HandleMemoryGetNote(ctx context.Context, input retrieval.GetRecordInput) Response[GetRecordData] {
 	output, err := h.MemoryGetNote(ctx, input)
 	if err != nil {
@@ -166,6 +184,7 @@ func (h *Handlers) HandleMemoryGetNote(ctx context.Context, input retrieval.GetR
 	}, output.Warnings)
 }
 
+// HandleMemorySearch adapts search results into an MCP response envelope.
 func (h *Handlers) HandleMemorySearch(ctx context.Context, input retrieval.SearchInput) Response[SearchData] {
 	output, err := h.MemorySearch(ctx, input)
 	if err != nil {
@@ -176,6 +195,7 @@ func (h *Handlers) HandleMemorySearch(ctx context.Context, input retrieval.Searc
 	}, output.Warnings)
 }
 
+// HandleMemoryInstallAgents adapts AGENTS installation into an MCP response envelope.
 func (h *Handlers) HandleMemoryInstallAgents(ctx context.Context, input agents.InstallInput) Response[InstallAgentsData] {
 	output, err := h.MemoryInstallAgents(ctx, input)
 	if err != nil {

@@ -1,3 +1,4 @@
+// Command mcp-smoke-test runs an end-to-end stdio MCP smoke test against the local source tree.
 package main
 
 import (
@@ -104,7 +105,9 @@ func main() {
 	if err != nil {
 		failf("create temp project: %v", err)
 	}
-	defer os.RemoveAll(tempProject)
+	defer func() {
+		_ = os.RemoveAll(tempProject)
+	}()
 
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/codex-mem", "serve")
 	cmd.Dir = repoRoot
@@ -305,3 +308,5 @@ func mustNoRPCError(method string, response rpcResponse) {
 		failf("%s failed: code=%d message=%s", method, response.Error.Code, response.Error.Message)
 	}
 }
+
+

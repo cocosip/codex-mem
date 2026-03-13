@@ -1,3 +1,4 @@
+// Package config loads runtime configuration for the codex-mem application.
 package config
 
 import (
@@ -17,11 +18,13 @@ const (
 	defaultConfigExtension = ".json"
 )
 
+// Config contains resolved runtime settings and their load metadata.
 type Config struct {
 	File FileConfig
 	Meta LoadMetadata
 }
 
+// FileConfig defines the runtime settings sourced from file and environment values.
 type FileConfig struct {
 	DatabasePath      string
 	DefaultSystemName string
@@ -37,6 +40,7 @@ type FileConfig struct {
 	LogAlsoStderr     bool
 }
 
+// LoadMetadata describes where configuration and log paths were resolved from.
 type LoadMetadata struct {
 	ConfigDir      string
 	ConfigFilePath string
@@ -44,6 +48,7 @@ type LoadMetadata struct {
 	LogDir         string
 }
 
+// Load resolves configuration from defaults, the optional config file, and environment overrides.
 func Load(cwd string) (Config, error) {
 	if cwd == "" {
 		var err error

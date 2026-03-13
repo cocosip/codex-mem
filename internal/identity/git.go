@@ -1,3 +1,4 @@
+// Package identity discovers canonical repository identity from local Git metadata.
 package identity
 
 import (
@@ -10,6 +11,7 @@ import (
 	"strings"
 )
 
+// RepositoryInfo describes the repository metadata discovered for a path.
 type RepositoryInfo struct {
 	Root   string
 	Remote string
@@ -17,6 +19,7 @@ type RepositoryInfo struct {
 	HasGit bool
 }
 
+// DiscoverRepository inspects start and its parents for Git repository metadata.
 func DiscoverRepository(start string) (RepositoryInfo, error) {
 	absStart, err := filepath.Abs(start)
 	if err != nil {
@@ -48,6 +51,7 @@ func DiscoverRepository(start string) (RepositoryInfo, error) {
 	}, nil
 }
 
+// NormalizePath canonicalizes a filesystem path for identity comparisons.
 func NormalizePath(path string) string {
 	clean := filepath.Clean(path)
 	clean = filepath.ToSlash(clean)
@@ -57,6 +61,7 @@ func NormalizePath(path string) string {
 	return clean
 }
 
+// NormalizeRemote canonicalizes a Git remote into host/path form.
 func NormalizeRemote(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	trimmed = strings.TrimSuffix(trimmed, ".git")
@@ -85,6 +90,7 @@ func NormalizeRemote(raw string) string {
 	return strings.Trim(strings.ToLower(trimmed), "/")
 }
 
+// NameFromRemote returns the repository name segment from a normalized remote.
 func NameFromRemote(remote string) string {
 	remote = strings.Trim(remote, "/")
 	if remote == "" {
@@ -136,7 +142,9 @@ func readRemote(configPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	scanner := bufio.NewScanner(file)
 	currentSection := ""

@@ -1,3 +1,4 @@
+// Command package-release builds per-platform release archives from the local source tree.
 package main
 
 import (
@@ -24,15 +25,16 @@ type target struct {
 	GOARCH string
 }
 
+const goosWindows = "windows"
+
 var defaultTargets = []target{
-	{GOOS: "windows", GOARCH: "amd64"},
-	{GOOS: "windows", GOARCH: "arm64"},
+	{GOOS: goosWindows, GOARCH: "amd64"},
+	{GOOS: goosWindows, GOARCH: "arm64"},
 	{GOOS: "linux", GOARCH: "amd64"},
 	{GOOS: "linux", GOARCH: "arm64"},
 	{GOOS: "darwin", GOARCH: "amd64"},
 	{GOOS: "darwin", GOARCH: "arm64"},
 }
-
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -72,7 +74,7 @@ func buildTarget(ctx context.Context, repoRoot, distDir, version, commit, date s
 	}
 
 	binaryName := "codex-mem"
-	if target.GOOS == "windows" {
+	if target.GOOS == goosWindows {
 		binaryName += ".exe"
 	}
 	binaryPath := filepath.Join(stageDir, binaryName)
@@ -80,7 +82,7 @@ func buildTarget(ctx context.Context, repoRoot, distDir, version, commit, date s
 	copyFile(filepath.Join(repoRoot, "README.md"), filepath.Join(stageDir, "README.md"))
 	copyFile(filepath.Join(repoRoot, "configs", "codex-mem.example.json"), filepath.Join(stageDir, "codex-mem.example.json"))
 
-	if target.GOOS == "windows" {
+	if target.GOOS == goosWindows {
 		archivePath := filepath.Join(distDir, baseName+".zip")
 		writeZip(archivePath, stageDir)
 	} else {
@@ -112,10 +114,14 @@ func writeZip(archivePath, sourceDir string) {
 	if err != nil {
 		failf("create zip %s: %v", archivePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	zipWriter := zip.NewWriter(file)
-	defer zipWriter.Close()
+	defer func() {
+		_ = zipWriter.Close()
+	}()
 
 	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -151,12 +157,18 @@ func writeTarGz(archivePath, sourceDir string) {
 	if err != nil {
 		failf("create tar.gz %s: %v", archivePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	gzipWriter := gzip.NewWriter(file)
-	defer gzipWriter.Close()
+	defer func() {
+		_ = gzipWriter.Close()
+	}()
 	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
+	defer func() {
+		_ = tarWriter.Close()
+	}()
 
 	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -190,7 +202,9 @@ func copyIntoWriter(path string, writer io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	_, err = io.Copy(writer, file)
 	return err
 }
@@ -250,7 +264,9 @@ func fileSHA256(path string) string {
 	if err != nil {
 		failf("open %s: %v", path, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
@@ -282,9 +298,20 @@ func firstNonEmpty(values ...string) string {
 func failf(format string, args ...any) {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, format+"\n", args...)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		buffer.WriteString("")
 	}
 	fmt.Fprint(os.Stderr, buffer.String())
 	os.Exit(1)
 }
+
+
+
+
+
+
+
+
+
+
+

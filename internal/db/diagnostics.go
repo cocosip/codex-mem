@@ -11,6 +11,7 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+// RuntimeDiagnostics summarizes runtime database health and readiness checks.
 type RuntimeDiagnostics struct {
 	ForeignKeysEnabled bool
 	BusyTimeout        time.Duration
@@ -21,6 +22,7 @@ type RuntimeDiagnostics struct {
 	Audit              AuditDiagnostics
 }
 
+// MigrationDiagnostics reports embedded and applied migration state.
 type MigrationDiagnostics struct {
 	Available       int
 	Applied         int
@@ -29,6 +31,7 @@ type MigrationDiagnostics struct {
 	LatestApplied   string
 }
 
+// AuditDiagnostics reports provenance and exclusion audit counts.
 type AuditDiagnostics struct {
 	NoteRecords                   int
 	HandoffRecords                int
@@ -47,6 +50,7 @@ type AuditDiagnostics struct {
 	ExclusionAuditReady           bool
 }
 
+// InspectRuntime inspects the SQLite runtime, schema, migrations, and audit counters.
 func InspectRuntime(ctx context.Context, handle *sql.DB) (RuntimeDiagnostics, error) {
 	files, err := loadMigrationFiles()
 	if err != nil {
@@ -124,7 +128,9 @@ func appliedMigrationRows(ctx context.Context, handle *sql.DB) ([]appliedMigrati
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query applied migrations", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var applied []appliedMigration
 	for rows.Next() {
@@ -200,7 +206,9 @@ func hasRequiredSchema(ctx context.Context, handle *sql.DB) (bool, error) {
 	if err != nil {
 		return false, common.WrapError(common.ErrReadFailed, "query sqlite schema objects", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var names []string
 	for rows.Next() {

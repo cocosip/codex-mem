@@ -29,7 +29,7 @@ type fixedIDFactory struct {
 	value string
 }
 
-func (f fixedIDFactory) New(prefix string) string {
+func (f fixedIDFactory) New(_ string) string {
 	return f.value
 }
 

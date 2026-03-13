@@ -12,6 +12,7 @@ import (
 	"codex-mem/internal/mcp"
 )
 
+// Run executes the selected CLI subcommand with the configured application wiring.
 func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader, stdout io.Writer) error {
 	logger := slog.Default().With(
 		"component", "cli",
@@ -34,7 +35,9 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		defer instance.Close()
+		defer func() {
+			_ = instance.Close()
+		}()
 		logger.Info("migrations applied", "database", cfg.File.DatabasePath)
 		_, err = fmt.Fprintf(stdout, "migrations applied successfully to %s\n", cfg.File.DatabasePath)
 		return err
@@ -47,7 +50,9 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		defer instance.Close()
+		defer func() {
+			_ = instance.Close()
+		}()
 		if err := db.HealthCheck(ctx, instance.DB); err != nil {
 			return err
 		}
@@ -80,7 +85,9 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		defer instance.Close()
+		defer func() {
+			_ = instance.Close()
+		}()
 		logger.Info("starting MCP stdio server")
 		return mcp.NewServer(instance.Handlers).Serve(ctx, stdin, stdout)
 	case "serve-http":
@@ -92,7 +99,9 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		defer instance.Close()
+		defer func() {
+			_ = instance.Close()
+		}()
 		logger.Info("starting MCP HTTP server",
 			"listen", options.ListenAddr,
 			"path", options.EndpointPath,
@@ -116,3 +125,5 @@ func doctorConfigFileUsed(cfg config.Config) string {
 	}
 	return "none"
 }
+
+

@@ -8,14 +8,17 @@ import (
 	"codex-mem/internal/domain/session"
 )
 
+// SessionRepository provides SQLite-backed persistence for session records.
 type SessionRepository struct {
 	db *sql.DB
 }
 
+// NewSessionRepository constructs a SessionRepository for the provided database handle.
 func NewSessionRepository(db *sql.DB) *SessionRepository {
 	return &SessionRepository{db: db}
 }
 
+// Create stores a session record after validating its scope relationship.
 func (r *SessionRepository) Create(record session.Session) error {
 	if err := validateScopeRef(r.db, record.Scope); err != nil {
 		return err

@@ -1,3 +1,4 @@
+// Package main wires the codex-mem CLI entrypoint.
 package main
 
 import (
@@ -31,7 +32,9 @@ func main() {
 		slog.Default().Error("initialize logger", "err", err, "log_file", cfg.File.LogFilePath)
 		os.Exit(1)
 	}
-	defer logCloser.Close()
+	defer func() {
+		_ = logCloser.Close()
+	}()
 	slog.SetDefault(logger)
 
 	if err := app.Run(ctx, cfg, os.Args[1:], os.Stdin, os.Stdout); err != nil {

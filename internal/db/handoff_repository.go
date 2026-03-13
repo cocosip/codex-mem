@@ -11,14 +11,17 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// HandoffRepository provides SQLite-backed persistence for handoff records.
 type HandoffRepository struct {
 	db *sql.DB
 }
 
+// NewHandoffRepository constructs a HandoffRepository for the provided database handle.
 func NewHandoffRepository(db *sql.DB) *HandoffRepository {
 	return &HandoffRepository{db: db}
 }
 
+// FindLatestOpenByTask returns the newest searchable open handoff for the same task and scope.
 func (r *HandoffRepository) FindLatestOpenByTask(ref scope.Ref, task string) (*handoff.Handoff, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -44,6 +47,7 @@ func (r *HandoffRepository) FindLatestOpenByTask(ref scope.Ref, task string) (*h
 	}
 }
 
+// Create stores a handoff record after validating scope and session relationships.
 func (r *HandoffRepository) Create(record handoff.Handoff) error {
 	if err := validateScopeRef(r.db, record.Scope); err != nil {
 		return err
@@ -113,6 +117,7 @@ func (r *HandoffRepository) Create(record handoff.Handoff) error {
 	return nil
 }
 
+// FindLatestOpenInWorkspace returns the newest searchable open handoff in a workspace.
 func (r *HandoffRepository) FindLatestOpenInWorkspace(workspaceID string) (*handoff.Handoff, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -138,6 +143,7 @@ func (r *HandoffRepository) FindLatestOpenInWorkspace(workspaceID string) (*hand
 	}
 }
 
+// FindLatestOpenInProject returns the newest searchable open handoff in sibling workspaces.
 func (r *HandoffRepository) FindLatestOpenInProject(projectID string, excludeWorkspaceID string) (*handoff.Handoff, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -163,6 +169,7 @@ func (r *HandoffRepository) FindLatestOpenInProject(projectID string, excludeWor
 	}
 }
 
+// ListRecentByWorkspace lists recent searchable handoffs for a workspace.
 func (r *HandoffRepository) ListRecentByWorkspace(workspaceID string, limit int) ([]handoff.Handoff, error) {
 	rows, err := r.db.Query(`
 		SELECT
@@ -179,11 +186,14 @@ func (r *HandoffRepository) ListRecentByWorkspace(workspaceID string, limit int)
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query workspace handoffs", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanHandoffs(rows)
 }
 
+// ListRecentByProject lists recent searchable handoffs for sibling workspaces in the same project.
 func (r *HandoffRepository) ListRecentByProject(projectID string, excludeWorkspaceID string, limit int) ([]handoff.Handoff, error) {
 	rows, err := r.db.Query(`
 		SELECT
@@ -200,11 +210,14 @@ func (r *HandoffRepository) ListRecentByProject(projectID string, excludeWorkspa
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "query project handoffs", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanHandoffs(rows)
 }
 
+// GetByID loads a handoff record by its stable identifier.
 func (r *HandoffRepository) GetByID(id string) (*handoff.Handoff, error) {
 	row := r.db.QueryRow(`
 		SELECT
@@ -228,6 +241,7 @@ func (r *HandoffRepository) GetByID(id string) (*handoff.Handoff, error) {
 	}
 }
 
+// Search finds searchable handoffs within a project that match the given query and optional states.
 func (r *HandoffRepository) Search(ref scope.Ref, query string, limit int, states []handoff.Status) ([]handoff.Handoff, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -263,7 +277,9 @@ func (r *HandoffRepository) Search(ref scope.Ref, query string, limit int, state
 	if err != nil {
 		return nil, common.WrapError(common.ErrReadFailed, "search handoffs", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	return scanHandoffs(rows)
 }

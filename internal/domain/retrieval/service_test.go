@@ -12,11 +12,13 @@ import (
 	"codex-mem/internal/domain/session"
 )
 
+const workspaceHandoffID = "handoff_ws"
+
 type fakeScopeResolver struct {
 	output scope.ResolveOutput
 }
 
-func (f *fakeScopeResolver) Resolve(ctx context.Context, input scope.ResolveInput) (scope.ResolveOutput, error) {
+func (f *fakeScopeResolver) Resolve(_ context.Context, _ scope.ResolveInput) (scope.ResolveOutput, error) {
 	return f.output, nil
 }
 
@@ -24,7 +26,7 @@ type fakeSessionStarter struct {
 	output session.StartOutput
 }
 
-func (f *fakeSessionStarter) Start(ctx context.Context, input session.StartInput) (session.StartOutput, error) {
+func (f *fakeSessionStarter) Start(_ context.Context, _ session.StartInput) (session.StartOutput, error) {
 	return f.output, nil
 }
 
@@ -37,11 +39,11 @@ type fakeMemoryReader struct {
 	relatedIDs     []string
 }
 
-func (f *fakeMemoryReader) ListRecentByWorkspace(workspaceID string, limit int, minImportance int) ([]memory.Note, error) {
+func (f *fakeMemoryReader) ListRecentByWorkspace(_ string, limit int, _ int) ([]memory.Note, error) {
 	return takeNotes(f.workspaceNotes, limit), nil
 }
 
-func (f *fakeMemoryReader) ListRecentByProject(projectID string, excludeWorkspaceID string, limit int, minImportance int) ([]memory.Note, error) {
+func (f *fakeMemoryReader) ListRecentByProject(_ string, _ string, limit int, _ int) ([]memory.Note, error) {
 	return takeNotes(f.projectNotes, limit), nil
 }
 
@@ -53,19 +55,19 @@ func (f *fakeMemoryReader) GetByID(id string) (*memory.Note, error) {
 	return &record, nil
 }
 
-func (f *fakeMemoryReader) Search(scope scope.Ref, query string, limit int, minImportance int, types []memory.NoteType, states []memory.Status) ([]memory.Note, error) {
+func (f *fakeMemoryReader) Search(_ scope.Ref, _ string, limit int, _ int, _ []memory.NoteType, _ []memory.Status) ([]memory.Note, error) {
 	return takeNotes(f.searchNotes, limit), nil
 }
 
-func (f *fakeMemoryReader) ListRecentByProjects(systemID string, projectIDs []string, limit int, minImportance int) ([]memory.Note, error) {
+func (f *fakeMemoryReader) ListRecentByProjects(_ string, _ []string, limit int, _ int) ([]memory.Note, error) {
 	return takeNotes(f.relatedNotes, limit), nil
 }
 
-func (f *fakeMemoryReader) ListRelatedProjectIDs(projectID string, limit int) ([]string, error) {
+func (f *fakeMemoryReader) ListRelatedProjectIDs(_ string, _ int) ([]string, error) {
 	return f.relatedIDs, nil
 }
 
-func (f *fakeMemoryReader) SearchProjects(systemID string, projectIDs []string, query string, limit int, minImportance int, types []memory.NoteType, states []memory.Status) ([]memory.Note, error) {
+func (f *fakeMemoryReader) SearchProjects(_ string, _ []string, _ string, limit int, _ int, _ []memory.NoteType, _ []memory.Status) ([]memory.Note, error) {
 	return takeNotes(f.relatedNotes, limit), nil
 }
 
@@ -78,19 +80,19 @@ type fakeHandoffReader struct {
 	searchHandoffs   []handoff.Handoff
 }
 
-func (f *fakeHandoffReader) FindLatestOpenInWorkspace(workspaceID string) (*handoff.Handoff, error) {
+func (f *fakeHandoffReader) FindLatestOpenInWorkspace(_ string) (*handoff.Handoff, error) {
 	return f.workspaceHandoff, nil
 }
 
-func (f *fakeHandoffReader) FindLatestOpenInProject(projectID string, excludeWorkspaceID string) (*handoff.Handoff, error) {
+func (f *fakeHandoffReader) FindLatestOpenInProject(_ string, _ string) (*handoff.Handoff, error) {
 	return f.projectHandoff, nil
 }
 
-func (f *fakeHandoffReader) ListRecentByWorkspace(workspaceID string, limit int) ([]handoff.Handoff, error) {
+func (f *fakeHandoffReader) ListRecentByWorkspace(_ string, limit int) ([]handoff.Handoff, error) {
 	return takeHandoffs(f.workspaceRecent, limit), nil
 }
 
-func (f *fakeHandoffReader) ListRecentByProject(projectID string, excludeWorkspaceID string, limit int) ([]handoff.Handoff, error) {
+func (f *fakeHandoffReader) ListRecentByProject(_ string, _ string, limit int) ([]handoff.Handoff, error) {
 	return takeHandoffs(f.projectRecent, limit), nil
 }
 
@@ -102,7 +104,7 @@ func (f *fakeHandoffReader) GetByID(id string) (*handoff.Handoff, error) {
 	return &record, nil
 }
 
-func (f *fakeHandoffReader) Search(scope scope.Ref, query string, limit int, states []handoff.Status) ([]handoff.Handoff, error) {
+func (f *fakeHandoffReader) Search(_ scope.Ref, _ string, limit int, _ []handoff.Status) ([]handoff.Handoff, error) {
 	return takeHandoffs(f.searchHandoffs, limit), nil
 }
 
@@ -146,7 +148,7 @@ func TestBootstrapSessionPrefersWorkspaceHandoffAndBuildsBrief(t *testing.T) {
 		},
 		&fakeHandoffReader{
 			workspaceHandoff: &handoff.Handoff{
-				ID:           "handoff_ws",
+				ID:           workspaceHandoffID,
 				Scope:        currentScope.Ref(),
 				SessionID:    "sess_prev",
 				Kind:         handoff.KindFinal,
@@ -170,7 +172,7 @@ func TestBootstrapSessionPrefersWorkspaceHandoffAndBuildsBrief(t *testing.T) {
 		t.Fatalf("BootstrapSession: %v", err)
 	}
 
-	if result.LatestHandoff == nil || result.LatestHandoff.ID != "handoff_ws" {
+	if result.LatestHandoff == nil || result.LatestHandoff.ID != workspaceHandoffID {
 		t.Fatalf("expected workspace handoff, got %+v", result.LatestHandoff)
 	}
 	if got, want := result.StartupBrief.CurrentTask, "Continue validation work"; got != want {
@@ -292,7 +294,7 @@ func TestGetRecentReturnsWorkspaceThenProjectRecords(t *testing.T) {
 			projectNotes:   []memory.Note{{ID: "note_proj", Scope: scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_2"}, Importance: 4}},
 		},
 		&fakeHandoffReader{
-			workspaceRecent: []handoff.Handoff{{ID: "handoff_ws", Scope: currentRef}},
+			workspaceRecent: []handoff.Handoff{{ID: workspaceHandoffID, Scope: currentRef}},
 			projectRecent:   []handoff.Handoff{{ID: "handoff_proj", Scope: scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_2"}}},
 		},
 	)
@@ -314,7 +316,7 @@ func TestGetRecentReturnsWorkspaceThenProjectRecords(t *testing.T) {
 	if got, want := result.Notes[0].ID, "note_ws"; got != want {
 		t.Fatalf("workspace note ordering mismatch: got %q want %q", got, want)
 	}
-	if got, want := result.Handoffs[0].ID, "handoff_ws"; got != want {
+	if got, want := result.Handoffs[0].ID, workspaceHandoffID; got != want {
 		t.Fatalf("workspace handoff ordering mismatch: got %q want %q", got, want)
 	}
 }
@@ -325,7 +327,7 @@ func TestGetRecentSupportsIncludeFlagsAndRelatedWarning(t *testing.T) {
 		&fakeScopeResolver{},
 		&fakeSessionStarter{},
 		&fakeMemoryReader{workspaceNotes: []memory.Note{{ID: "note_ws", Scope: currentRef, Importance: 4}}},
-		&fakeHandoffReader{workspaceRecent: []handoff.Handoff{{ID: "handoff_ws", Scope: currentRef}}},
+		&fakeHandoffReader{workspaceRecent: []handoff.Handoff{{ID: workspaceHandoffID, Scope: currentRef}}},
 	)
 
 	result, err := service.GetRecent(context.Background(), GetRecentInput{
@@ -460,7 +462,7 @@ func TestSearchRanksWorkspaceResultsFirstAndSupportsHandoffs(t *testing.T) {
 		&fakeHandoffReader{
 			searchHandoffs: []handoff.Handoff{
 				{
-					ID:        "handoff_ws",
+					ID:        workspaceHandoffID,
 					Scope:     currentRef,
 					Kind:      handoff.KindFinal,
 					Task:      "Payment validation follow-up",

@@ -9,11 +9,13 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+// ScopeRepository provides SQLite-backed persistence for scope records.
 type ScopeRepository struct {
 	db    *sql.DB
 	clock common.Clock
 }
 
+// NewScopeRepository constructs a ScopeRepository for the provided database handle.
 func NewScopeRepository(db *sql.DB, clock common.Clock) *ScopeRepository {
 	if clock == nil {
 		clock = common.RealClock{}
@@ -21,6 +23,7 @@ func NewScopeRepository(db *sql.DB, clock common.Clock) *ScopeRepository {
 	return &ScopeRepository{db: db, clock: clock}
 }
 
+// EnsureSystem upserts a system record by its stable identifier.
 func (r *ScopeRepository) EnsureSystem(system scope.SystemRecord) (scope.SystemRecord, error) {
 	now := r.clock.Now().UTC().Format(time.RFC3339Nano)
 	_, err := r.db.Exec(`
@@ -37,6 +40,7 @@ func (r *ScopeRepository) EnsureSystem(system scope.SystemRecord) (scope.SystemR
 	return system, nil
 }
 
+// EnsureProject upserts a project record while preserving canonical-key ownership.
 func (r *ScopeRepository) EnsureProject(project scope.ProjectRecord) (scope.ProjectRecord, error) {
 	var existing scope.ProjectRecord
 	err := r.db.QueryRow(`
@@ -83,6 +87,7 @@ func (r *ScopeRepository) EnsureProject(project scope.ProjectRecord) (scope.Proj
 	}
 }
 
+// EnsureWorkspace upserts a workspace record while preserving workspace-key ownership.
 func (r *ScopeRepository) EnsureWorkspace(workspace scope.WorkspaceRecord) (scope.WorkspaceRecord, error) {
 	var existing scope.WorkspaceRecord
 	err := r.db.QueryRow(`

@@ -1,3 +1,4 @@
+// Package app wires the runtime dependencies for codex-mem.
 package app
 
 import (
@@ -31,6 +32,7 @@ type App struct {
 	Handlers         *mcp.Handlers
 }
 
+// New constructs the application service graph from the loaded configuration.
 func New(ctx context.Context, cfg config.Config) (*App, error) {
 	logger := slog.Default().With(
 		"component", "app",
@@ -86,6 +88,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}, nil
 }
 
+// Close releases the application's database handle when it is present.
 func (a *App) Close() error {
 	if a == nil || a.DB == nil {
 		return nil

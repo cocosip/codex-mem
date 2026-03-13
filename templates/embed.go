@@ -1,3 +1,4 @@
+// Package templates embeds AGENTS.md templates for runtime installation.
 package templates
 
 import _ "embed"
@@ -11,3 +12,4 @@ var GlobalAgentsTemplate string
 //
 //go:embed AGENTS.project.template.md
 var ProjectAgentsTemplate string
+

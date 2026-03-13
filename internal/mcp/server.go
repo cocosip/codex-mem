@@ -23,6 +23,7 @@ const (
 	jsonRPCVersion         = "2.0"
 )
 
+// Server serves the codex-mem MCP protocol over stdio.
 type Server struct {
 	handlers *Handlers
 	tools    map[string]toolDefinition
@@ -213,6 +214,7 @@ type installAgentsRequest struct {
 	AllowRelatedProjectMemory *bool    `json:"allow_related_project_memory,omitempty"`
 }
 
+// NewServer constructs a Server with the registered MCP tools.
 func NewServer(handlers *Handlers) *Server {
 	server := &Server{handlers: handlers}
 	server.tools = map[string]toolDefinition{}
@@ -222,6 +224,7 @@ func NewServer(handlers *Handlers) *Server {
 	return server
 }
 
+// Serve reads MCP requests from stdin and writes responses to stdout.
 func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	reader := bufio.NewReader(stdin)
 	writer := bufio.NewWriter(stdout)
@@ -331,6 +334,7 @@ func (s *Server) listTools() []toolDefinition {
 	return result
 }
 
+// ToolCount returns the number of tools exposed by the server.
 func (s *Server) ToolCount() int {
 	return len(s.listTools())
 }
@@ -854,7 +858,7 @@ func writeFrame(writer *bufio.Writer, payload any) error {
 		return fmt.Errorf("marshal frame: %w", err)
 	}
 
-	if _, err := writer.WriteString(fmt.Sprintf("Content-Length: %d\r\n\r\n", len(body))); err != nil {
+	if _, err := fmt.Fprintf(writer, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
 		return err
 	}
 	if _, err := writer.Write(body); err != nil {

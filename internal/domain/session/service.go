@@ -1,3 +1,4 @@
+// Package session tracks active and historical Codex work sessions.
 package session
 
 import (
@@ -7,16 +8,19 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+// Options configures session creation dependencies.
 type Options struct {
 	Clock     common.Clock
 	IDFactory common.IDFactory
 }
 
+// Service creates session records.
 type Service struct {
 	repo    Repository
 	options Options
 }
 
+// NewService constructs a Service with default clock and ID generation behavior.
 func NewService(repo Repository, options Options) *Service {
 	if options.Clock == nil {
 		options.Clock = common.RealClock{}
@@ -27,6 +31,7 @@ func NewService(repo Repository, options Options) *Service {
 	return &Service{repo: repo, options: options}
 }
 
+// Start creates a new active session from the resolved scope input.
 func (s *Service) Start(ctx context.Context, input StartInput) (StartOutput, error) {
 	_ = ctx
 

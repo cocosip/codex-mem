@@ -6,12 +6,14 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+// Ref is the minimal canonical scope reference used across records.
 type Ref struct {
 	SystemID    string `json:"system_id"`
 	ProjectID   string `json:"project_id"`
 	WorkspaceID string `json:"workspace_id"`
 }
 
+// Validate ensures the scope reference contains all required ids.
 func (r Ref) Validate() error {
 	switch {
 	case strings.TrimSpace(r.SystemID) == "":
@@ -25,6 +27,7 @@ func (r Ref) Validate() error {
 	}
 }
 
+// Scope is the full canonical scope returned to callers and stored on records.
 type Scope struct {
 	SystemID      string `json:"system_id"`
 	SystemName    string `json:"system_name"`
@@ -36,6 +39,7 @@ type Scope struct {
 	ResolvedBy    string `json:"resolved_by"`
 }
 
+// Validate ensures the full scope contains all required identity fields.
 func (s Scope) Validate() error {
 	if err := s.Ref().Validate(); err != nil {
 		return err
@@ -55,6 +59,7 @@ func (s Scope) Validate() error {
 	return nil
 }
 
+// Ref returns the minimal canonical reference for the full scope.
 func (s Scope) Ref() Ref {
 	return Ref{
 		SystemID:    s.SystemID,
@@ -63,6 +68,7 @@ func (s Scope) Ref() Ref {
 	}
 }
 
+// ResolveInput describes one scope-resolution request.
 type ResolveInput struct {
 	CWD             string
 	BranchName      string
@@ -71,18 +77,21 @@ type ResolveInput struct {
 	SystemNameHint  string
 }
 
+// ResolveOutput reports the resolved canonical scope and any warnings.
 type ResolveOutput struct {
 	Scope      Scope            `json:"scope"`
 	ResolvedBy string           `json:"resolved_by"`
 	Warnings   []common.Warning `json:"warnings"`
 }
 
+// SystemRecord is the persisted system identity row.
 type SystemRecord struct {
 	ID   string
 	Name string
 	Slug string
 }
 
+// ProjectRecord is the persisted project identity row.
 type ProjectRecord struct {
 	ID               string
 	SystemID         string
@@ -92,6 +101,7 @@ type ProjectRecord struct {
 	RemoteNormalized string
 }
 
+// WorkspaceRecord is the persisted workspace identity row.
 type WorkspaceRecord struct {
 	ID           string
 	ProjectID    string
@@ -100,6 +110,7 @@ type WorkspaceRecord struct {
 	BranchName   string
 }
 
+// Repository persists canonical scope records.
 type Repository interface {
 	EnsureSystem(system SystemRecord) (SystemRecord, error)
 	EnsureProject(project ProjectRecord) (ProjectRecord, error)
