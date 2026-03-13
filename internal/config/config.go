@@ -1,11 +1,20 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/spf13/viper"
+)
+
+const (
+	defaultConfigBaseName  = "codex-mem"
+	defaultConfigExtension = ".json"
 )
 
 type Config struct {
@@ -42,63 +51,50 @@ func Load(cwd string) (Config, error) {
 
 	configDir := filepath.Join(absCWD, "configs")
 	logDir := filepath.Join(absCWD, "logs")
-	configFilePath := os.Getenv("CODEX_MEM_CONFIG_FILE")
-	if configFilePath == "" {
-		configFilePath = filepath.Join(configDir, "codex-mem.json")
-	} else if !filepath.IsAbs(configFilePath) {
-		configFilePath = filepath.Join(configDir, configFilePath)
-	}
-	configFilePath, err = filepath.Abs(configFilePath)
+
+	configFilePath, explicitConfigPath, err := resolveConfigFilePath(configDir, os.Getenv("CODEX_MEM_CONFIG_FILE"))
 	if err != nil {
-		return Config{}, fmt.Errorf("resolve config file path: %w", err)
+		return Config{}, err
 	}
 
-	databasePath := os.Getenv("CODEX_MEM_DB_PATH")
-	if databasePath == "" {
-		databasePath = filepath.Join(absCWD, "data", "codex-mem.db")
-	}
-	if databasePath != ":memory:" {
-		databasePath, err = filepath.Abs(databasePath)
-		if err != nil {
-			return Config{}, fmt.Errorf("resolve database path: %w", err)
-		}
+	settings, loadedConfigPath, err := loadSettings(absCWD, configDir, logDir, configFilePath, explicitConfigPath)
+	if err != nil {
+		return Config{}, err
 	}
 
-	systemName := os.Getenv("CODEX_MEM_SYSTEM_NAME")
-	if systemName == "" {
-		systemName = "codex-mem"
-	}
-
-	driverName := os.Getenv("CODEX_MEM_SQLITE_DRIVER")
-	if driverName == "" {
-		driverName = "sqlite"
-	}
-
-	logLevel, err := parseLogLevel(os.Getenv("CODEX_MEM_LOG_LEVEL"))
+	databasePath, err := resolveDataPath(absCWD, settings.databasePath)
 	if err != nil {
 		return Config{}, err
 	}
-	logFilePath, err := resolveLogFilePath(logDir, os.Getenv("CODEX_MEM_LOG_FILE"))
+	logFilePath, err := resolveLogFilePath(logDir, settings.logFilePath)
 	if err != nil {
 		return Config{}, err
 	}
-	logMaxSizeMB, err := parsePositiveInt("CODEX_MEM_LOG_MAX_SIZE_MB", os.Getenv("CODEX_MEM_LOG_MAX_SIZE_MB"), 20)
+	logLevel, err := parseLogLevel(settings.logLevel)
 	if err != nil {
 		return Config{}, err
 	}
-	logMaxBackups, err := parsePositiveInt("CODEX_MEM_LOG_MAX_BACKUPS", os.Getenv("CODEX_MEM_LOG_MAX_BACKUPS"), 10)
+	busyTimeoutMS, err := parsePositiveInt("busy_timeout_ms", settings.busyTimeoutMS, 5000)
 	if err != nil {
 		return Config{}, err
 	}
-	logMaxAgeDays, err := parsePositiveInt("CODEX_MEM_LOG_MAX_AGE_DAYS", os.Getenv("CODEX_MEM_LOG_MAX_AGE_DAYS"), 30)
+	logMaxSizeMB, err := parsePositiveInt("log_max_size_mb", settings.logMaxSizeMB, 20)
 	if err != nil {
 		return Config{}, err
 	}
-	logCompress, err := parseBool("CODEX_MEM_LOG_COMPRESS", os.Getenv("CODEX_MEM_LOG_COMPRESS"), true)
+	logMaxBackups, err := parsePositiveInt("log_max_backups", settings.logMaxBackups, 10)
 	if err != nil {
 		return Config{}, err
 	}
-	logAlsoStderr, err := parseBool("CODEX_MEM_LOG_STDERR", os.Getenv("CODEX_MEM_LOG_STDERR"), true)
+	logMaxAgeDays, err := parsePositiveInt("log_max_age_days", settings.logMaxAgeDays, 30)
+	if err != nil {
+		return Config{}, err
+	}
+	logCompress, err := parseBool("log_compress", settings.logCompress, true)
+	if err != nil {
+		return Config{}, err
+	}
+	logAlsoStderr, err := parseBool("log_stderr", settings.logAlsoStderr, true)
 	if err != nil {
 		return Config{}, err
 	}
@@ -106,13 +102,13 @@ func Load(cwd string) (Config, error) {
 	return Config{
 		DatabasePath:      databasePath,
 		ConfigDir:         configDir,
-		ConfigFilePath:    configFilePath,
+		ConfigFilePath:    loadedConfigPath,
 		LogDir:            logDir,
 		LogFilePath:       logFilePath,
-		DefaultSystemName: systemName,
-		SQLiteDriver:      driverName,
-		BusyTimeout:       5 * time.Second,
-		JournalMode:       "WAL",
+		DefaultSystemName: firstNonEmpty(settings.systemName, "codex-mem"),
+		SQLiteDriver:      firstNonEmpty(settings.sqliteDriver, "sqlite"),
+		BusyTimeout:       time.Duration(busyTimeoutMS) * time.Millisecond,
+		JournalMode:       firstNonEmpty(settings.journalMode, "WAL"),
 		LogLevel:          logLevel,
 		LogMaxSizeMB:      logMaxSizeMB,
 		LogMaxBackups:     logMaxBackups,
@@ -120,6 +116,112 @@ func Load(cwd string) (Config, error) {
 		LogCompress:       logCompress,
 		LogAlsoStderr:     logAlsoStderr,
 	}, nil
+}
+
+type loadedSettings struct {
+	databasePath  string
+	systemName    string
+	sqliteDriver  string
+	busyTimeoutMS string
+	journalMode   string
+	logLevel      string
+	logFilePath   string
+	logMaxSizeMB  string
+	logMaxBackups string
+	logMaxAgeDays string
+	logCompress   string
+	logAlsoStderr string
+}
+
+func loadSettings(absCWD string, configDir string, logDir string, configFilePath string, explicitConfigPath bool) (loadedSettings, string, error) {
+	v := viper.New()
+	v.SetEnvPrefix("CODEX_MEM")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	v.SetDefault("db_path", filepath.Join(absCWD, "data", "codex-mem.db"))
+	v.SetDefault("system_name", "codex-mem")
+	v.SetDefault("sqlite_driver", "sqlite")
+	v.SetDefault("busy_timeout_ms", "5000")
+	v.SetDefault("journal_mode", "WAL")
+	v.SetDefault("log_level", "info")
+	v.SetDefault("log_file", filepath.Join(logDir, "codex-mem.log"))
+	v.SetDefault("log_max_size_mb", "20")
+	v.SetDefault("log_max_backups", "10")
+	v.SetDefault("log_max_age_days", "30")
+	v.SetDefault("log_compress", "true")
+	v.SetDefault("log_stderr", "true")
+
+	if explicitConfigPath {
+		v.SetConfigFile(configFilePath)
+	} else {
+		v.SetConfigName(defaultConfigBaseName)
+		v.AddConfigPath(configDir)
+	}
+
+	if err := v.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if explicitConfigPath || !errors.As(err, &notFound) {
+			return loadedSettings{}, "", fmt.Errorf("read config file: %w", err)
+		}
+	}
+
+	usedConfigPath := configFilePath
+	if used := strings.TrimSpace(v.ConfigFileUsed()); used != "" {
+		absUsed, err := filepath.Abs(used)
+		if err != nil {
+			return loadedSettings{}, "", fmt.Errorf("resolve used config file path: %w", err)
+		}
+		usedConfigPath = absUsed
+	}
+
+	return loadedSettings{
+		databasePath:  strings.TrimSpace(v.GetString("db_path")),
+		systemName:    strings.TrimSpace(v.GetString("system_name")),
+		sqliteDriver:  strings.TrimSpace(v.GetString("sqlite_driver")),
+		busyTimeoutMS: strings.TrimSpace(v.GetString("busy_timeout_ms")),
+		journalMode:   strings.TrimSpace(v.GetString("journal_mode")),
+		logLevel:      strings.TrimSpace(v.GetString("log_level")),
+		logFilePath:   strings.TrimSpace(v.GetString("log_file")),
+		logMaxSizeMB:  strings.TrimSpace(v.GetString("log_max_size_mb")),
+		logMaxBackups: strings.TrimSpace(v.GetString("log_max_backups")),
+		logMaxAgeDays: strings.TrimSpace(v.GetString("log_max_age_days")),
+		logCompress:   strings.TrimSpace(v.GetString("log_compress")),
+		logAlsoStderr: strings.TrimSpace(v.GetString("log_stderr")),
+	}, usedConfigPath, nil
+}
+
+func resolveConfigFilePath(configDir string, envValue string) (string, bool, error) {
+	if strings.TrimSpace(envValue) == "" {
+		return filepath.Join(configDir, defaultConfigBaseName+defaultConfigExtension), false, nil
+	}
+
+	configFilePath := strings.TrimSpace(envValue)
+	if !filepath.IsAbs(configFilePath) {
+		configFilePath = filepath.Join(configDir, configFilePath)
+	}
+	absPath, err := filepath.Abs(configFilePath)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve config file path: %w", err)
+	}
+	return absPath, true, nil
+}
+
+func resolveDataPath(baseDir string, value string) (string, error) {
+	if value == "" {
+		value = filepath.Join(baseDir, "data", "codex-mem.db")
+	}
+	if value == ":memory:" {
+		return value, nil
+	}
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(baseDir, value)
+	}
+	absPath, err := filepath.Abs(value)
+	if err != nil {
+		return "", fmt.Errorf("resolve database path: %w", err)
+	}
+	return absPath, nil
 }
 
 func parseLogLevel(value string) (slog.Level, error) {
@@ -133,12 +235,12 @@ func parseLogLevel(value string) (slog.Level, error) {
 	case "error", "ERROR":
 		return slog.LevelError, nil
 	default:
-		return 0, fmt.Errorf("invalid CODEX_MEM_LOG_LEVEL %q", value)
+		return 0, fmt.Errorf("invalid log_level %q", value)
 	}
 }
 
-func resolveLogFilePath(logDir, envValue string) (string, error) {
-	logFilePath := envValue
+func resolveLogFilePath(logDir, value string) (string, error) {
+	logFilePath := strings.TrimSpace(value)
 	if logFilePath == "" {
 		logFilePath = filepath.Join(logDir, "codex-mem.log")
 	} else if !filepath.IsAbs(logFilePath) {
@@ -152,6 +254,7 @@ func resolveLogFilePath(logDir, envValue string) (string, error) {
 }
 
 func parsePositiveInt(name, value string, fallback int) (int, error) {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return fallback, nil
 	}
@@ -163,7 +266,7 @@ func parsePositiveInt(name, value string, fallback int) (int, error) {
 }
 
 func parseBool(name, value string, fallback bool) (bool, error) {
-	switch value {
+	switch strings.TrimSpace(value) {
 	case "":
 		return fallback, nil
 	case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":
@@ -173,4 +276,14 @@ func parseBool(name, value string, fallback bool) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid %s %q", name, value)
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

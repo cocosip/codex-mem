@@ -1,0 +1,14 @@
+{
+  "db_path": "data/codex-mem.db",
+  "system_name": "codex-mem",
+  "sqlite_driver": "sqlite",
+  "busy_timeout_ms": 5000,
+  "journal_mode": "WAL",
+  "log_level": "info",
+  "log_file": "codex-mem.log",
+  "log_max_size_mb": 10,
+  "log_max_backups": 10,
+  "log_max_age_days": 30,
+  "log_compress": true,
+  "log_stderr": true
+}

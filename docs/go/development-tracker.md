@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Begin Phase 5 conformance and hardening on top of the completed AGENTS integration slice.
+Current target: Maintain v1 conformance coverage and follow-up implementation polish.
 
 ## Phase Progress
 
@@ -101,33 +101,33 @@ Tasks:
 
 ### Phase 5: Conformance and Hardening
 
-Status: todo
+Status: done
 
 Note: This phase is the remaining validation layer for already-implemented Phase 1-4 features and should not be confused with missing feature implementation work.
 
 Tasks:
 
-- [ ] Add conformance tests for empty-store bootstrap
-- [ ] Add conformance tests for same-project recovery
-- [ ] Add conformance tests for related-project retrieval
-- [ ] Add conformance tests for privacy exclusion
-- [ ] Add conformance tests for AGENTS safe install
-- [ ] Add identity conflict tests
-- [ ] Add migration edge-case tests
-- [ ] Verify provenance and warning visibility
+- [x] Add conformance tests for empty-store bootstrap
+- [x] Add conformance tests for same-project recovery
+- [x] Add conformance tests for related-project retrieval
+- [x] Add conformance tests for privacy exclusion
+- [x] Add conformance tests for AGENTS safe install
+- [x] Add identity conflict tests
+- [x] Add migration edge-case tests
+- [x] Verify provenance and warning visibility
 
 ## Current Session Plan
 
 Current session focus:
 
-- Finish Phase 4 AGENTS integration and hand off into Phase 5 validation work
+- Post-conformance implementation polish and runtime integration follow-up
 
 Immediate next tasks:
 
-1. Add conformance tests for AGENTS safe install
-2. Add conformance tests for empty-store bootstrap and same-project recovery
-3. Add identity conflict and migration edge-case tests
-4. Verify provenance and warning visibility end-to-end
+1. Add any remaining CLI or MCP transport integration around new tools
+2. Review residual observability gaps beyond test coverage
+3. Prepare release/readiness notes if v1 packaging is desired
+4. Decide whether to expose config diagnostics in `doctor`
 
 ## Decisions Log
 
@@ -155,6 +155,8 @@ Immediate next tasks:
 - Phase completion in this tracker refers to implementation status; broader conformance, hardening, and verification status remains tracked separately under Phase 5.
 - AGENTS templates are now embedded for runtime use, and `memory_install_agents` defaults global installs to `~/.codex/AGENTS.md` plus project installs to `<cwd>/AGENTS.md`.
 - AGENTS append mode uses managed comment markers so repeated installs do not duplicate appended template blocks.
+- Phase 5 now includes explicit conformance-named Go tests for bootstrap, recovery, retrieval isolation/expansion, privacy exclusion, AGENTS safe install, identity conflict handling, migration continuity, and warning/provenance visibility.
+- Runtime config now loads through `viper` from `configs/codex-mem.*`, with environment variables overriding file values and a checked-in example config under `configs/codex-mem.example.json`.
 
 ## Blockers
 
@@ -231,6 +233,20 @@ Current blockers:
 - In progress: Phase 5 conformance and hardening planning.
 - Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
 - Next step: Add conformance tests for AGENTS safe install, bootstrap recovery scenarios, and warning/provenance visibility.
+
+### 2026-03-13 Session Update
+
+- Completed: Added explicit Phase 5 conformance and hardening tests covering empty-store bootstrap, same-workspace/project recovery, related-project retrieval labeling, privacy exclusion behavior, AGENTS safe install, identity conflicts, project rename continuity, remote URL normalization continuity, and warning/provenance visibility; verified with `go test ./...`.
+- In progress: Post-conformance polish and config-loader follow-up.
+- Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
+- Next step: Implement repository-local config-file loading with `viper` so runtime behavior matches the documented config policy.
+
+### 2026-03-13 Session Update
+
+- Completed: Implemented repository-local config loading with `viper` in `internal/config`, preserving `defaults < config file < environment variables`; added tests for default loading, `configs/` file loading, environment overrides, and explicit config-path selection; added `configs/codex-mem.example.json`; verified with `go test ./...`.
+- In progress: Post-conformance polish and runtime integration follow-up.
+- Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
+- Next step: Review remaining CLI and diagnostics polish, especially whether `doctor` should surface effective config information.
 
 ## Session Handoff Template
 
