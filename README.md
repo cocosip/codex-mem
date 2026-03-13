@@ -1,0 +1,77 @@
+# codex-mem
+
+`codex-mem` is a local-first durable memory service for Codex workflows.
+It stores structured notes and handoffs in SQLite, restores continuity across restarted sessions, and exposes the v1 tool surface over MCP stdio.
+
+## Current Status
+
+- Go v1 implementation is feature-complete for the core spec slices.
+- `serve` runs a native MCP stdio server.
+- `doctor` reports config, database readiness, migration status, provenance coverage, and MCP tool availability.
+- AGENTS template installation is implemented for global and project workflows.
+
+Normative product docs live in [docs/spec/README.md](/D:/Code/go/codex-mem/docs/spec/README.md).
+Go implementation planning and progress live in [docs/go/README.md](/D:/Code/go/codex-mem/docs/go/README.md).
+
+## Commands
+
+- `go run ./cmd/codex-mem doctor`
+  Prints effective config plus runtime readiness and audit diagnostics.
+- `go run ./cmd/codex-mem migrate`
+  Opens the configured SQLite database and applies embedded migrations.
+- `go run ./cmd/codex-mem serve`
+  Starts the MCP stdio transport and exposes the v1 tools.
+
+## Quick Start
+
+1. Copy [codex-mem.example.json](/D:/Code/go/codex-mem/configs/codex-mem.example.json) to `configs/codex-mem.json` if you want repository-local config.
+2. Run `go run ./cmd/codex-mem doctor`.
+3. Confirm:
+   `required_schema_ok=true`
+   `fts_ready=true`
+   `migrations_pending=0`
+   `mcp_tool_count=9`
+4. Start the MCP server with `go run ./cmd/codex-mem serve`.
+
+## MCP Tool Surface
+
+The current stdio server exposes:
+
+- `memory_bootstrap_session`
+- `memory_resolve_scope`
+- `memory_start_session`
+- `memory_save_note`
+- `memory_save_handoff`
+- `memory_search`
+- `memory_get_recent`
+- `memory_get_note`
+- `memory_install_agents`
+
+Request and response examples are documented in [example-payloads.md](/D:/Code/go/codex-mem/docs/spec/appendices/example-payloads.md).
+
+## First-Run Workflow
+
+For one repository:
+
+1. Run `memory_install_agents` in safe mode for project or both targets.
+2. Start work with `memory_bootstrap_session`.
+3. Save durable discoveries with `memory_save_note`.
+4. Save a continuation record with `memory_save_handoff` before ending.
+
+See [onboarding-flows.md](/D:/Code/go/codex-mem/docs/spec/appendices/onboarding-flows.md) for the full onboarding guidance.
+
+## Diagnostics
+
+`doctor` now reports:
+
+- config precedence and selected config file
+- SQLite pragmas and schema readiness
+- migration availability and applied status
+- note and handoff audit counts
+- note source-category coverage
+- exclusion audit coverage
+- MCP transport/tool availability
+
+## Release Notes
+
+The current release/readiness checklist lives in [release-readiness.md](/D:/Code/go/codex-mem/docs/go/release-readiness.md).

@@ -120,14 +120,14 @@ Tasks:
 
 Current session focus:
 
-- Post-conformance implementation polish and runtime integration follow-up
+- Post-conformance implementation polish, MCP runtime integration, and diagnostics follow-up
 
 Immediate next tasks:
 
-1. Add any remaining CLI or MCP transport integration around new tools
-2. Review residual observability gaps beyond test coverage
-3. Prepare release/readiness notes if v1 packaging is desired
-4. Decide whether to expose config diagnostics in `doctor`
+1. Review residual observability gaps beyond test coverage
+2. Add any remaining MCP compatibility polish discovered during client integration
+3. Decide whether the next polish slice should prioritize troubleshooting docs or richer retrieval/audit traces
+4. Decide whether `doctor` needs machine-readable diagnostics output for automation
 
 ## Decisions Log
 
@@ -255,6 +255,62 @@ Current blockers:
 - In progress: Post-conformance polish and runtime integration follow-up.
 - Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
 - Next step: Decide whether to expose an explicit effective-config summary in `doctor` or a dedicated diagnostics command.
+
+### 2026-03-13 Session Update
+
+- Completed: Implemented a native MCP stdio transport in `internal/mcp` with framed JSON-RPC handling for `initialize`, `ping`, `tools/list`, and `tools/call`; registered all v1 memory tools with JSON schemas and structured tool responses; wired `serve` to run the MCP server instead of a placeholder skeleton; added transport tests and a real `go run ./cmd/codex-mem serve` initialize smoke check; verified with `go test ./...`.
+- In progress: Post-conformance diagnostics and observability follow-up.
+- Blockers: none new.
+- Next step: Decide whether `doctor` should expose an effective-config summary and review any remaining client-facing observability gaps.
+
+### 2026-03-13 Session Update
+
+- Completed: Expanded `doctor` to print an effective configuration summary including config precedence, selected config file, database path, SQLite settings, and log rotation settings; added `internal/app` tests covering config-file-present and config-file-absent diagnostics; verified with `go test ./...` and a real `go run ./cmd/codex-mem doctor` smoke check.
+- In progress: Residual observability review and release/readiness follow-up.
+- Blockers: none new.
+- Next step: Review whether `doctor` should also surface broader runtime health and provenance diagnostics beyond effective config.
+
+### 2026-03-13 Session Update
+
+- Completed: Expanded `doctor` again to include runtime readiness diagnostics for SQLite pragmas, required schema presence, FTS availability, applied/available migration status, and MCP tool count; added `internal/db` diagnostics support plus database and app tests; verified with `go test ./...` and a real `go run ./cmd/codex-mem doctor` smoke check.
+- In progress: Residual observability review and release/readiness follow-up.
+- Blockers: none new.
+- Next step: Decide whether the next diagnostics slice should focus on provenance/audit visibility or on release/readiness packaging.
+
+### 2026-03-13 Session Update
+
+- Completed: Expanded `doctor` provenance/audit diagnostics to report durable note and handoff counts, note source-category coverage, exclusion counts, missing exclusion-reason checks, recovery/open handoff counts, and readiness booleans for provenance/exclusion audit posture; added runtime inspection queries plus focused `internal/db` and `internal/app` tests; verified with `go test ./...` and a real `go run ./cmd/codex-mem doctor` smoke check.
+- In progress: Residual observability review and release/readiness follow-up.
+- Blockers: none new.
+- Next step: Decide whether the next polish slice should focus on release/readiness packaging or on richer retrieval/audit traces.
+
+### 2026-03-13 Session Update
+
+- Completed: Added release/readiness packaging docs by creating a root `README.md` with command, MCP, onboarding, and diagnostics guidance; added `docs/go/release-readiness.md` with a practical pre-release checklist and smoke-test flow; updated the Go docs index to include the new readiness document.
+- In progress: Residual observability review and packaging follow-up.
+- Blockers: none new.
+- Next step: Decide whether the next polish slice should focus on troubleshooting guidance, machine-readable diagnostics output, or richer retrieval/audit traces.
+
+## Recommended Next Step
+
+Recommended next implementation slice:
+
+1. Add machine-readable `doctor` output, preferably a `--json` mode.
+2. Keep the existing human-readable report as the default.
+3. Include the current readiness sections in JSON form:
+   config
+   sqlite/runtime health
+   migration status
+   provenance/audit diagnostics
+   MCP transport/tool availability
+4. Add tests that verify both human-readable and JSON diagnostics paths.
+
+Why this is the best next step now:
+
+- it builds directly on the new `doctor` diagnostics work
+- it improves automation and release-readiness checks
+- it avoids reopening core domain design
+- it can later support CI or scripted environment validation
 
 ## Session Handoff Template
 

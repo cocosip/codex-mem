@@ -31,33 +31,10 @@ func RunMigrations(ctx context.Context, handle *sql.DB) error {
 		return common.WrapError(common.ErrStorageUnavailable, "ensure schema_migrations table", err)
 	}
 
-	entries, err := fs.ReadDir(projectmigrations.FS, ".")
+	files, err := loadMigrationFiles()
 	if err != nil {
-		return common.WrapError(common.ErrReadFailed, "read embedded migrations", err)
+		return err
 	}
-
-	var files []migrationFile
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
-		}
-		version, parseErr := parseMigrationVersion(entry.Name())
-		if parseErr != nil {
-			return parseErr
-		}
-		body, readErr := fs.ReadFile(projectmigrations.FS, entry.Name())
-		if readErr != nil {
-			return common.WrapError(common.ErrReadFailed, "read embedded migration", readErr)
-		}
-		files = append(files, migrationFile{
-			Name:    entry.Name(),
-			Version: version,
-			Body:    string(body),
-		})
-	}
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Version < files[j].Version
-	})
 
 	applied, err := appliedMigrations(ctx, handle)
 	if err != nil {
@@ -89,6 +66,37 @@ func RunMigrations(ctx context.Context, handle *sql.DB) error {
 	}
 
 	return nil
+}
+
+func loadMigrationFiles() ([]migrationFile, error) {
+	entries, err := fs.ReadDir(projectmigrations.FS, ".")
+	if err != nil {
+		return nil, common.WrapError(common.ErrReadFailed, "read embedded migrations", err)
+	}
+
+	var files []migrationFile
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, parseErr := parseMigrationVersion(entry.Name())
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		body, readErr := fs.ReadFile(projectmigrations.FS, entry.Name())
+		if readErr != nil {
+			return nil, common.WrapError(common.ErrReadFailed, "read embedded migration", readErr)
+		}
+		files = append(files, migrationFile{
+			Name:    entry.Name(),
+			Version: version,
+			Body:    string(body),
+		})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Version < files[j].Version
+	})
+	return files, nil
 }
 
 func appliedMigrations(ctx context.Context, handle *sql.DB) (map[int]bool, error) {

@@ -34,7 +34,7 @@ func main() {
 	defer logCloser.Close()
 	slog.SetDefault(logger)
 
-	if err := app.Run(ctx, cfg, os.Args[1:], os.Stdout); err != nil {
+	if err := app.Run(ctx, cfg, os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		logger.Error("command failed", "err", err)
 		os.Exit(1)
 	}

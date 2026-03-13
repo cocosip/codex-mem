@@ -7,6 +7,7 @@ This directory contains Go-specific planning and execution documents for the `co
 - [implementation-plan.md](./implementation-plan.md)
 - [dev-kickoff.md](./dev-kickoff.md)
 - [development-tracker.md](./development-tracker.md)
+- [release-readiness.md](./release-readiness.md)
 
 Language-neutral planning remains here:
 
