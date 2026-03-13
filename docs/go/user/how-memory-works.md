@@ -467,3 +467,101 @@ A 项目的支付流程依赖 B 项目的订单接口和字段约定。后续凡
 - [client-examples.md](../operator/client-examples.md)
 - [mcp-integration.md](../maintainer/mcp-integration.md)
 - [tool-contracts.md](../../spec/tool-contracts.md)
+
+## FAQ: `memory_save_note` 和 `memory_save_handoff` 有什么区别
+
+这两个都属于“保存记忆”，但用途不一样。
+
+### `memory_save_note`
+
+更适合保存会在后面反复复用的内容，例如：
+
+- 设计决策
+- bug 根因和修复经验
+- 以后还会继续约束实现的规则
+- 值得长期保留的发现
+
+可以把它理解成：
+
+- “知识卡片”
+- “长期结论”
+
+如果你想表达的是“这个结论以后还会有用”，通常更适合存成 note。
+
+### `memory_save_handoff`
+
+更适合保存这一次任务的续做信息，例如：
+
+- 这次已经做了什么
+- 当前做到哪里
+- 下一步该做什么
+- 还有哪些风险、问题、未完成项
+
+可以把它理解成：
+
+- “交接记录”
+- “续做检查点”
+
+如果你想表达的是“下次回来怎么接着做”，通常更适合存成 handoff。
+
+### 最实用的判断方法
+
+可以直接这样区分：
+
+- 想保存“以后很多次都可能会用到的经验或结论” -> `memory_save_note`
+- 想保存“这次任务下次如何继续” -> `memory_save_handoff`
+
+很多时候两者可以一起保存：
+
+1. 先把值得长期保留的结论存成 note
+2. 再把当前任务进度和 next steps 存成 handoff
+
+## FAQ: `workspace` 和 `project` 有什么区别
+
+可以先记成一句话：
+
+- `workspace` = 你当前这份本地工作目录 / clone / worktree
+- `project` = 这些 workspace 所属的同一个项目身份
+
+### `workspace`
+
+它更接近：
+
+- 这台机器上当前这个路径下的仓库副本
+- 你现在正在工作的这份本地工作区
+
+如果同一个项目有多个本地副本，例如：
+
+- 多个 clone
+- 多个 worktree
+- 不同磁盘路径下的同一仓库副本
+
+那么它们通常属于不同的 workspace。
+
+### `project`
+
+它更接近：
+
+- 一个更稳定的项目身份
+- 不依赖某一个具体本地路径的项目级上下文
+
+同一个项目的不同 clone 或 worktree，通常都归到同一个 project。
+
+### 最实用的理解方式
+
+可以这样记：
+
+- `workspace` 更像“这份本地工作副本的当前进度”
+- `project` 更像“这个项目整体的长期记忆”
+
+### 为什么要分这两层
+
+因为系统恢复上下文时，通常会优先：
+
+1. 看当前 workspace 的 handoff 和 notes
+2. 如果不够，再回退到同一个 project 下的内容
+
+这样做的好处是：
+
+- 先优先恢复你这份本地工作区最直接相关的上下文
+- 不够时，再补项目级的长期经验和历史记录
