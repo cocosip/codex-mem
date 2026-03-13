@@ -30,26 +30,26 @@ Normative references:
 
 ## Current Target
 
-Current target: Start Phase 1 foundation work for the Go implementation.
+Current target: Begin Phase 2 note and handoff persistence on top of the Phase 1 foundation.
 
 ## Phase Progress
 
 ### Phase 1: Foundation
 
-Status: todo
+Status: done
 
 Tasks:
 
-- [ ] Initialize Go module and base repository layout
-- [ ] Choose SQLite driver and migration approach
-- [ ] Implement database open/init flow
-- [ ] Create initial schema migrations
-- [ ] Implement canonical scope types
-- [ ] Implement canonical session types
-- [ ] Implement scope resolution inputs and fallback order
-- [ ] Implement scope consistency validation
-- [ ] Implement `memory_resolve_scope`
-- [ ] Implement `memory_start_session`
+- [x] Initialize Go module and base repository layout
+- [x] Choose SQLite driver and migration approach
+- [x] Implement database open/init flow
+- [x] Create initial schema migrations
+- [x] Implement canonical scope types
+- [x] Implement canonical session types
+- [x] Implement scope resolution inputs and fallback order
+- [x] Implement scope consistency validation
+- [x] Implement `memory_resolve_scope`
+- [x] Implement `memory_start_session`
 
 ### Phase 2: Core Continuity Loop
 
@@ -116,14 +116,14 @@ Tasks:
 
 Current session focus:
 
-- not started yet
+- Phase 1 foundation skeleton, storage bootstrap, and scope/session flow
 
 Immediate next tasks:
 
-1. Initialize Go module
-2. Decide SQLite driver
-3. Create migration scaffolding
-4. Add scope/session domain types
+1. Add canonical note and handoff types
+2. Create note and handoff tables plus repositories
+3. Implement `memory_save_note`
+4. Implement `memory_save_handoff`
 
 ## Decisions Log
 
@@ -133,12 +133,25 @@ Immediate next tasks:
 - Dynamic continuity data should stay in durable memory and MCP responses, not in `AGENTS.md`.
 - `AGENTS.md` should remain cache-friendly and stable.
 - The first coding slice should focus on Phase 1 foundation work.
+- Go logging should use `log/slog`.
+- If a config file is introduced, it should live under the repository `configs/` directory.
+- The SQLite driver is `modernc.org/sqlite`.
+- Schema migrations are embedded SQL files under `migrations/` and are applied automatically on startup.
+- Scope resolution prefers normalized repo remote identity, then Git root fallback, then local directory fallback.
+- Session writes validate the stored `workspace -> project -> system` scope chain before insert.
 
 ## Blockers
 
 Current blockers:
 
 - none recorded yet
+
+### 2026-03-13 Session Update
+
+- Completed: Initialized the Go module and repository skeleton; added `slog`-based startup logging; implemented SQLite open/init with embedded migrations; implemented scope/session domain types and services; added Git-based identity discovery; implemented scope/session SQLite repositories; added scope-chain validation for session writes; added foundation tests; verified with `go test ./...`.
+- In progress: Preparing Phase 2 note and handoff persistence.
+- Blockers: none.
+- Next step: Add note/handoff schema, domain types, repositories, and the first save-tool handlers.
 
 ## Session Handoff Template
 

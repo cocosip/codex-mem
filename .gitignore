@@ -1,0 +1,6 @@
+data/
+bin/
+.gocache/
+*.db
+*.db-shm
+*.db-wal
