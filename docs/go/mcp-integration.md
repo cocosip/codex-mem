@@ -2,16 +2,30 @@
 
 ## Purpose
 
-This document gives a practical integration path for the current Go MCP server.
+This document describes the MCP transport behavior of the current Go server and the checked-in source-tree smoke tests.
 
 It is intended for:
 
-- validating that `codex-mem` can be launched as an MCP server over stdio or HTTP
-- checking a client's `initialize` and `tools/list` behavior
-- smoke-testing one real `tools/call` round trip end to end
+- maintainers validating that `codex-mem` can be launched as an MCP server over stdio or HTTP
+- integrators checking a client's `initialize` and `tools/list` behavior
+- CI or local source-tree smoke-testing of one real `tools/call` round trip end to end
+
+Use this when:
+
+- validating transport behavior from the source tree
+- running checked-in smoke tests under `scripts/`
+- comparing a custom client against a known-good MCP request flow
+
+Do not use this for:
+
+- first-time packaged-binary setup with Codex CLI
+- learning how mem works as a user
+- deciding how to implement the Go codebase
 
 This document is mostly for maintainers, integrators, and CI.
-Normal end users should primarily consume packaged binaries and register them with Codex.
+It assumes you are working from the source tree, which is why it uses `go run` for the checked-in smoke-test programs.
+
+If you are a normal user trying to connect a packaged `codex-mem` binary to Codex, start with [client-examples.md](./client-examples.md) instead.
 
 ## Transport Summary
 
@@ -55,7 +69,19 @@ Characteristics:
 - `mcp_transport=stdio` in text mode
 - `mcp.tool_count=9` in JSON mode
 
-## Fastest Smoke Test
+## Scope Of This Document
+
+This is not the primary end-user setup guide.
+
+Use this document when you need one of these:
+
+- a source-tree protocol smoke test
+- a transport-level request/response example
+- a maintainer-oriented explanation of stdio versus HTTP MCP behavior
+
+If you only want to register the packaged binary with Codex CLI, use [client-examples.md](./client-examples.md).
+
+## Fastest Source-Tree Smoke Test
 
 Run the checked-in smoke test:
 
@@ -82,6 +108,8 @@ tool_call=memory_install_agents
 written_file=...
 ```
 
+This uses `go run` because the smoke-test helper itself lives inside this repository under `scripts/`.
+
 For the HTTP transport, run:
 
 ```powershell
@@ -99,7 +127,7 @@ tool_call=memory_install_agents
 written_file=...
 ```
 
-If you want one command that also validates `doctor --json`, run:
+If you want one maintainer-oriented command that also validates `doctor --json`, run:
 
 ```powershell
 go run ./scripts/readiness-check
@@ -168,5 +196,5 @@ Move past the smoke test when you need to validate:
 - search and recent retrieval against a populated database
 - a specific external MCP client's process launch model
 
-For concrete client setup examples, use [client-examples.md](./client-examples.md).
+For packaged-binary client setup examples, use [client-examples.md](./client-examples.md).
 For environment and failure diagnosis, use [troubleshooting.md](./troubleshooting.md).

@@ -4,6 +4,23 @@
 
 This document maps the `codex-mem` v1 specification to a Go-oriented implementation plan.
 
+Audience:
+
+- maintainers
+- contributors designing or reviewing Go implementation structure
+
+Use this when:
+
+- deciding how the Go implementation should be structured
+- reviewing package boundaries, service responsibilities, and delivery order
+- checking whether a code change matches the intended architecture
+
+Do not use this for:
+
+- first-time user onboarding
+- runtime troubleshooting
+- registering a packaged binary with a client
+
 It is not the normative product spec.
 Instead, it describes how a Go implementation can realize the required behavior in a maintainable and testable way.
 

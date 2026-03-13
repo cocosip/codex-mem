@@ -4,6 +4,24 @@
 
 This document is a practical release/readiness checklist for the current Go implementation of `codex-mem`.
 
+Audience:
+
+- maintainers
+- release engineers
+- operators validating packaged builds before wider use
+
+Use this when:
+
+- preparing a release artifact
+- validating that the built binary is ready for broader use
+- checking packaging, readiness, and deployment gates
+
+Do not use this for:
+
+- first-time day-to-day user onboarding
+- normal prompt usage inside Codex
+- source-tree implementation planning
+
 It is written for maintainers and release engineers.
 End users should consume the produced binaries and should not need a local Go toolchain.
 

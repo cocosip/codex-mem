@@ -4,6 +4,22 @@
 
 This document gives client-specific examples for connecting `codex-mem` as an MCP server.
 
+Audience:
+
+- normal users registering `codex-mem` with a real MCP client
+- operators choosing between local stdio and remote HTTP deployment
+
+Use this when:
+
+- you already have the packaged binary
+- you want to connect Codex CLI or another real client to the server
+
+Do not use this for:
+
+- source-tree smoke tests from this repository
+- CI validation of MCP protocol behavior
+- Go implementation planning
+
 Use it after:
 
 - the release artifact for your platform has been unpacked

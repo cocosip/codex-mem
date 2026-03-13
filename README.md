@@ -93,8 +93,9 @@ The current MCP server exposes:
 - `memory_install_agents`
 
 Request and response examples are documented in [example-payloads.md](docs/spec/appendices/example-payloads.md).
-For a runnable client-side handshake and tool-call check, use [mcp-integration.md](docs/go/mcp-integration.md).
-For concrete client setup examples, use [client-examples.md](docs/go/client-examples.md).
+For concrete packaged-binary client setup examples, use [client-examples.md](docs/go/client-examples.md).
+For maintainer-oriented MCP transport and smoke-test guidance from the source tree, use [mcp-integration.md](docs/go/mcp-integration.md).
+For a quick explanation of how memory works, what gets saved, and when scope matters, use [how-memory-works.md](docs/go/how-memory-works.md).
 For end-user prompt templates that cause Codex to pick the memory tools automatically, use [prompt-examples.md](docs/go/prompt-examples.md).
 For release packaging and operator guidance, use [release-readiness.md](docs/go/release-readiness.md).
 

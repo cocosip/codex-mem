@@ -4,12 +4,24 @@
 
 This document is the first-stop troubleshooting guide for the current Go implementation of `codex-mem`.
 
-Use it when:
+Audience:
+
+- operators
+- maintainers
+- integrators debugging runtime or MCP setup issues
+
+Use this when:
 
 - `doctor` fails or reports unexpected readiness values
 - config changes do not appear to take effect
 - SQLite cannot be opened or migrated
 - `serve` starts but an MCP client cannot initialize or call tools
+
+Do not use this for:
+
+- learning what mem is for
+- normal day-to-day prompt usage
+- release packaging policy decisions
 
 ## Fast Triage
 

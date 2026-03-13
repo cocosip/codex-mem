@@ -4,6 +4,22 @@
 
 This file is the fastest entry point for the next session if the goal is to begin actual Go implementation work for `codex-mem`.
 
+Audience:
+
+- maintainers continuing Go implementation work
+- contributors starting a new coding session in this repository
+
+Use this when:
+
+- you are about to implement or extend the Go codebase
+- you want the shortest path back into active development work
+
+Do not use this for:
+
+- normal user onboarding
+- MCP client registration
+- packaged-binary operations
+
 Primary references:
 
 - [Spec Index](../spec/README.md)
