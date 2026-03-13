@@ -130,3 +130,24 @@ func TestSaveNoteReturnsExistingDuplicate(t *testing.T) {
 		t.Fatalf("expected duplicate note to skip create, got %+v", repo.created)
 	}
 }
+
+func TestSaveNoteRejectsPrivateIntent(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo, Options{
+		Clock:     fixedClock{now: time.Date(2026, 3, 13, 13, 20, 0, 0, time.UTC)},
+		IDFactory: fixedIDFactory{value: "note_fixed"},
+	})
+
+	_, err := service.SaveNote(context.Background(), SaveInput{
+		Scope:         scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:     "sess_1",
+		Type:          NoteTypeBugfix,
+		Title:         "Sensitive fix",
+		Content:       "Contains private data.",
+		Importance:    4,
+		PrivacyIntent: "private",
+	})
+	if err == nil {
+		t.Fatal("expected private note to be rejected")
+	}
+}

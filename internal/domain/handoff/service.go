@@ -30,6 +30,9 @@ func NewService(repo Repository, options Options) *Service {
 
 func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput, error) {
 	_ = ctx
+	if isPrivateIntent(input.PrivacyIntent) {
+		return SaveOutput{}, common.NewError(common.ErrInvalidInput, "private/do_not_store content must not be written to durable memory")
+	}
 
 	now := s.options.Clock.Now().UTC()
 	record := Handoff{
@@ -46,6 +49,7 @@ func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput,
 		FilesTouched:   normalizePaths(input.FilesTouched),
 		RelatedNoteIDs: normalizeStrings(input.RelatedNoteIDs),
 		Status:         input.Status,
+		Searchable:     true,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -56,7 +60,7 @@ func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput,
 	var warnings []common.Warning
 	existing, err := s.repo.FindLatestOpenByTask(record.Scope, record.Task)
 	if err != nil {
-		return SaveOutput{}, err
+		return SaveOutput{}, common.EnsureCoded(err, common.ErrReadFailed, "find latest open handoff by task")
 	}
 	if existing != nil {
 		warnings = append(warnings, common.Warning{
@@ -72,7 +76,7 @@ func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput,
 	}
 
 	if err := s.repo.Create(record); err != nil {
-		return SaveOutput{}, err
+		return SaveOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "create handoff")
 	}
 
 	return SaveOutput{
@@ -81,6 +85,15 @@ func (s *Service) SaveHandoff(ctx context.Context, input SaveInput) (SaveOutput,
 		EligibleForBootstrap: record.Status == StatusOpen,
 		Warnings:             warnings,
 	}, nil
+}
+
+func isPrivateIntent(privacyIntent string) bool {
+	switch strings.TrimSpace(strings.ToLower(privacyIntent)) {
+	case "private", "do_not_store", "ephemeral_only":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeStrings(values []string) []string {

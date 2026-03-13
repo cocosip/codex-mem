@@ -55,7 +55,7 @@ func (s *Service) Start(ctx context.Context, input StartInput) (StartOutput, err
 	}
 
 	if err := s.repo.Create(record); err != nil {
-		return StartOutput{}, err
+		return StartOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "create session")
 	}
 
 	return StartOutput{Session: record}, nil

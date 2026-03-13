@@ -47,3 +47,15 @@ func (h *Handlers) MemorySaveHandoff(ctx context.Context, input handoff.SaveInpu
 func (h *Handlers) MemoryBootstrapSession(ctx context.Context, input retrieval.BootstrapInput) (retrieval.BootstrapOutput, error) {
 	return h.retrievalService.BootstrapSession(ctx, input)
 }
+
+func (h *Handlers) MemoryGetRecent(ctx context.Context, input retrieval.GetRecentInput) (retrieval.GetRecentOutput, error) {
+	return h.retrievalService.GetRecent(ctx, input)
+}
+
+func (h *Handlers) MemoryGetNote(ctx context.Context, input retrieval.GetRecordInput) (retrieval.GetRecordOutput, error) {
+	return h.retrievalService.GetRecord(ctx, input)
+}
+
+func (h *Handlers) MemorySearch(ctx context.Context, input retrieval.SearchInput) (retrieval.SearchOutput, error) {
+	return h.retrievalService.Search(ctx, input)
+}

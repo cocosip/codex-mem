@@ -41,6 +41,12 @@ Recommended runtime modes:
 - `doctor` for local diagnostics
 - `agents install` or equivalent for AGENTS template installation
 
+Recommended configuration convention:
+
+- load project-level configuration from the repository `configs/` directory
+- use `viper` as the Go configuration library for file loading and environment overrides
+- keep precedence as `defaults < config file < environment variables`
+
 ## Recommended Repository Layout
 
 Suggested layout:
@@ -111,6 +117,12 @@ Responsibilities:
 - env var overrides
 - runtime path resolution
 - policy precedence helpers
+
+Recommended implementation details:
+
+- treat `configs/` as the default home for repository-local configuration
+- let `viper` load the config file and bind environment variables into the same config model
+- keep file parsing format-flexible through `viper`, even if the first checked-in example uses JSON
 
 Suggested outputs:
 

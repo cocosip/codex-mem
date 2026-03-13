@@ -39,6 +39,9 @@ func (s *Service) SaveNote(ctx context.Context, input SaveInput) (SaveOutput, er
 	if source == "" {
 		source = SourceCodexExplicit
 	}
+	if isPrivateIntent(input.PrivacyIntent, input.Tags) {
+		return SaveOutput{}, common.NewError(common.ErrInvalidInput, "private/do_not_store content must not be written to durable memory")
+	}
 
 	now := s.options.Clock.Now().UTC()
 	record := Note{
@@ -54,6 +57,7 @@ func (s *Service) SaveNote(ctx context.Context, input SaveInput) (SaveOutput, er
 		RelatedProjectIDs: normalizeStrings(input.RelatedProjectIDs),
 		Status:            status,
 		Source:            source,
+		Searchable:        true,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -63,7 +67,7 @@ func (s *Service) SaveNote(ctx context.Context, input SaveInput) (SaveOutput, er
 
 	duplicate, err := s.repo.FindDuplicate(record)
 	if err != nil {
-		return SaveOutput{}, err
+		return SaveOutput{}, common.EnsureCoded(err, common.ErrReadFailed, "find duplicate note")
 	}
 	if duplicate != nil {
 		return SaveOutput{
@@ -77,13 +81,27 @@ func (s *Service) SaveNote(ctx context.Context, input SaveInput) (SaveOutput, er
 	}
 
 	if err := s.repo.Create(record); err != nil {
-		return SaveOutput{}, err
+		return SaveOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "create note")
 	}
 
 	return SaveOutput{
 		Note:     record,
 		StoredAt: record.CreatedAt,
 	}, nil
+}
+
+func isPrivateIntent(privacyIntent string, tags []string) bool {
+	switch strings.TrimSpace(strings.ToLower(privacyIntent)) {
+	case "private", "do_not_store", "ephemeral_only":
+		return true
+	}
+	for _, tag := range tags {
+		switch strings.TrimSpace(strings.ToLower(tag)) {
+		case "private", "do_not_store", "do-not-store", "ephemeral_only":
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeTags(values []string) []string {

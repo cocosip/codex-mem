@@ -43,21 +43,23 @@ func (s Status) Validate() error {
 }
 
 type Handoff struct {
-	ID             string    `json:"handoff_id"`
-	Scope          scope.Ref `json:"scope"`
-	SessionID      string    `json:"session_id"`
-	Kind           Kind      `json:"kind"`
-	Task           string    `json:"task"`
-	Summary        string    `json:"summary"`
-	Completed      []string  `json:"completed,omitempty"`
-	NextSteps      []string  `json:"next_steps"`
-	OpenQuestions  []string  `json:"open_questions,omitempty"`
-	Risks          []string  `json:"risks,omitempty"`
-	FilesTouched   []string  `json:"files_touched,omitempty"`
-	RelatedNoteIDs []string  `json:"related_note_ids,omitempty"`
-	Status         Status    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"-"`
+	ID              string    `json:"handoff_id"`
+	Scope           scope.Ref `json:"scope"`
+	SessionID       string    `json:"session_id"`
+	Kind            Kind      `json:"kind"`
+	Task            string    `json:"task"`
+	Summary         string    `json:"summary"`
+	Completed       []string  `json:"completed,omitempty"`
+	NextSteps       []string  `json:"next_steps"`
+	OpenQuestions   []string  `json:"open_questions,omitempty"`
+	Risks           []string  `json:"risks,omitempty"`
+	FilesTouched    []string  `json:"files_touched,omitempty"`
+	RelatedNoteIDs  []string  `json:"related_note_ids,omitempty"`
+	Status          Status    `json:"status"`
+	Searchable      bool      `json:"searchable"`
+	ExclusionReason string    `json:"exclusion_reason,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"-"`
 }
 
 type SaveInput struct {
@@ -73,6 +75,7 @@ type SaveInput struct {
 	FilesTouched   []string
 	RelatedNoteIDs []string
 	Status         Status
+	PrivacyIntent  string
 }
 
 type SaveOutput struct {

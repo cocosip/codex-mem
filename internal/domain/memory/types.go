@@ -76,6 +76,9 @@ type Note struct {
 	RelatedProjectIDs []string  `json:"related_project_ids,omitempty"`
 	Status            Status    `json:"status"`
 	Source            Source    `json:"source"`
+	RelationType      string    `json:"relation_type,omitempty"`
+	Searchable        bool      `json:"searchable"`
+	ExclusionReason   string    `json:"exclusion_reason,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"-"`
 }
@@ -92,6 +95,7 @@ type SaveInput struct {
 	RelatedProjectIDs []string
 	Status            Status
 	Source            Source
+	PrivacyIntent     string
 }
 
 type SaveOutput struct {

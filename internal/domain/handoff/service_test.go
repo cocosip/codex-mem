@@ -109,3 +109,24 @@ func TestSaveHandoffRejectsMissingNextSteps(t *testing.T) {
 		t.Fatal("expected missing next_steps to fail")
 	}
 }
+
+func TestSaveHandoffRejectsPrivateIntent(t *testing.T) {
+	service := NewService(&fakeRepository{}, Options{
+		Clock:     fixedClock{now: time.Date(2026, 3, 13, 13, 50, 0, 0, time.UTC)},
+		IDFactory: fixedIDFactory{value: "handoff_new"},
+	})
+
+	_, err := service.SaveHandoff(context.Background(), SaveInput{
+		Scope:         scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:     "sess_1",
+		Kind:          KindFinal,
+		Task:          "Sensitive task",
+		Summary:       "Contains sensitive content.",
+		NextSteps:     []string{"Do not store"},
+		Status:        StatusOpen,
+		PrivacyIntent: "do_not_store",
+	})
+	if err == nil {
+		t.Fatal("expected private handoff to be rejected")
+	}
+}

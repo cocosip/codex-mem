@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -18,15 +19,23 @@ const (
 	WarnNoPriorHandoff         = "WARN_NO_PRIOR_HANDOFF"
 	WarnNoPriorNotes           = "WARN_NO_PRIOR_NOTES"
 	WarnRelatedProjectsSkipped = "WARN_RELATED_PROJECTS_SKIPPED"
+	WarnRelatedProjectsEmpty   = "WARN_RELATED_PROJECTS_EMPTY"
 	WarnRecoveryHandoffUsed    = "WARN_RECOVERY_HANDOFF_USED"
+	WarnRelatedRefIgnored      = "WARN_RELATED_REFERENCE_IGNORED"
+	WarnExistingAgentsSkipped  = "WARN_EXISTING_AGENTS_SKIPPED"
+	WarnPlaceholdersUnresolved = "WARN_PLACEHOLDERS_UNRESOLVED"
+	WarnImportSuppressed       = "WARN_IMPORT_SUPPRESSED"
 	ErrInvalidInput            = "ERR_INVALID_INPUT"
 	ErrInvalidScope            = "ERR_INVALID_SCOPE"
 	ErrScopeConflict           = "ERR_SCOPE_CONFLICT"
 	ErrInvalidState            = "ERR_INVALID_STATE"
 	ErrSessionNotFound         = "ERR_SESSION_NOT_FOUND"
+	ErrRecordNotFound          = "ERR_RECORD_NOT_FOUND"
 	ErrStorageUnavailable      = "ERR_STORAGE_UNAVAILABLE"
 	ErrWriteFailed             = "ERR_WRITE_FAILED"
 	ErrReadFailed              = "ERR_READ_FAILED"
+	ErrAgentsWriteDenied       = "ERR_AGENTS_WRITE_DENIED"
+	ErrInvalidTarget           = "ERR_INVALID_TARGET"
 )
 
 type Warning struct {
@@ -38,6 +47,11 @@ type CodedError struct {
 	Code    string
 	Message string
 	Err     error
+}
+
+type ErrorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func (e *CodedError) Error() string {
@@ -57,6 +71,87 @@ func NewError(code, message string) error {
 
 func WrapError(code, message string, err error) error {
 	return &CodedError{Code: code, Message: message, Err: err}
+}
+
+func ErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var coded *CodedError
+	if errors.As(err, &coded) {
+		return coded.Code
+	}
+	return ""
+}
+
+func ErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var coded *CodedError
+	if errors.As(err, &coded) && strings.TrimSpace(coded.Message) != "" {
+		return coded.Message
+	}
+	return err.Error()
+}
+
+func ErrorDetails(err error, fallbackCode string, fallbackMessage string) ErrorPayload {
+	if err == nil {
+		return ErrorPayload{}
+	}
+
+	code := strings.TrimSpace(ErrorCode(err))
+	if code == "" {
+		code = strings.TrimSpace(fallbackCode)
+	}
+	message := strings.TrimSpace(ErrorMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(fallbackMessage)
+	}
+	if message == "" {
+		message = "operation failed"
+	}
+	return ErrorPayload{
+		Code:    code,
+		Message: message,
+	}
+}
+
+func EnsureCoded(err error, fallbackCode string, fallbackMessage string) error {
+	if err == nil || strings.TrimSpace(ErrorCode(err)) != "" {
+		return err
+	}
+	message := strings.TrimSpace(fallbackMessage)
+	if message == "" {
+		message = "operation failed"
+	}
+	return WrapError(fallbackCode, message, err)
+}
+
+func MergeWarnings(groups ...[]Warning) []Warning {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	if total == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, total)
+	merged := make([]Warning, 0, total)
+	for _, group := range groups {
+		for _, warning := range group {
+			key := strings.TrimSpace(warning.Code) + "\x00" + strings.TrimSpace(warning.Message)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, warning)
+		}
+	}
+	return merged
 }
 
 type Clock interface {

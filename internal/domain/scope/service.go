@@ -88,7 +88,7 @@ func (s *Service) Resolve(ctx context.Context, input ResolveInput) (ResolveOutpu
 		Slug: systemSlug,
 	})
 	if err != nil {
-		return ResolveOutput{}, err
+		return ResolveOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "ensure system scope")
 	}
 
 	projectRecord, err := s.repo.EnsureProject(ProjectRecord{
@@ -100,7 +100,7 @@ func (s *Service) Resolve(ctx context.Context, input ResolveInput) (ResolveOutpu
 		RemoteNormalized: remoteNormalized,
 	})
 	if err != nil {
-		return ResolveOutput{}, err
+		return ResolveOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "ensure project scope")
 	}
 
 	workspaceRecord, err := s.repo.EnsureWorkspace(WorkspaceRecord{
@@ -111,7 +111,7 @@ func (s *Service) Resolve(ctx context.Context, input ResolveInput) (ResolveOutpu
 		BranchName:   branchName,
 	})
 	if err != nil {
-		return ResolveOutput{}, err
+		return ResolveOutput{}, common.EnsureCoded(err, common.ErrWriteFailed, "ensure workspace scope")
 	}
 
 	scope := Scope{

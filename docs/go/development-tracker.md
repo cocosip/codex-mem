@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Begin Phase 3 retrieval and safety work on top of the completed continuity loop.
+Current target: Begin Phase 4 AGENTS integration on top of the completed retrieval and safety slice.
 
 ## Phase Progress
 
@@ -70,19 +70,21 @@ Tasks:
 
 ### Phase 3: Retrieval and Safety
 
-Status: todo
+Status: done
+
+Note: Phase 3 feature implementation is complete, but broader conformance and hardening verification still remains under Phase 5.
 
 Tasks:
 
-- [ ] Add FTS5 search support
-- [ ] Implement `memory_search`
-- [ ] Implement `memory_get_recent`
-- [ ] Implement `memory_get_note`
-- [ ] Implement related-project retrieval gating
-- [ ] Implement result ranking policy
-- [ ] Implement dedupe behavior for search results
-- [ ] Implement privacy exclusion checks before indexing
-- [ ] Implement warning/error taxonomy mapping
+- [x] Add FTS5 search support
+- [x] Implement `memory_search`
+- [x] Implement `memory_get_recent`
+- [x] Implement `memory_get_note`
+- [x] Implement related-project retrieval gating
+- [x] Implement result ranking policy
+- [x] Implement dedupe behavior for search results
+- [x] Implement privacy exclusion checks before indexing
+- [x] Implement warning/error taxonomy mapping
 
 ### Phase 4: AGENTS Integration
 
@@ -101,6 +103,8 @@ Tasks:
 
 Status: todo
 
+Note: This phase is the remaining validation layer for already-implemented Phase 1-4 features and should not be confused with missing feature implementation work.
+
 Tasks:
 
 - [ ] Add conformance tests for empty-store bootstrap
@@ -116,14 +120,14 @@ Tasks:
 
 Current session focus:
 
-- Phase 3 retrieval and safety work starting from the completed continuity loop
+- Close out Phase 3 warning/error taxonomy work and prepare the handoff into Phase 4
 
 Immediate next tasks:
 
-1. Add retrieval-facing recent activity APIs on top of the current note and handoff repositories
-2. Implement `memory_get_recent`
-3. Implement `memory_get_note`
-4. Prepare the Phase 3 search foundation and FTS5 schema changes
+1. Package AGENTS templates for runtime use
+2. Implement `memory_install_agents` with safe default write behavior
+3. Add conformance-oriented tests for warning visibility and AGENTS safety
+4. Decide whether handoffs need additional lifecycle/archive controls beyond `searchable`
 
 ## Decisions Log
 
@@ -135,12 +139,20 @@ Immediate next tasks:
 - The first coding slice should focus on Phase 1 foundation work.
 - Go logging should use `log/slog`.
 - `slog` output should be written to a rotated log file with retention/compression support.
-- If a config file is introduced, it should live under the repository `configs/` directory.
+- Repository-local config should load from the repository `configs/` directory.
+- Go config loading should use `viper`, with environment variables overriding file values.
 - The SQLite driver is `modernc.org/sqlite`.
 - Schema migrations are embedded SQL files under `migrations/` and are applied automatically on startup.
 - Scope resolution prefers normalized repo remote identity, then Git root fallback, then local directory fallback.
 - Session writes validate the stored `workspace -> project -> system` scope chain before insert.
 - Bootstrap retrieval prefers the latest open workspace handoff, then project fallback, then recent notes ordered by scope and importance.
+- Recent retrieval reuses the same workspace-first/project-fallback scope ordering and full-record reads return `ERR_RECORD_NOT_FOUND` on misses.
+- Search is project-scoped by default, uses FTS5-backed note matching plus SQL handoff matching, and ranks results by scope, state, importance, recency, and text overlap.
+- Related-project expansion is now opt-in and currently derives allowed related projects from explicit `related_project_ids` references stored on current-project notes.
+- Explicit `private`, `do_not_store`, and `ephemeral_only` intents are rejected before durable note or handoff writes.
+- Durable notes and handoffs now carry `searchable` controls; non-searchable records stay readable by id but are excluded from recent/bootstrap/search paths and from the note FTS index.
+- Warning/error taxonomy now flows through shared coded-error helpers, retrieval warning codes, and MCP-ready response envelopes that promote warnings to the top level while preserving stable error codes.
+- Phase completion in this tracker refers to implementation status; broader conformance, hardening, and verification status remains tracked separately under Phase 5.
 
 ## Blockers
 
@@ -168,6 +180,48 @@ Current blockers:
 - In progress: Phase 3 retrieval and safety planning.
 - Blockers: An untracked backup file `internal/db/handoff_repository.go.1923079326463469687` is currently locked by the local environment and could not be removed even though it does not affect builds.
 - Next step: Implement `memory_get_recent`, `memory_get_note`, and the first safe search/FTS slice.
+
+### 2026-03-13 Session Update
+
+- Completed: Added recent-activity and record-by-id retrieval support; extended note and handoff repositories with recent/project-fallback and `GetByID` queries; wired `memory_get_recent` and `memory_get_note` through the retrieval service and MCP handlers; added retrieval and repository tests for ordering, include flags, and not-found behavior; verified with `go test ./...`.
+- In progress: Phase 3 search and indexing foundation.
+- Blockers: An untracked backup file `internal/db/handoff_repository.go.1923079326463469687` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Add FTS5 support and implement the first `memory_search` slice.
+
+### 2026-03-13 Session Update
+
+- Completed: Added SQLite FTS5 support for note indexing via migration `003_memory_search_fts.sql`; implemented project-scoped `memory_search` with FTS-backed note lookup, handoff text matching, ranking, and basic dedupe; wired search through the retrieval service and MCP handlers; added repository and retrieval tests covering FTS hits, zero-result success, project isolation, and search ordering; verified with `go test ./...`.
+- In progress: Phase 3 safety and policy tightening.
+- Blockers: An untracked backup file `internal/db/handoff_repository.go.1923079326463469687` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Add privacy/search exclusion checks and improve related-project retrieval gating.
+
+### 2026-03-13 Session Update
+
+- Completed: Implemented opt-in related-project expansion for bootstrap, recent retrieval, and search using explicit `related_project_ids` references from current-project notes; added relation labeling for cross-project notes; added explicit privacy-intent rejection for durable note and handoff writes; added repository and service tests for related-project lookup and privacy rejection; verified with `go test ./...`.
+- In progress: Phase 3 privacy/search exclusion hardening.
+- Blockers: An untracked backup file `internal/domain/retrieval/service.go.7617514228505897916` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Add storage-level/search-level exclusion controls so private or archived records can exist without being indexed or returned.
+
+### 2026-03-13 Session Update
+
+- Completed: Added migration `004_searchability_controls.sql`; introduced durable `searchable` and `exclusion_reason` fields for notes and handoffs; filtered recent/bootstrap/search reads to exclude non-searchable records; rebuilt FTS synchronization so excluded notes do not enter the note index; preserved `GetByID` access for non-searchable records; added repository tests covering exclusion from recent/search plus by-id visibility; verified with `go test ./...`.
+- In progress: Phase 3 warning/error and conformance tightening.
+- Blockers: An untracked backup file `internal/domain/retrieval/service.go.7617514228505897916` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Finish warning/error taxonomy mapping and round out Phase 3 conformance-oriented tests.
+
+### 2026-03-13 Session Update
+
+- Completed: Finished Phase 3 warning/error taxonomy mapping by adding shared coded-error helpers, completing stable taxonomy constants, normalizing uncoded service/retrieval failures, emitting warning codes for related-project and search-dedupe paths, and adding MCP-ready response envelopes that surface top-level warnings and stable error payloads; added retrieval and MCP tests; verified with `go test ./...`.
+- In progress: Phase 4 AGENTS integration planning.
+- Blockers: Untracked backup files created by the local environment are still present and may remain locked, but they do not affect builds or tests.
+- Next step: Start packaging AGENTS templates for runtime installation and implement the first `memory_install_agents` slice.
+
+### 2026-03-13 Session Update
+
+- Completed: Recorded the Go config-loading decision in the development docs: repository-local config should load from `configs/`, and Go config loading should use `viper` with environment variables overriding file values.
+- In progress: Phase 4 AGENTS integration planning.
+- Blockers: none new.
+- Next step: Reflect the same config decision in implementation code when the config loader is expanded beyond env/default-only behavior.
 
 ## Session Handoff Template
 

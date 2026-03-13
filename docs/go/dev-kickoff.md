@@ -86,10 +86,14 @@ These are not product blockers, but the next session may need to choose them dur
 - exact SQLite driver choice
 - migration tool style
 - exact MCP library choice
-- exact config file format
 - exact package naming
 
 These can be decided locally during implementation without reopening the spec.
+
+Configuration decision already made for the Go implementation:
+
+- repository-local configuration should load from `configs/`
+- configuration loading should use `viper`
 
 ## Best Starting Documents For The Next Session
 
