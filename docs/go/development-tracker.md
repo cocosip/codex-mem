@@ -120,14 +120,14 @@ Tasks:
 
 Current session focus:
 
-- Post-conformance implementation polish, diagnostics automation, and release-readiness follow-up
+- Post-conformance implementation polish, troubleshooting guidance, and release-readiness follow-up
 
 Immediate next tasks:
 
-1. Add troubleshooting guidance for config, database-path, and MCP startup failures
-2. See whether any client integration work still exposes MCP compatibility polish gaps
-3. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
-4. Consider wiring `doctor --json` into scripted smoke checks or CI
+1. Add a client-facing MCP integration example or smoke-test recipe
+2. Consider wiring `doctor --json` into scripted smoke checks or CI
+3. See whether any client integration work still exposes MCP compatibility polish gaps
+4. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
 
 ## Decisions Log
 
@@ -299,23 +299,31 @@ Current blockers:
 - Blockers: none new.
 - Next step: Add a concise troubleshooting guide for config resolution, database path/setup failures, and MCP startup/client integration issues.
 
+### 2026-03-13 Session Update
+
+- Completed: Added [troubleshooting.md](./troubleshooting.md) covering config discovery and precedence, invalid config values, database path and SQLite readiness failures, logging visibility, MCP stdio framing, initialize/tool-call failures, and minimal recovery recipes; updated the Go docs index, root README, and release-readiness doc to point at the troubleshooting guide.
+- In progress: Packaging and client-integration follow-up.
+- Blockers: none new.
+- Next step: Add a client-facing MCP integration example or a scripted smoke-test recipe that uses `serve`, `initialize`, `tools/list`, and one real tool call.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Add a troubleshooting guide for the most likely operator failures.
-2. Focus first on:
-   config file discovery and precedence confusion
-   database path and permission issues
-   MCP stdio startup and client initialization failures
+1. Add a client-facing MCP integration example or smoke-test recipe.
+2. Cover:
+   stdio process launch
+   `initialize`
+   `tools/list`
+   one representative tool call
 3. Keep `doctor --json` as the automation-oriented diagnostics surface.
 4. Revisit richer retrieval or audit traces only if real troubleshooting cases require them.
 
 Why this is the best next step now:
 
-- it builds directly on the improved diagnostics surface without reopening core design
-- it helps real users recover from setup and integration failures faster
-- it improves release-readiness packaging and operator usability
+- it builds directly on the new troubleshooting and diagnostics docs
+- it reduces ambiguity when wiring the server into a real MCP client
+- it improves release-readiness without reopening core behavior
 - it keeps richer trace work demand-driven instead of speculative
 
 ## Session Handoff Template

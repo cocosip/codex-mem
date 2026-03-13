@@ -76,6 +76,8 @@ See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full
 
 Use `go run ./cmd/codex-mem doctor --json` when the output needs to be consumed by scripts.
 
+For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/troubleshooting.md).
+
 ## Release Notes
 
 The current release/readiness checklist lives in [release-readiness.md](docs/go/release-readiness.md).
