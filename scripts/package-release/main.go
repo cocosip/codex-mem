@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -53,6 +56,7 @@ func main() {
 	for _, target := range defaultTargets {
 		buildTarget(ctx, repoRoot, distDir, version, commit, date, target)
 	}
+	writeChecksums(distDir)
 
 	fmt.Printf("release packaging complete\n")
 	fmt.Printf("version=%s\n", version)
@@ -82,6 +86,9 @@ func buildTarget(ctx context.Context, repoRoot, distDir, version, commit, date s
 	} else {
 		archivePath := filepath.Join(distDir, baseName+".tar.gz")
 		writeTarGz(archivePath, stageDir)
+	}
+	if err := os.RemoveAll(stageDir); err != nil {
+		failf("remove stage dir %s: %v", stageDir, err)
 	}
 }
 
@@ -196,6 +203,60 @@ func copyFile(src, dst string) {
 	if err := os.WriteFile(dst, input, 0o644); err != nil {
 		failf("write %s: %v", dst, err)
 	}
+}
+
+func writeChecksums(distDir string) {
+	entries, err := os.ReadDir(distDir)
+	if err != nil {
+		failf("read dist directory %s: %v", distDir, err)
+	}
+
+	type checksumEntry struct {
+		name string
+		sum  string
+	}
+
+	checksums := make([]checksumEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == "SHA256SUMS" {
+			continue
+		}
+		checksums = append(checksums, checksumEntry{
+			name: name,
+			sum:  fileSHA256(filepath.Join(distDir, name)),
+		})
+	}
+	sort.Slice(checksums, func(i, j int) bool {
+		return checksums[i].name < checksums[j].name
+	})
+
+	var builder strings.Builder
+	for _, entry := range checksums {
+		fmt.Fprintf(&builder, "%s  %s\n", entry.sum, entry.name)
+	}
+
+	outputPath := filepath.Join(distDir, "SHA256SUMS")
+	if err := os.WriteFile(outputPath, []byte(builder.String()), 0o644); err != nil {
+		failf("write %s: %v", outputPath, err)
+	}
+}
+
+func fileSHA256(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		failf("open %s: %v", path, err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		failf("hash %s: %v", path, err)
+	}
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 func sanitizeVersion(value string) string {

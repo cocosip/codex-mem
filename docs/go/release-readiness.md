@@ -26,6 +26,8 @@ As of 2026-03-13, the Go implementation includes:
 The operational troubleshooting guide lives in [troubleshooting.md](./troubleshooting.md).
 Client-specific MCP setup examples live in [client-examples.md](./client-examples.md).
 
+Tagged releases should publish per-platform archives plus a SHA256SUMS manifest. Signature-based release verification is deferred until the project has stable signing-key management and distribution policy.
+
 ## Pre-Release Checklist
 
 ### 1. Runtime Health
@@ -152,8 +154,7 @@ These do not currently block internal usage:
 
 If the project is being prepared for wider use, the next packaging tasks are:
 
-1. Publish per-platform archives and version metadata as standard release outputs for tagged releases.
-2. Decide whether release automation should also create GitHub Releases, checksums, or signed artifacts.
-3. Add one or more external-client-specific integration examples if a concrete deployment target emerges.
-4. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.
+1. Decide whether release assets should also include detached signatures after signing-key management is established.
+2. Add one or more external-client-specific integration examples if a concrete deployment target emerges.
+3. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.
 

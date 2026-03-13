@@ -129,4 +129,7 @@ For setup and integration failures, use the Go troubleshooting guide in [trouble
 
 ## Release Notes
 
+Tagged GitHub Actions releases now publish the per-platform archives plus a SHA256SUMS manifest for verification. Signature-based release verification is intentionally deferred until key management is in place.
+
 The current release/readiness checklist lives in [release-readiness.md](docs/go/release-readiness.md).
+
