@@ -30,6 +30,12 @@ Run:
 go run ./cmd/codex-mem doctor
 ```
 
+For automation or CI, also run:
+
+```powershell
+go run ./cmd/codex-mem doctor --json
+```
+
 Confirm:
 
 - `required_schema_ok=true`
@@ -111,6 +117,7 @@ These do not currently block internal usage:
 - no packaged release artifact workflow yet
 - no dedicated README examples for a specific external MCP client
 - `doctor` focuses on readiness and audit posture, not deep retrieval trace introspection
+- troubleshooting guidance is still light for config-path, database-path, and MCP client setup failures
 
 ## Recommended Next Packaging Tasks
 
@@ -118,5 +125,5 @@ If the project is being prepared for wider use, the next packaging tasks are:
 
 1. Add a binary build/release workflow and versioning guidance.
 2. Add a client-facing MCP integration example.
-3. Add a short troubleshooting section for config and database path issues.
-4. Decide whether `doctor` should support machine-readable output later.
+3. Add a short troubleshooting section for config, database path, and MCP startup issues.
+4. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.

@@ -120,14 +120,14 @@ Tasks:
 
 Current session focus:
 
-- Post-conformance implementation polish, MCP runtime integration, and diagnostics follow-up
+- Post-conformance implementation polish, diagnostics automation, and release-readiness follow-up
 
 Immediate next tasks:
 
-1. Review residual observability gaps beyond test coverage
-2. Add any remaining MCP compatibility polish discovered during client integration
-3. Decide whether the next polish slice should prioritize troubleshooting docs or richer retrieval/audit traces
-4. Decide whether `doctor` needs machine-readable diagnostics output for automation
+1. Add troubleshooting guidance for config, database-path, and MCP startup failures
+2. See whether any client integration work still exposes MCP compatibility polish gaps
+3. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
+4. Consider wiring `doctor --json` into scripted smoke checks or CI
 
 ## Decisions Log
 
@@ -158,6 +158,7 @@ Immediate next tasks:
 - Phase 5 now includes explicit conformance-named Go tests for bootstrap, recovery, retrieval isolation/expansion, privacy exclusion, AGENTS safe install, identity conflict handling, migration continuity, and warning/provenance visibility.
 - Runtime config now loads through `viper` from `configs/codex-mem.*`, with environment variables overriding file values and a checked-in example config under `configs/codex-mem.example.json`.
 - Go config is now split between user-configurable file/env settings and runtime-derived metadata so fields like `ConfigFileUsed` and `LogDir` are not treated as file-configurable inputs.
+- `doctor` should support machine-readable diagnostics output via `--json`, while keeping the existing human-readable report as the default.
 
 ## Blockers
 
@@ -291,26 +292,31 @@ Current blockers:
 - Blockers: none new.
 - Next step: Decide whether the next polish slice should focus on troubleshooting guidance, machine-readable diagnostics output, or richer retrieval/audit traces.
 
+### 2026-03-13 Session Update
+
+- Completed: Chose machine-readable diagnostics as the next polish slice and implemented `doctor --json`; refactored doctor output through a shared report model so text and JSON stay aligned; added CLI tests for default text output, JSON output, and unknown-flag rejection; updated README and release-readiness docs to include the new automation path.
+- In progress: Troubleshooting and release-readiness follow-up.
+- Blockers: none new.
+- Next step: Add a concise troubleshooting guide for config resolution, database path/setup failures, and MCP startup/client integration issues.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Add machine-readable `doctor` output, preferably a `--json` mode.
-2. Keep the existing human-readable report as the default.
-3. Include the current readiness sections in JSON form:
-   config
-   sqlite/runtime health
-   migration status
-   provenance/audit diagnostics
-   MCP transport/tool availability
-4. Add tests that verify both human-readable and JSON diagnostics paths.
+1. Add a troubleshooting guide for the most likely operator failures.
+2. Focus first on:
+   config file discovery and precedence confusion
+   database path and permission issues
+   MCP stdio startup and client initialization failures
+3. Keep `doctor --json` as the automation-oriented diagnostics surface.
+4. Revisit richer retrieval or audit traces only if real troubleshooting cases require them.
 
 Why this is the best next step now:
 
-- it builds directly on the new `doctor` diagnostics work
-- it improves automation and release-readiness checks
-- it avoids reopening core domain design
-- it can later support CI or scripted environment validation
+- it builds directly on the improved diagnostics surface without reopening core design
+- it helps real users recover from setup and integration failures faster
+- it improves release-readiness packaging and operator usability
+- it keeps richer trace work demand-driven instead of speculative
 
 ## Session Handoff Template
 

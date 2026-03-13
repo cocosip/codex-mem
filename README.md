@@ -10,13 +10,15 @@ It stores structured notes and handoffs in SQLite, restores continuity across re
 - `doctor` reports config, database readiness, migration status, provenance coverage, and MCP tool availability.
 - AGENTS template installation is implemented for global and project workflows.
 
-Normative product docs live in [docs/spec/README.md](/D:/Code/go/codex-mem/docs/spec/README.md).
-Go implementation planning and progress live in [docs/go/README.md](/D:/Code/go/codex-mem/docs/go/README.md).
+Normative product docs live in [docs/spec/README.md](docs/spec/README.md).
+Go implementation planning and progress live in [docs/go/README.md](docs/go/README.md).
 
 ## Commands
 
 - `go run ./cmd/codex-mem doctor`
   Prints effective config plus runtime readiness and audit diagnostics.
+- `go run ./cmd/codex-mem doctor --json`
+  Prints the same diagnostics in machine-readable JSON for automation or CI checks.
 - `go run ./cmd/codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `go run ./cmd/codex-mem serve`
@@ -24,7 +26,7 @@ Go implementation planning and progress live in [docs/go/README.md](/D:/Code/go/
 
 ## Quick Start
 
-1. Copy [codex-mem.example.json](/D:/Code/go/codex-mem/configs/codex-mem.example.json) to `configs/codex-mem.json` if you want repository-local config.
+1. Copy [codex-mem.example.json](configs/codex-mem.example.json) to `configs/codex-mem.json` if you want repository-local config.
 2. Run `go run ./cmd/codex-mem doctor`.
 3. Confirm:
    `required_schema_ok=true`
@@ -47,7 +49,7 @@ The current stdio server exposes:
 - `memory_get_note`
 - `memory_install_agents`
 
-Request and response examples are documented in [example-payloads.md](/D:/Code/go/codex-mem/docs/spec/appendices/example-payloads.md).
+Request and response examples are documented in [example-payloads.md](docs/spec/appendices/example-payloads.md).
 
 ## First-Run Workflow
 
@@ -58,7 +60,7 @@ For one repository:
 3. Save durable discoveries with `memory_save_note`.
 4. Save a continuation record with `memory_save_handoff` before ending.
 
-See [onboarding-flows.md](/D:/Code/go/codex-mem/docs/spec/appendices/onboarding-flows.md) for the full onboarding guidance.
+See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full onboarding guidance.
 
 ## Diagnostics
 
@@ -72,6 +74,8 @@ See [onboarding-flows.md](/D:/Code/go/codex-mem/docs/spec/appendices/onboarding-
 - exclusion audit coverage
 - MCP transport/tool availability
 
+Use `go run ./cmd/codex-mem doctor --json` when the output needs to be consumed by scripts.
+
 ## Release Notes
 
-The current release/readiness checklist lives in [release-readiness.md](/D:/Code/go/codex-mem/docs/go/release-readiness.md).
+The current release/readiness checklist lives in [release-readiness.md](docs/go/release-readiness.md).
