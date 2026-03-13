@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Begin Phase 2 note and handoff persistence on top of the Phase 1 foundation.
+Current target: Begin Phase 3 retrieval and safety work on top of the completed continuity loop.
 
 ## Phase Progress
 
@@ -53,20 +53,20 @@ Tasks:
 
 ### Phase 2: Core Continuity Loop
 
-Status: todo
+Status: done
 
 Tasks:
 
-- [ ] Implement canonical memory note types
-- [ ] Implement canonical handoff types
-- [ ] Implement note storage
-- [ ] Implement handoff storage
-- [ ] Implement `memory_save_note`
-- [ ] Implement `memory_save_handoff`
-- [ ] Implement latest open handoff lookup
-- [ ] Implement recent high-value note lookup
-- [ ] Implement startup brief synthesis
-- [ ] Implement `memory_bootstrap_session`
+- [x] Implement canonical memory note types
+- [x] Implement canonical handoff types
+- [x] Implement note storage
+- [x] Implement handoff storage
+- [x] Implement `memory_save_note`
+- [x] Implement `memory_save_handoff`
+- [x] Implement latest open handoff lookup
+- [x] Implement recent high-value note lookup
+- [x] Implement startup brief synthesis
+- [x] Implement `memory_bootstrap_session`
 
 ### Phase 3: Retrieval and Safety
 
@@ -116,14 +116,14 @@ Tasks:
 
 Current session focus:
 
-- Phase 1 foundation skeleton, storage bootstrap, and scope/session flow
+- Phase 3 retrieval and safety work starting from the completed continuity loop
 
 Immediate next tasks:
 
-1. Add canonical note and handoff types
-2. Create note and handoff tables plus repositories
-3. Implement `memory_save_note`
-4. Implement `memory_save_handoff`
+1. Add retrieval-facing recent activity APIs on top of the current note and handoff repositories
+2. Implement `memory_get_recent`
+3. Implement `memory_get_note`
+4. Prepare the Phase 3 search foundation and FTS5 schema changes
 
 ## Decisions Log
 
@@ -140,6 +140,7 @@ Immediate next tasks:
 - Schema migrations are embedded SQL files under `migrations/` and are applied automatically on startup.
 - Scope resolution prefers normalized repo remote identity, then Git root fallback, then local directory fallback.
 - Session writes validate the stored `workspace -> project -> system` scope chain before insert.
+- Bootstrap retrieval prefers the latest open workspace handoff, then project fallback, then recent notes ordered by scope and importance.
 
 ## Blockers
 
@@ -153,6 +154,20 @@ Current blockers:
 - In progress: Preparing Phase 2 note and handoff persistence.
 - Blockers: none.
 - Next step: Add note/handoff schema, domain types, repositories, and the first save-tool handlers.
+
+### 2026-03-13 Session Update
+
+- Completed: Added `memory` and `handoff` domain packages with canonical types and validation; added SQLite migration `002_memory_and_handoffs.sql`; implemented note and handoff repositories with scope/session consistency checks; wired `memory_save_note` and `memory_save_handoff` through the app and MCP handlers; added service and repository tests; verified with `go test ./...`.
+- In progress: Phase 2 continuity bootstrap work.
+- Blockers: An untracked backup file `internal/db/handoff_repository.go.1923079326463469687` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Implement latest handoff lookup, recent note retrieval, startup brief synthesis, and `memory_bootstrap_session`.
+
+### 2026-03-13 Session Update
+
+- Completed: Added retrieval bootstrap orchestration with fresh-session startup, latest open handoff lookup, recent high-value note lookup, and startup brief synthesis; wired `memory_bootstrap_session` through the app and MCP handlers; added retrieval service tests for workspace preference, project fallback, and empty-history warnings; verified with `go test ./...`.
+- In progress: Phase 3 retrieval and safety planning.
+- Blockers: An untracked backup file `internal/db/handoff_repository.go.1923079326463469687` is currently locked by the local environment and could not be removed even though it does not affect builds.
+- Next step: Implement `memory_get_recent`, `memory_get_note`, and the first safe search/FTS slice.
 
 ## Session Handoff Template
 

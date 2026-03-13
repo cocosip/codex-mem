@@ -11,15 +11,22 @@ import (
 )
 
 const (
-	WarnScopeAmbiguous    = "WARN_SCOPE_AMBIGUOUS"
-	WarnScopeFallback     = "WARN_SCOPE_FALLBACK_USED"
-	ErrInvalidInput       = "ERR_INVALID_INPUT"
-	ErrInvalidScope       = "ERR_INVALID_SCOPE"
-	ErrScopeConflict      = "ERR_SCOPE_CONFLICT"
-	ErrInvalidState       = "ERR_INVALID_STATE"
-	ErrStorageUnavailable = "ERR_STORAGE_UNAVAILABLE"
-	ErrWriteFailed        = "ERR_WRITE_FAILED"
-	ErrReadFailed         = "ERR_READ_FAILED"
+	WarnScopeAmbiguous         = "WARN_SCOPE_AMBIGUOUS"
+	WarnScopeFallback          = "WARN_SCOPE_FALLBACK_USED"
+	WarnDedupeApplied          = "WARN_DEDUPE_APPLIED"
+	WarnHandoffSparse          = "WARN_HANDOFF_SPARSE"
+	WarnNoPriorHandoff         = "WARN_NO_PRIOR_HANDOFF"
+	WarnNoPriorNotes           = "WARN_NO_PRIOR_NOTES"
+	WarnRelatedProjectsSkipped = "WARN_RELATED_PROJECTS_SKIPPED"
+	WarnRecoveryHandoffUsed    = "WARN_RECOVERY_HANDOFF_USED"
+	ErrInvalidInput            = "ERR_INVALID_INPUT"
+	ErrInvalidScope            = "ERR_INVALID_SCOPE"
+	ErrScopeConflict           = "ERR_SCOPE_CONFLICT"
+	ErrInvalidState            = "ERR_INVALID_STATE"
+	ErrSessionNotFound         = "ERR_SESSION_NOT_FOUND"
+	ErrStorageUnavailable      = "ERR_STORAGE_UNAVAILABLE"
+	ErrWriteFailed             = "ERR_WRITE_FAILED"
+	ErrReadFailed              = "ERR_READ_FAILED"
 )
 
 type Warning struct {

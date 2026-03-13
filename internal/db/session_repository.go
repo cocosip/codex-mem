@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"codex-mem/internal/domain/common"
-	"codex-mem/internal/domain/scope"
 	"codex-mem/internal/domain/session"
 )
 
@@ -41,24 +40,6 @@ func (r *SessionRepository) Create(record session.Session) error {
 	)
 	if err != nil {
 		return common.WrapError(common.ErrWriteFailed, "insert session", err)
-	}
-	return nil
-}
-
-func validateScopeRef(db *sql.DB, ref scope.Ref) error {
-	var matched int
-	err := db.QueryRow(`
-		SELECT COUNT(1)
-		FROM workspaces w
-		INNER JOIN projects p ON p.id = w.project_id
-		INNER JOIN systems s ON s.id = p.system_id
-		WHERE w.id = ? AND p.id = ? AND s.id = ?
-	`, ref.WorkspaceID, ref.ProjectID, ref.SystemID).Scan(&matched)
-	if err != nil {
-		return common.WrapError(common.ErrReadFailed, "validate scope chain", err)
-	}
-	if matched != 1 {
-		return common.NewError(common.ErrInvalidScope, "scope chain does not match stored workspace/project/system hierarchy")
 	}
 	return nil
 }

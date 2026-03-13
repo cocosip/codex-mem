@@ -7,7 +7,7 @@ Last updated: 2026-03-13
 This file is the design log and decision index for `codex-mem`.
 
 It is no longer the primary place for the formal v1 specification.
-The normative spec now lives under [docs/spec/](D:/Code/go/codex-mem/docs/spec/README.md).
+The normative spec now lives under [docs/spec/](docs/spec/README.md).
 
 ## Background
 
@@ -102,31 +102,31 @@ without leaking sensitive content.
 
 The formal `codex-mem v1` specification is split into these files:
 
-- [Spec Index](D:/Code/go/codex-mem/docs/spec/README.md)
-- [Glossary](D:/Code/go/codex-mem/docs/spec/glossary.md)
-- [Domain Model](D:/Code/go/codex-mem/docs/spec/domain-model.md)
-- [State Model](D:/Code/go/codex-mem/docs/spec/state-model.md)
-- [Tool Contracts](D:/Code/go/codex-mem/docs/spec/tool-contracts.md)
-- [Retrieval Policy](D:/Code/go/codex-mem/docs/spec/retrieval-policy.md)
-- [Privacy and Retention](D:/Code/go/codex-mem/docs/spec/privacy-retention.md)
-- [AGENTS Policy](D:/Code/go/codex-mem/docs/spec/agents-policy.md)
-- [Configuration and Precedence](D:/Code/go/codex-mem/docs/spec/configuration-precedence.md)
-- [Identity and Consistency](D:/Code/go/codex-mem/docs/spec/identity-consistency.md)
-- [Observability and Provenance](D:/Code/go/codex-mem/docs/spec/observability-provenance.md)
-- [V1 Baseline](D:/Code/go/codex-mem/docs/spec/v1-baseline.md)
+- [Spec Index](docs/spec/README.md)
+- [Glossary](docs/spec/glossary.md)
+- [Domain Model](docs/spec/domain-model.md)
+- [State Model](docs/spec/state-model.md)
+- [Tool Contracts](docs/spec/tool-contracts.md)
+- [Retrieval Policy](docs/spec/retrieval-policy.md)
+- [Privacy and Retention](docs/spec/privacy-retention.md)
+- [AGENTS Policy](docs/spec/agents-policy.md)
+- [Configuration and Precedence](docs/spec/configuration-precedence.md)
+- [Identity and Consistency](docs/spec/identity-consistency.md)
+- [Observability and Provenance](docs/spec/observability-provenance.md)
+- [V1 Baseline](docs/spec/v1-baseline.md)
 
 ## Supporting Assets
 
 AGENTS templates are stored here:
 
-- [Global AGENTS Template](D:/Code/go/codex-mem/templates/AGENTS.global.template.md)
-- [Project AGENTS Template](D:/Code/go/codex-mem/templates/AGENTS.project.template.md)
+- [Global AGENTS Template](templates/AGENTS.global.template.md)
+- [Project AGENTS Template](templates/AGENTS.project.template.md)
 
 Implementation planning reference:
 
-- [Implementation Backlog](D:/Code/go/codex-mem/docs/implementation-backlog.md)
-- [Go Implementation Plan](D:/Code/go/codex-mem/docs/go-implementation-plan.md)
-- [Go Development Tracker](D:/Code/go/codex-mem/docs/go-development-tracker.md)
+- [Implementation Backlog](docs/go/implementation-backlog.md)
+- [Go Implementation Plan](docs/go/implementation-plan.md)
+- [Go Development Tracker](docs/go/development-tracker.md)
 
 ## Remaining Follow-Up Items
 

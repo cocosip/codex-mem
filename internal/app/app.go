@@ -8,6 +8,9 @@ import (
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
 	"codex-mem/internal/domain/common"
+	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/memory"
+	"codex-mem/internal/domain/retrieval"
 	"codex-mem/internal/domain/scope"
 	"codex-mem/internal/domain/session"
 	"codex-mem/internal/mcp"
@@ -15,12 +18,15 @@ import (
 
 // App wires the Phase 1 foundation services together.
 type App struct {
-	Config         config.Config
-	DB             *sql.DB
-	Logger         *slog.Logger
-	ScopeService   *scope.Service
-	SessionService *session.Service
-	Handlers       *mcp.Handlers
+	Config           config.Config
+	DB               *sql.DB
+	Logger           *slog.Logger
+	ScopeService     *scope.Service
+	SessionService   *session.Service
+	MemoryService    *memory.Service
+	HandoffService   *handoff.Service
+	RetrievalService *retrieval.Service
+	Handlers         *mcp.Handlers
 }
 
 func New(ctx context.Context, cfg config.Config) (*App, error) {
@@ -43,6 +49,8 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	ids := common.DefaultIDFactory{Clock: clock}
 	scopeRepo := db.NewScopeRepository(store, clock)
 	sessionRepo := db.NewSessionRepository(store)
+	memoryRepo := db.NewMemoryRepository(store)
+	handoffRepo := db.NewHandoffRepository(store)
 	scopeService := scope.NewService(scopeRepo, scope.Options{
 		DefaultSystemName: cfg.DefaultSystemName,
 	})
@@ -50,14 +58,26 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Clock:     clock,
 		IDFactory: ids,
 	})
+	memoryService := memory.NewService(memoryRepo, memory.Options{
+		Clock:     clock,
+		IDFactory: ids,
+	})
+	handoffService := handoff.NewService(handoffRepo, handoff.Options{
+		Clock:     clock,
+		IDFactory: ids,
+	})
+	retrievalService := retrieval.NewService(scopeService, sessionService, memoryRepo, handoffRepo)
 
 	return &App{
-		Config:         cfg,
-		DB:             store,
-		Logger:         logger,
-		ScopeService:   scopeService,
-		SessionService: sessionService,
-		Handlers:       mcp.NewHandlers(scopeService, sessionService),
+		Config:           cfg,
+		DB:               store,
+		Logger:           logger,
+		ScopeService:     scopeService,
+		SessionService:   sessionService,
+		MemoryService:    memoryService,
+		HandoffService:   handoffService,
+		RetrievalService: retrievalService,
+		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, retrievalService),
 	}, nil
 }
 
