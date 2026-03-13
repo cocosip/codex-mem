@@ -17,10 +17,11 @@ As of 2026-03-13, the Go implementation includes:
 - SQLite-backed durable storage with embedded migrations
 - scoped continuity tools and retrieval tools
 - AGENTS template installation
-- MCP stdio transport for all v1 tools
+- MCP stdio and HTTP transports for all v1 tools
 - `doctor` diagnostics for config, runtime readiness, and provenance/audit posture
 
 The operational troubleshooting guide lives in [troubleshooting.md](./troubleshooting.md).
+Client-specific MCP setup examples live in [client-examples.md](./client-examples.md).
 
 ## Pre-Release Checklist
 
@@ -36,6 +37,12 @@ For automation or CI, also run:
 
 ```powershell
 go run ./cmd/codex-mem doctor --json
+```
+
+For a single combined local readiness check, run:
+
+```powershell
+go run ./scripts/readiness-check
 ```
 
 Confirm:
@@ -69,12 +76,31 @@ Run:
 go run ./cmd/codex-mem serve
 ```
 
+If remote deployment is in scope, also run:
+
+```powershell
+go run ./cmd/codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp
+```
+
+For an end-to-end client simulation, also run:
+
+```powershell
+go run ./scripts/mcp-smoke-test
+```
+
+For the HTTP transport, also run:
+
+```powershell
+go run ./scripts/http-mcp-smoke-test
+```
+
 Confirm that an MCP client can:
 
 - call `initialize`
 - list tools through `tools/list`
 - call at least `memory_install_agents`
 - call at least one continuity tool such as `memory_bootstrap_session`
+- if using HTTP transport, reach the configured `/mcp` endpoint successfully
 
 ### 4. Onboarding Smoke Check
 
@@ -125,6 +151,6 @@ These do not currently block internal usage:
 If the project is being prepared for wider use, the next packaging tasks are:
 
 1. Add a binary build/release workflow and versioning guidance.
-2. Add a client-facing MCP integration example.
-3. Consider wiring `doctor --json` into scripted smoke checks or CI.
+2. Consider wiring `go run ./scripts/readiness-check` into CI or a release checklist runner.
+3. Add a CI or release wrapper that treats both stdio and HTTP smoke tests as required gates.
 4. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.

@@ -79,6 +79,28 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		defer instance.Close()
 		logger.Info("starting MCP stdio server")
 		return mcp.NewServer(instance.Handlers).Serve(ctx, stdin, stdout)
+	case "serve-http":
+		options, err := parseServeHTTPOptions(args[1:])
+		if err != nil {
+			return err
+		}
+		instance, err := New(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		defer instance.Close()
+		logger.Info("starting MCP HTTP server",
+			"listen", options.ListenAddr,
+			"path", options.EndpointPath,
+			"allowed_origins", options.AllowedOrigins,
+		)
+		return mcp.ServeHTTP(ctx, options.ListenAddr, mcp.NewHTTPHandler(
+			mcp.NewServer(instance.Handlers),
+			mcp.HTTPOptions{
+				EndpointPath:   options.EndpointPath,
+				AllowedOrigins: options.AllowedOrigins,
+			},
+		))
 	default:
 		return fmt.Errorf("unknown command %q", command)
 	}

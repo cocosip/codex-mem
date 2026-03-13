@@ -120,12 +120,12 @@ Tasks:
 
 Current session focus:
 
-- Post-conformance implementation polish, troubleshooting guidance, and release-readiness follow-up
+- Remote MCP transport, client-integration examples, and packaging follow-up
 
 Immediate next tasks:
 
-1. Add a client-facing MCP integration example or smoke-test recipe
-2. Consider wiring `doctor --json` into scripted smoke checks or CI
+1. Decide whether the readiness check should be wrapped by a CI workflow or release script
+2. Decide whether the readiness check should become the default release gate
 3. See whether any client integration work still exposes MCP compatibility polish gaps
 4. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
 
@@ -159,6 +159,7 @@ Immediate next tasks:
 - Runtime config now loads through `viper` from `configs/codex-mem.*`, with environment variables overriding file values and a checked-in example config under `configs/codex-mem.example.json`.
 - Go config is now split between user-configurable file/env settings and runtime-derived metadata so fields like `ConfigFileUsed` and `LogDir` are not treated as file-configurable inputs.
 - `doctor` should support machine-readable diagnostics output via `--json`, while keeping the existing human-readable report as the default.
+- The Go implementation should support both local stdio MCP and remote HTTP MCP transports over the same tool surface.
 
 ## Blockers
 
@@ -306,24 +307,58 @@ Current blockers:
 - Blockers: none new.
 - Next step: Add a client-facing MCP integration example or a scripted smoke-test recipe that uses `serve`, `initialize`, `tools/list`, and one real tool call.
 
+### 2026-03-13 Session Update
+
+- Completed: Added a runnable MCP smoke-test program under `scripts/mcp-smoke-test` that launches `go run ./cmd/codex-mem serve`, performs `initialize`, `notifications/initialized`, `tools/list`, and a real `memory_install_agents` tool call, then verifies that a temporary `AGENTS.md` file was written; added [mcp-integration.md](./mcp-integration.md) with the transport summary, expected request order, and usage guidance; updated the Go docs index, root README, and release-readiness doc to point at the new integration path.
+- In progress: Release-readiness and CI automation follow-up.
+- Blockers: none new.
+- Next step: Decide whether to wire the MCP smoke test and `doctor --json` into a scripted CI-style check, or to add external-client-specific examples next.
+
+### 2026-03-13 Session Update
+
+- Completed: Added a combined readiness-check runner under `scripts/readiness-check` that executes `go run ./cmd/codex-mem doctor --json`, validates the key readiness fields, then runs `go run ./scripts/mcp-smoke-test`; updated README, MCP integration guidance, and release-readiness docs to point at the single-command readiness path.
+- In progress: Client-specific integration and packaging follow-up.
+- Blockers: none new.
+- Next step: Add one or more external-client-specific MCP setup examples, or wire the readiness check into a CI/release workflow.
+
+### 2026-03-13 Session Update
+
+- Completed: Added [client-examples.md](./client-examples.md) with a concrete Codex CLI local stdio setup flow based on the locally available `codex mcp add` command shape, plus a ChatGPT connector limitation note that documents the current remote-only MCP support boundary and points to the OpenAI Apps SDK docs; updated the Go docs index, MCP integration guide, root README, and release-readiness doc to point at the client examples.
+- In progress: Packaging and transport-scope follow-up.
+- Blockers: none new.
+- Next step: Decide whether to wire `go run ./scripts/readiness-check` into CI/release automation, or to open a separate implementation slice for remote MCP transport if ChatGPT support is required.
+
+### 2026-03-13 Session Update
+
+- Completed: Implemented a minimal remote HTTP MCP transport in `internal/mcp` with `POST` JSON request handling, JSON-RPC method reuse over the existing handlers, notification-only `202 Accepted` behavior, explicit `GET`/`DELETE` method rejection, and optional origin allowlisting; added the `serve-http` CLI command with `--listen`, `--path`, and repeated `--allow-origin` flags; added transport and option parser tests; updated MCP integration, client examples, release-readiness, and root README docs to describe both stdio and HTTP deployment paths.
+- In progress: Remote transport hardening and packaging follow-up.
+- Blockers: none new.
+- Next step: Add an HTTP transport smoke-test runner and decide whether CI should call it together with `go run ./scripts/readiness-check`.
+
+### 2026-03-13 Session Update
+
+- Completed: Added a real HTTP transport smoke test under `scripts/http-mcp-smoke-test` that launches `serve-http`, performs `initialize`, `notifications/initialized`, `tools/list`, and a real `memory_install_agents` call over `POST /mcp`, then verifies that a temporary `AGENTS.md` file was written; extended `scripts/readiness-check` so it now validates `doctor --json`, the stdio smoke test, and the HTTP smoke test in one run; updated MCP integration, release-readiness, and root README docs to describe the expanded readiness gate.
+- In progress: CI/release gate follow-up.
+- Blockers: none new.
+- Next step: Decide whether to wire `go run ./scripts/readiness-check` directly into CI or a release script, and whether any additional HTTP transport hardening is needed before that.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Add a client-facing MCP integration example or smoke-test recipe.
-2. Cover:
-   stdio process launch
-   `initialize`
-   `tools/list`
-   one representative tool call
-3. Keep `doctor --json` as the automation-oriented diagnostics surface.
+1. Wire `go run ./scripts/readiness-check` into CI or a release checklist runner.
+2. Keep both stdio and HTTP smoke tests as required gates.
+3. After that, decide whether HTTP transport needs:
+   auth hardening
+   richer capability signaling
+   stream support
 4. Revisit richer retrieval or audit traces only if real troubleshooting cases require them.
 
 Why this is the best next step now:
 
-- it builds directly on the new troubleshooting and diagnostics docs
-- it reduces ambiguity when wiring the server into a real MCP client
-- it improves release-readiness without reopening core behavior
+- it builds directly on the new dual-transport readiness coverage
+- it converts the current manual validation path into an enforceable release gate
+- it improves release-readiness for private deployment scenarios without changing core logic
 - it keeps richer trace work demand-driven instead of speculative
 
 ## Session Handoff Template

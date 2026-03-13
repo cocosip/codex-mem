@@ -1,0 +1,47 @@
+package app
+
+import "testing"
+
+func TestParseServeHTTPOptionsDefaults(t *testing.T) {
+	options, err := parseServeHTTPOptions(nil)
+	if err != nil {
+		t.Fatalf("parseServeHTTPOptions: %v", err)
+	}
+	if got, want := options.ListenAddr, "127.0.0.1:8080"; got != want {
+		t.Fatalf("listen mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.EndpointPath, "/mcp"; got != want {
+		t.Fatalf("path mismatch: got %q want %q", got, want)
+	}
+	if len(options.AllowedOrigins) != 0 {
+		t.Fatalf("expected no allowed origins, got %+v", options.AllowedOrigins)
+	}
+}
+
+func TestParseServeHTTPOptionsOverridesValues(t *testing.T) {
+	options, err := parseServeHTTPOptions([]string{
+		"--listen", "0.0.0.0:9090",
+		"--path", "remote",
+		"--allow-origin", "https://client.example.com",
+		"--allow-origin", "https://admin.example.com",
+	})
+	if err != nil {
+		t.Fatalf("parseServeHTTPOptions: %v", err)
+	}
+	if got, want := options.ListenAddr, "0.0.0.0:9090"; got != want {
+		t.Fatalf("listen mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.EndpointPath, "/remote"; got != want {
+		t.Fatalf("path mismatch: got %q want %q", got, want)
+	}
+	if got, want := len(options.AllowedOrigins), 2; got != want {
+		t.Fatalf("allowed origin count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestParseServeHTTPOptionsRejectsUnknownFlag(t *testing.T) {
+	_, err := parseServeHTTPOptions([]string{"--unknown"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+}
