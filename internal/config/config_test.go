@@ -16,31 +16,34 @@ func TestLoadDefaultsIncludeLogFileRotationSettings(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got, want := cfg.ConfigFilePath, filepath.Join(root, "configs", "codex-mem.json"); got != want {
+	if got, want := cfg.Meta.ConfigFilePath, filepath.Join(root, "configs", "codex-mem.json"); got != want {
 		t.Fatalf("config file path mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.LogFilePath, filepath.Join(cfg.LogDir, "codex-mem.log"); got != want {
+	if cfg.Meta.ConfigFileUsed != "" {
+		t.Fatalf("expected no config file to be loaded, got %q", cfg.Meta.ConfigFileUsed)
+	}
+	if got, want := cfg.File.LogFilePath, filepath.Join(cfg.Meta.LogDir, "codex-mem.log"); got != want {
 		t.Fatalf("log file mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.DatabasePath, filepath.Join(root, "data", "codex-mem.db"); got != want {
+	if got, want := cfg.File.DatabasePath, filepath.Join(root, "data", "codex-mem.db"); got != want {
 		t.Fatalf("database path mismatch: got %q want %q", got, want)
 	}
-	if cfg.BusyTimeout != 5*time.Second {
-		t.Fatalf("unexpected BusyTimeout: %s", cfg.BusyTimeout)
+	if cfg.File.BusyTimeout != 5*time.Second {
+		t.Fatalf("unexpected BusyTimeout: %s", cfg.File.BusyTimeout)
 	}
-	if cfg.LogMaxSizeMB != 20 {
-		t.Fatalf("unexpected LogMaxSizeMB: %d", cfg.LogMaxSizeMB)
+	if cfg.File.LogMaxSizeMB != 20 {
+		t.Fatalf("unexpected LogMaxSizeMB: %d", cfg.File.LogMaxSizeMB)
 	}
-	if cfg.LogMaxBackups != 10 {
-		t.Fatalf("unexpected LogMaxBackups: %d", cfg.LogMaxBackups)
+	if cfg.File.LogMaxBackups != 10 {
+		t.Fatalf("unexpected LogMaxBackups: %d", cfg.File.LogMaxBackups)
 	}
-	if cfg.LogMaxAgeDays != 30 {
-		t.Fatalf("unexpected LogMaxAgeDays: %d", cfg.LogMaxAgeDays)
+	if cfg.File.LogMaxAgeDays != 30 {
+		t.Fatalf("unexpected LogMaxAgeDays: %d", cfg.File.LogMaxAgeDays)
 	}
-	if !cfg.LogCompress {
+	if !cfg.File.LogCompress {
 		t.Fatal("expected log compression to default to true")
 	}
-	if !cfg.LogAlsoStderr {
+	if !cfg.File.LogAlsoStderr {
 		t.Fatal("expected stderr logging to default to true")
 	}
 }
@@ -77,28 +80,31 @@ func TestLoadReadsConfigFromConfigsDirectory(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got, want := cfg.ConfigFilePath, configPath; got != want {
+	if got, want := cfg.Meta.ConfigFilePath, configPath; got != want {
 		t.Fatalf("config file path mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.DatabasePath, filepath.Join(root, "store", "app.db"); got != want {
+	if got, want := cfg.Meta.ConfigFileUsed, configPath; got != want {
+		t.Fatalf("config file used mismatch: got %q want %q", got, want)
+	}
+	if got, want := cfg.File.DatabasePath, filepath.Join(root, "store", "app.db"); got != want {
 		t.Fatalf("database path mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.DefaultSystemName, "order-platform"; got != want {
+	if got, want := cfg.File.DefaultSystemName, "order-platform"; got != want {
 		t.Fatalf("system name mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.BusyTimeout, 9*time.Second; got != want {
+	if got, want := cfg.File.BusyTimeout, 9*time.Second; got != want {
 		t.Fatalf("busy timeout mismatch: got %s want %s", got, want)
 	}
-	if got, want := cfg.JournalMode, "DELETE"; got != want {
+	if got, want := cfg.File.JournalMode, "DELETE"; got != want {
 		t.Fatalf("journal mode mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.LogFilePath, filepath.Join(root, "logs", "custom.log"); got != want {
+	if got, want := cfg.File.LogFilePath, filepath.Join(root, "logs", "custom.log"); got != want {
 		t.Fatalf("log file mismatch: got %q want %q", got, want)
 	}
-	if cfg.LogCompress {
+	if cfg.File.LogCompress {
 		t.Fatal("expected log compression to load as false")
 	}
-	if cfg.LogAlsoStderr {
+	if cfg.File.LogAlsoStderr {
 		t.Fatal("expected stderr logging to load as false")
 	}
 }
@@ -139,25 +145,25 @@ func TestLoadEnvironmentOverridesConfigFile(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got, want := cfg.DatabasePath, filepath.Join(root, "override", "override.db"); got != want {
+	if got, want := cfg.File.DatabasePath, filepath.Join(root, "override", "override.db"); got != want {
 		t.Fatalf("database path mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.DefaultSystemName, "override-system"; got != want {
+	if got, want := cfg.File.DefaultSystemName, "override-system"; got != want {
 		t.Fatalf("system name mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.BusyTimeout, 12*time.Second; got != want {
+	if got, want := cfg.File.BusyTimeout, 12*time.Second; got != want {
 		t.Fatalf("busy timeout mismatch: got %s want %s", got, want)
 	}
-	if got, want := cfg.JournalMode, "WAL"; got != want {
+	if got, want := cfg.File.JournalMode, "WAL"; got != want {
 		t.Fatalf("journal mode mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.LogFilePath, filepath.Join(root, "logs", "override.log"); got != want {
+	if got, want := cfg.File.LogFilePath, filepath.Join(root, "logs", "override.log"); got != want {
 		t.Fatalf("log file mismatch: got %q want %q", got, want)
 	}
-	if !cfg.LogCompress {
+	if !cfg.File.LogCompress {
 		t.Fatal("expected env to override log compression to true")
 	}
-	if !cfg.LogAlsoStderr {
+	if !cfg.File.LogAlsoStderr {
 		t.Fatal("expected env to override stderr logging to true")
 	}
 }
@@ -182,13 +188,16 @@ busy_timeout_ms = 3000`
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got, want := cfg.ConfigFilePath, explicitPath; got != want {
+	if got, want := cfg.Meta.ConfigFilePath, explicitPath; got != want {
 		t.Fatalf("config file path mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.DefaultSystemName, "custom-system"; got != want {
+	if got, want := cfg.Meta.ConfigFileUsed, explicitPath; got != want {
+		t.Fatalf("config file used mismatch: got %q want %q", got, want)
+	}
+	if got, want := cfg.File.DefaultSystemName, "custom-system"; got != want {
 		t.Fatalf("system name mismatch: got %q want %q", got, want)
 	}
-	if got, want := cfg.BusyTimeout, 3*time.Second; got != want {
+	if got, want := cfg.File.BusyTimeout, 3*time.Second; got != want {
 		t.Fatalf("busy timeout mismatch: got %s want %s", got, want)
 	}
 }

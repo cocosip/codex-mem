@@ -13,8 +13,9 @@ import (
 func Run(ctx context.Context, cfg config.Config, args []string, stdout io.Writer) error {
 	logger := slog.Default().With(
 		"component", "cli",
-		"config_dir", cfg.ConfigDir,
-		"config_file", cfg.ConfigFilePath,
+		"config_dir", cfg.Meta.ConfigDir,
+		"config_file", cfg.Meta.ConfigFilePath,
+		"config_file_used", cfg.Meta.ConfigFileUsed,
 	)
 	command := "doctor"
 	if len(args) > 0 {
@@ -29,8 +30,8 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdout io.Writer
 			return err
 		}
 		defer instance.Close()
-		logger.Info("migrations applied", "database", cfg.DatabasePath)
-		_, err = fmt.Fprintf(stdout, "migrations applied successfully to %s\n", cfg.DatabasePath)
+		logger.Info("migrations applied", "database", cfg.File.DatabasePath)
+		_, err = fmt.Fprintf(stdout, "migrations applied successfully to %s\n", cfg.File.DatabasePath)
 		return err
 	case "doctor":
 		instance, err := New(ctx, cfg)
@@ -41,8 +42,12 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdout io.Writer
 		if err := db.HealthCheck(ctx, instance.DB); err != nil {
 			return err
 		}
-		logger.Info("doctor check passed", "database", cfg.DatabasePath, "system", cfg.DefaultSystemName)
-		_, err = fmt.Fprintf(stdout, "doctor ok: database=%s system=%s\n", cfg.DatabasePath, cfg.DefaultSystemName)
+		logger.Info("doctor check passed",
+			"database", cfg.File.DatabasePath,
+			"system", cfg.File.DefaultSystemName,
+			"config_file_used", doctorConfigFileUsed(cfg),
+		)
+		_, err = fmt.Fprintf(stdout, "doctor ok: database=%s system=%s config=%s\n", cfg.File.DatabasePath, cfg.File.DefaultSystemName, doctorConfigFileUsed(cfg))
 		return err
 	case "serve":
 		instance, err := New(ctx, cfg)
@@ -56,4 +61,11 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdout io.Writer
 	default:
 		return fmt.Errorf("unknown command %q", command)
 	}
+}
+
+func doctorConfigFileUsed(cfg config.Config) string {
+	if cfg.Meta.ConfigFileUsed != "" {
+		return cfg.Meta.ConfigFileUsed
+	}
+	return "none"
 }

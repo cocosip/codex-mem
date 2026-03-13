@@ -34,14 +34,15 @@ type App struct {
 func New(ctx context.Context, cfg config.Config) (*App, error) {
 	logger := slog.Default().With(
 		"component", "app",
-		"db_path", cfg.DatabasePath,
-		"config_file", cfg.ConfigFilePath,
+		"db_path", cfg.File.DatabasePath,
+		"config_file", cfg.Meta.ConfigFilePath,
+		"config_file_used", cfg.Meta.ConfigFileUsed,
 	)
 	store, err := db.Open(ctx, db.Options{
-		Path:        cfg.DatabasePath,
-		DriverName:  cfg.SQLiteDriver,
-		BusyTimeout: cfg.BusyTimeout,
-		JournalMode: cfg.JournalMode,
+		Path:        cfg.File.DatabasePath,
+		DriverName:  cfg.File.SQLiteDriver,
+		BusyTimeout: cfg.File.BusyTimeout,
+		JournalMode: cfg.File.JournalMode,
 	})
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	memoryRepo := db.NewMemoryRepository(store)
 	handoffRepo := db.NewHandoffRepository(store)
 	scopeService := scope.NewService(scopeRepo, scope.Options{
-		DefaultSystemName: cfg.DefaultSystemName,
+		DefaultSystemName: cfg.File.DefaultSystemName,
 	})
 	sessionService := session.NewService(sessionRepo, session.Options{
 		Clock:     clock,

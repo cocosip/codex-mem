@@ -15,27 +15,27 @@ func NewBootstrapLogger(level slog.Level) *slog.Logger {
 }
 
 func NewLogger(cfg config.Config) (*slog.Logger, io.Closer, error) {
-	if err := os.MkdirAll(filepath.Dir(cfg.LogFilePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.File.LogFilePath), 0o755); err != nil {
 		return nil, nil, err
 	}
 
 	rotator := &lumberjack.Logger{
-		Filename:   cfg.LogFilePath,
-		MaxSize:    cfg.LogMaxSizeMB,
-		MaxBackups: cfg.LogMaxBackups,
-		MaxAge:     cfg.LogMaxAgeDays,
-		Compress:   cfg.LogCompress,
+		Filename:   cfg.File.LogFilePath,
+		MaxSize:    cfg.File.LogMaxSizeMB,
+		MaxBackups: cfg.File.LogMaxBackups,
+		MaxAge:     cfg.File.LogMaxAgeDays,
+		Compress:   cfg.File.LogCompress,
 		LocalTime:  true,
 	}
 	writers := []io.Writer{
 		rotator,
 	}
-	if cfg.LogAlsoStderr {
+	if cfg.File.LogAlsoStderr {
 		writers = append(writers, os.Stderr)
 	}
 
 	handler := slog.NewTextHandler(io.MultiWriter(writers...), &slog.HandlerOptions{
-		Level: cfg.LogLevel,
+		Level: cfg.File.LogLevel,
 	})
 	return slog.New(handler), rotator, nil
 }

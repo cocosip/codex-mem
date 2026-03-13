@@ -15,14 +15,20 @@ func main() {
 	logger := observability.NewBootstrapLogger(slog.LevelInfo)
 	slog.SetDefault(logger)
 
-	cfg, err := config.Load("")
+	cwd, err := os.Getwd()
+	if err != nil {
+		logger.Error("get working directory", "err", err)
+		os.Exit(1)
+	}
+
+	cfg, err := config.Load(cwd)
 	if err != nil {
 		logger.Error("load config", "err", err)
 		os.Exit(1)
 	}
 	logger, logCloser, err := observability.NewLogger(cfg)
 	if err != nil {
-		slog.Default().Error("initialize logger", "err", err, "log_file", cfg.LogFilePath)
+		slog.Default().Error("initialize logger", "err", err, "log_file", cfg.File.LogFilePath)
 		os.Exit(1)
 	}
 	defer logCloser.Close()

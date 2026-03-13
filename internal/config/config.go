@@ -18,21 +18,30 @@ const (
 )
 
 type Config struct {
+	File FileConfig
+	Meta LoadMetadata
+}
+
+type FileConfig struct {
 	DatabasePath      string
-	ConfigDir         string
-	ConfigFilePath    string
-	LogDir            string
-	LogFilePath       string
 	DefaultSystemName string
 	SQLiteDriver      string
 	BusyTimeout       time.Duration
 	JournalMode       string
 	LogLevel          slog.Level
+	LogFilePath       string
 	LogMaxSizeMB      int
 	LogMaxBackups     int
 	LogMaxAgeDays     int
 	LogCompress       bool
 	LogAlsoStderr     bool
+}
+
+type LoadMetadata struct {
+	ConfigDir      string
+	ConfigFilePath string
+	ConfigFileUsed string
+	LogDir         string
 }
 
 func Load(cwd string) (Config, error) {
@@ -100,21 +109,26 @@ func Load(cwd string) (Config, error) {
 	}
 
 	return Config{
-		DatabasePath:      databasePath,
-		ConfigDir:         configDir,
-		ConfigFilePath:    loadedConfigPath,
-		LogDir:            logDir,
-		LogFilePath:       logFilePath,
-		DefaultSystemName: firstNonEmpty(settings.systemName, "codex-mem"),
-		SQLiteDriver:      firstNonEmpty(settings.sqliteDriver, "sqlite"),
-		BusyTimeout:       time.Duration(busyTimeoutMS) * time.Millisecond,
-		JournalMode:       firstNonEmpty(settings.journalMode, "WAL"),
-		LogLevel:          logLevel,
-		LogMaxSizeMB:      logMaxSizeMB,
-		LogMaxBackups:     logMaxBackups,
-		LogMaxAgeDays:     logMaxAgeDays,
-		LogCompress:       logCompress,
-		LogAlsoStderr:     logAlsoStderr,
+		File: FileConfig{
+			DatabasePath:      databasePath,
+			DefaultSystemName: firstNonEmpty(settings.systemName, "codex-mem"),
+			SQLiteDriver:      firstNonEmpty(settings.sqliteDriver, "sqlite"),
+			BusyTimeout:       time.Duration(busyTimeoutMS) * time.Millisecond,
+			JournalMode:       firstNonEmpty(settings.journalMode, "WAL"),
+			LogLevel:          logLevel,
+			LogFilePath:       logFilePath,
+			LogMaxSizeMB:      logMaxSizeMB,
+			LogMaxBackups:     logMaxBackups,
+			LogMaxAgeDays:     logMaxAgeDays,
+			LogCompress:       logCompress,
+			LogAlsoStderr:     logAlsoStderr,
+		},
+		Meta: LoadMetadata{
+			ConfigDir:      configDir,
+			ConfigFilePath: configFilePath,
+			ConfigFileUsed: loadedConfigPath,
+			LogDir:         logDir,
+		},
 	}, nil
 }
 
@@ -166,7 +180,7 @@ func loadSettings(absCWD string, configDir string, logDir string, configFilePath
 		}
 	}
 
-	usedConfigPath := configFilePath
+	usedConfigPath := ""
 	if used := strings.TrimSpace(v.ConfigFileUsed()); used != "" {
 		absUsed, err := filepath.Abs(used)
 		if err != nil {

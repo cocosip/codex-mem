@@ -13,14 +13,18 @@ func TestNewLoggerWritesToFile(t *testing.T) {
 	logDir := t.TempDir()
 	logFilePath := logDir + string(os.PathSeparator) + "codex-mem.log"
 	logger, closer, err := NewLogger(config.Config{
-		LogDir:        logDir,
-		LogFilePath:   logFilePath,
-		LogLevel:      slog.LevelInfo,
-		LogMaxSizeMB:  1,
-		LogMaxBackups: 2,
-		LogMaxAgeDays: 1,
-		LogCompress:   true,
-		LogAlsoStderr: false,
+		File: config.FileConfig{
+			LogFilePath:   logFilePath,
+			LogLevel:      slog.LevelInfo,
+			LogMaxSizeMB:  1,
+			LogMaxBackups: 2,
+			LogMaxAgeDays: 1,
+			LogCompress:   true,
+			LogAlsoStderr: false,
+		},
+		Meta: config.LoadMetadata{
+			LogDir: logDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewLogger: %v", err)

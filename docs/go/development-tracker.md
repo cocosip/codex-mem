@@ -157,6 +157,7 @@ Immediate next tasks:
 - AGENTS append mode uses managed comment markers so repeated installs do not duplicate appended template blocks.
 - Phase 5 now includes explicit conformance-named Go tests for bootstrap, recovery, retrieval isolation/expansion, privacy exclusion, AGENTS safe install, identity conflict handling, migration continuity, and warning/provenance visibility.
 - Runtime config now loads through `viper` from `configs/codex-mem.*`, with environment variables overriding file values and a checked-in example config under `configs/codex-mem.example.json`.
+- Go config is now split between user-configurable file/env settings and runtime-derived metadata so fields like `ConfigFileUsed` and `LogDir` are not treated as file-configurable inputs.
 
 ## Blockers
 
@@ -247,6 +248,13 @@ Current blockers:
 - In progress: Post-conformance polish and runtime integration follow-up.
 - Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
 - Next step: Review remaining CLI and diagnostics polish, especially whether `doctor` should surface effective config information.
+
+### 2026-03-13 Session Update
+
+- Completed: Refactored `internal/config` so `Config` now separates user-configurable file/env values from runtime-derived metadata, and updated app/logger/CLI call sites plus tests to use the split structure; verified with `go test ./...`.
+- In progress: Post-conformance polish and runtime integration follow-up.
+- Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
+- Next step: Decide whether to expose an explicit effective-config summary in `doctor` or a dedicated diagnostics command.
 
 ## Session Handoff Template
 
