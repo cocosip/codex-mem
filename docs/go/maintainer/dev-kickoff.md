@@ -22,8 +22,8 @@ Do not use this for:
 
 Primary references:
 
-- [Spec Index](../spec/README.md)
-- [Implementation Backlog](../implementation-backlog.md)
+- [Spec Index](../../spec/README.md)
+- [Implementation Backlog](./implementation-backlog.md)
 - [Go Implementation Plan](./implementation-plan.md)
 - [Go Development Tracker](./development-tracker.md)
 
@@ -115,11 +115,11 @@ Configuration decision already made for the Go implementation:
 
 Read in this order:
 
-1. [V1 Baseline](../spec/v1-baseline.md)
-2. [Tool Contracts](../spec/tool-contracts.md)
-3. [Domain Model](../spec/domain-model.md)
-4. [Retrieval Policy](../spec/retrieval-policy.md)
-5. [Implementation Backlog](../implementation-backlog.md)
+1. [V1 Baseline](../../spec/v1-baseline.md)
+2. [Tool Contracts](../../spec/tool-contracts.md)
+3. [Domain Model](../../spec/domain-model.md)
+4. [Retrieval Policy](../../spec/retrieval-policy.md)
+5. [Implementation Backlog](./implementation-backlog.md)
 6. [Go Implementation Plan](./implementation-plan.md)
 
 ## Suggested First Prompt For The Next Session
@@ -127,5 +127,5 @@ Read in this order:
 Use a prompt like:
 
 ```text
-Read docs/go/dev-kickoff.md, docs/go/implementation-plan.md, and docs/spec/v1-baseline.md, then start implementing the Go project skeleton and the Phase 1 foundation work.
+Read docs/go/maintainer/dev-kickoff.md, docs/go/maintainer/implementation-plan.md, and docs/spec/v1-baseline.md, then start implementing the Go project skeleton and the Phase 1 foundation work.
 ```

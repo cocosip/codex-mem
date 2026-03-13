@@ -25,7 +25,7 @@ Do not use this for:
 This document is mostly for maintainers, integrators, and CI.
 It assumes you are working from the source tree, which is why it uses `go run` for the checked-in smoke-test programs.
 
-If you are a normal user trying to connect a packaged `codex-mem` binary to Codex, start with [client-examples.md](./client-examples.md) instead.
+If you are a normal user trying to connect a packaged `codex-mem` binary to Codex, start with [client-examples.md](../operator/client-examples.md) instead.
 
 ## Transport Summary
 
@@ -79,7 +79,7 @@ Use this document when you need one of these:
 - a transport-level request/response example
 - a maintainer-oriented explanation of stdio versus HTTP MCP behavior
 
-If you only want to register the packaged binary with Codex CLI, use [client-examples.md](./client-examples.md).
+If you only want to register the packaged binary with Codex CLI, use [client-examples.md](../operator/client-examples.md).
 
 ## Fastest Source-Tree Smoke Test
 
@@ -196,5 +196,5 @@ Move past the smoke test when you need to validate:
 - search and recent retrieval against a populated database
 - a specific external MCP client's process launch model
 
-For packaged-binary client setup examples, use [client-examples.md](./client-examples.md).
-For environment and failure diagnosis, use [troubleshooting.md](./troubleshooting.md).
+For packaged-binary client setup examples, use [client-examples.md](../operator/client-examples.md).
+For environment and failure diagnosis, use [troubleshooting.md](../operator/troubleshooting.md).

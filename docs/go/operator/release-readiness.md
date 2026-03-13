@@ -140,7 +140,7 @@ In a clean repository:
 Verify both:
 
 - default behavior with no `configs/codex-mem.json`
-- repository-local behavior with a copied config file from [codex-mem.example.json](../../configs/codex-mem.example.json)
+- repository-local behavior with a copied config file from [codex-mem.example.json](../../../configs/codex-mem.example.json)
 
 Also verify environment overrides where relevant:
 

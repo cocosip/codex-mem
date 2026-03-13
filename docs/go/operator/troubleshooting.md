@@ -100,7 +100,7 @@ What to do:
 
 1. Confirm the exact path from `doctor` or from the environment variable.
 2. Remove `CODEX_MEM_CONFIG_FILE` temporarily and verify the default path works.
-3. Start from [codex-mem.example.json](../../configs/codex-mem.example.json) and reapply changes incrementally.
+3. Start from [codex-mem.example.json](../../../configs/codex-mem.example.json) and reapply changes incrementally.
 
 ### Symptom: startup fails with `invalid log_level`, `invalid busy_timeout_ms`, or another `invalid ...` message
 

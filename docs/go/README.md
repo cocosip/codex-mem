@@ -2,50 +2,42 @@
 
 This directory contains Go-specific documents for the `codex-mem` implementation.
 
-The most useful way to read these docs is by audience, not by filename.
+These docs are now physically grouped by audience, not just linked that way from a flat index.
 
-## If You Are Using `codex-mem` Day To Day
+## Audience Directories
 
-Read these first:
+- [user/](./user/README.md)
+  End-user usage guidance, memory concepts, and prompt examples.
+- [operator/](./operator/README.md)
+  Client registration, deployment/readiness, and troubleshooting.
+- [maintainer/](./maintainer/README.md)
+  Source-tree integration, implementation planning, and development tracking.
 
-- [how-memory-works.md](./how-memory-works.md)
-  What mem is for, what it stores, when scope matters, and how cross-project lookup works.
-- [prompt-examples.md](./prompt-examples.md)
-  Natural-language prompts you can send to Codex.
-- [client-examples.md](./client-examples.md)
-  How to register the packaged binary with a real MCP client such as Codex CLI.
+## Suggested Starting Points
 
-These are the normal user-facing docs.
+If you are using `codex-mem` day to day:
 
-## If You Are Deploying Or Operating The MCP Server
+- [How Memory Works](./user/how-memory-works.md)
+- [Prompt Examples](./user/prompt-examples.md)
 
-Read these:
+If you are deploying or operating the MCP server:
 
-- [client-examples.md](./client-examples.md)
-  Real client registration examples for local stdio and remote HTTP.
-- [release-readiness.md](./release-readiness.md)
-  Packaging, release, and readiness checklist.
-- [troubleshooting.md](./troubleshooting.md)
-  Setup and runtime failure diagnosis.
+- [Client Examples](./operator/client-examples.md)
+- [Release Readiness](./operator/release-readiness.md)
+- [Troubleshooting](./operator/troubleshooting.md)
 
-## If You Are Maintaining Or Testing The Go Implementation
+If you are maintaining or testing the Go implementation:
 
-Read these:
-
-- [mcp-integration.md](./mcp-integration.md)
-  Maintainer-oriented MCP transport and smoke-test guide from the source tree.
-- [development-tracker.md](./development-tracker.md)
-  Current execution tracker and recent implementation history.
-- [dev-kickoff.md](./dev-kickoff.md)
-  Fastest re-entry point for a new implementation session.
-- [implementation-plan.md](./implementation-plan.md)
-  Go-oriented architecture and implementation plan.
+- [MCP Integration](./maintainer/mcp-integration.md)
+- [Development Tracker](./maintainer/development-tracker.md)
+- [Development Kickoff](./maintainer/dev-kickoff.md)
+- [Implementation Plan](./maintainer/implementation-plan.md)
 
 ## Planning And Spec References
 
-Language-neutral planning remains here:
+Go planning now lives under `maintainer/`:
 
-- [Implementation Backlog](../implementation-backlog.md)
+- [Implementation Backlog](./maintainer/implementation-backlog.md)
 
 Normative product specification remains here:
 

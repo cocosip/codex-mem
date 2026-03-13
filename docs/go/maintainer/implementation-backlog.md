@@ -9,7 +9,7 @@ Instead, it provides a practical execution plan for building a conformant v1 imp
 
 Normative reference:
 
-- [Spec Index](../spec/README.md)
+- [Spec Index](../../spec/README.md)
 
 ## How To Use This Backlog
 
@@ -52,8 +52,8 @@ Create the basic identity, storage, and canonical object layer required by all l
 
 Depends on:
 
-- [domain-model.md](../spec/domain-model.md)
-- [identity-consistency.md](../spec/identity-consistency.md)
+- [domain-model.md](../../spec/domain-model.md)
+- [identity-consistency.md](../../spec/identity-consistency.md)
 
 #### 2. Durable storage model
 
@@ -63,8 +63,8 @@ Depends on:
 
 Depends on:
 
-- [domain-model.md](../spec/domain-model.md)
-- [state-model.md](../spec/state-model.md)
+- [domain-model.md](../../spec/domain-model.md)
+- [state-model.md](../../spec/state-model.md)
 
 #### 3. Canonical object mapping
 
@@ -73,8 +73,8 @@ Depends on:
 
 Depends on:
 
-- [tool-contracts.md](../spec/tool-contracts.md)
-- [v1-baseline.md](../spec/v1-baseline.md)
+- [tool-contracts.md](../../spec/tool-contracts.md)
+- [v1-baseline.md](../../spec/v1-baseline.md)
 
 ### Phase 1 Exit Criteria
 
@@ -147,7 +147,7 @@ Make the memory system reliably searchable, scope-safe, and privacy-safe.
 
 Depends on:
 
-- [retrieval-policy.md](../spec/retrieval-policy.md)
+- [retrieval-policy.md](../../spec/retrieval-policy.md)
 
 #### 10. `memory_search`
 
@@ -173,7 +173,7 @@ Depends on:
 
 Depends on:
 
-- [privacy-retention.md](../spec/privacy-retention.md)
+- [privacy-retention.md](../../spec/privacy-retention.md)
 
 #### 14. Warning and error taxonomy
 
@@ -182,7 +182,7 @@ Depends on:
 
 Depends on:
 
-- [warning-error-taxonomy.md](../spec/appendices/warning-error-taxonomy.md)
+- [warning-error-taxonomy.md](../../spec/appendices/warning-error-taxonomy.md)
 
 ### Phase 3 Exit Criteria
 
@@ -206,7 +206,7 @@ Integrate `codex-mem` into normal Codex workflow through safe AGENTS usage.
 
 Depends on:
 
-- [agents-policy.md](../spec/agents-policy.md)
+- [agents-policy.md](../../spec/agents-policy.md)
 
 #### 16. `memory_install_agents`
 
@@ -223,7 +223,7 @@ Depends on:
 
 Depends on:
 
-- [onboarding-flows.md](../spec/appendices/onboarding-flows.md)
+- [onboarding-flows.md](../../spec/appendices/onboarding-flows.md)
 
 ### Phase 4 Exit Criteria
 
@@ -246,7 +246,7 @@ Validate that the implementation is truly v1-ready and robust under edge cases.
 
 Depends on:
 
-- [conformance-matrix.md](../spec/appendices/conformance-matrix.md)
+- [conformance-matrix.md](../../spec/appendices/conformance-matrix.md)
 
 #### 19. Migration edge cases
 
@@ -255,7 +255,7 @@ Depends on:
 
 Depends on:
 
-- [migration-examples.md](../spec/appendices/migration-examples.md)
+- [migration-examples.md](../../spec/appendices/migration-examples.md)
 
 #### 20. Observability and provenance inspection
 
@@ -264,7 +264,7 @@ Depends on:
 
 Depends on:
 
-- [observability-provenance.md](../spec/observability-provenance.md)
+- [observability-provenance.md](../../spec/observability-provenance.md)
 
 ### Phase 5 Exit Criteria
 

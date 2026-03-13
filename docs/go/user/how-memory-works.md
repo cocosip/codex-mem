@@ -464,6 +464,6 @@ A 项目的支付流程依赖 B 项目的订单接口和字段约定。后续凡
 ## 进一步阅读
 
 - [prompt-examples.md](./prompt-examples.md)
-- [client-examples.md](./client-examples.md)
-- [mcp-integration.md](./mcp-integration.md)
-- [tool-contracts.md](../spec/tool-contracts.md)
+- [client-examples.md](../operator/client-examples.md)
+- [mcp-integration.md](../maintainer/mcp-integration.md)
+- [tool-contracts.md](../../spec/tool-contracts.md)

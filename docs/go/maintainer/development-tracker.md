@@ -16,8 +16,8 @@ Use it to:
 
 Normative references:
 
-- [Spec Index](../spec/README.md)
-- [Implementation Backlog](../implementation-backlog.md)
+- [Spec Index](../../spec/README.md)
+- [Implementation Backlog](./implementation-backlog.md)
 - [Go Implementation Plan](./implementation-plan.md)
 - [Go Development Kickoff](./dev-kickoff.md)
 
@@ -169,17 +169,24 @@ Current blockers:
 
 ### 2026-03-13 Session Update
 
-- Completed: Rewrote the Chinese portion of [prompt-examples.md](./prompt-examples.md) to use user-facing language such as “当前仓库/项目/范围” instead of leaning on raw `scope` terminology; added [how-memory-works.md](./how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
+- Completed: Rewrote the Chinese portion of [prompt-examples.md](../user/prompt-examples.md) to use user-facing language such as “当前仓库/项目/范围” instead of leaning on raw `scope` terminology; added [how-memory-works.md](../user/how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
 - In progress: User-facing documentation clarity follow-up.
 - Blockers: none new.
 - Next step: Decide whether the quick explainer should be expanded into a full onboarding doc with screenshots or client-specific walkthroughs.
 
 ### 2026-03-13 Session Update
 
-- Completed: Reorganized the `docs/go` documentation entry points by audience; updated [docs/go/README.md](./README.md) to route users, operators, and maintainers to different docs; clarified [client-examples.md](./client-examples.md), [mcp-integration.md](./mcp-integration.md), [release-readiness.md](./release-readiness.md), [troubleshooting.md](./troubleshooting.md), [dev-kickoff.md](./dev-kickoff.md), [implementation-plan.md](./implementation-plan.md), [how-memory-works.md](./how-memory-works.md), and [prompt-examples.md](./prompt-examples.md) with explicit audience and use-case framing so source-tree maintainer docs are less likely to be mistaken for end-user setup guides.
+- Completed: Reorganized the `docs/go` documentation entry points by audience; updated [docs/go/README.md](../README.md) to route users, operators, and maintainers to different docs; clarified [client-examples.md](../operator/client-examples.md), [mcp-integration.md](./mcp-integration.md), [release-readiness.md](../operator/release-readiness.md), [troubleshooting.md](../operator/troubleshooting.md), [dev-kickoff.md](./dev-kickoff.md), [implementation-plan.md](./implementation-plan.md), [how-memory-works.md](../user/how-memory-works.md), and [prompt-examples.md](../user/prompt-examples.md) with explicit audience and use-case framing so source-tree maintainer docs are less likely to be mistaken for end-user setup guides.
 - In progress: Go docs information-architecture polish follow-up.
 - Blockers: none new.
 - Next step: Decide whether the `docs/go` area should stay flat with audience-based navigation or be physically split into `user`, `operator`, and `maintainer` subdirectories.
+
+### 2026-03-13 Session Update
+
+- Completed: Physically split `docs/go` into [user](../user/README.md), [operator](../operator/README.md), and [maintainer](./README.md) directories; moved the existing docs into those directories; added per-audience index files; and updated cross-links plus root README references so the new layout is navigable without relying on one flat directory.
+- In progress: Post-split information architecture polish.
+- Blockers: none new.
+- Next step: Decide whether the user and operator areas need more task-oriented onboarding guides now that the audience boundaries are enforced by path.
 
 ## Recommended Next Step
 
@@ -216,6 +223,6 @@ When ending a coding session, append a short update in this format:
 ## Suggested Prompt For A New Session
 
 ```text
-Read docs/go/development-tracker.md, docs/go/dev-kickoff.md, and docs/go/implementation-plan.md, then continue the current Go implementation from the listed next tasks and update the tracker as you make progress.
+Read docs/go/maintainer/development-tracker.md, docs/go/maintainer/dev-kickoff.md, and docs/go/maintainer/implementation-plan.md, then continue the current Go implementation from the listed next tasks and update the tracker as you make progress.
 ```
 

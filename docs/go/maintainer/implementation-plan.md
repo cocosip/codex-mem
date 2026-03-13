@@ -26,8 +26,8 @@ Instead, it describes how a Go implementation can realize the required behavior 
 
 Normative references:
 
-- [Spec Index](../spec/README.md)
-- [Implementation Backlog](../implementation-backlog.md)
+- [Spec Index](../../spec/README.md)
+- [Implementation Backlog](./implementation-backlog.md)
 
 ## Implementation Goals
 
@@ -554,7 +554,7 @@ Focus:
 
 Focus:
 
-- scenarios from [conformance-matrix.md](../spec/appendices/conformance-matrix.md)
+- scenarios from [conformance-matrix.md](../../spec/appendices/conformance-matrix.md)
 
 Recommended approach:
 

@@ -12,7 +12,20 @@ It stores structured notes and handoffs in SQLite, restores continuity across re
 - AGENTS template installation is implemented for global and project workflows.
 
 Normative product docs live in [docs/spec/README.md](docs/spec/README.md).
-Go implementation planning and progress live in [docs/go/README.md](docs/go/README.md).
+Go implementation docs now live under [docs/go/README.md](docs/go/README.md), grouped into user, operator, and maintainer directories.
+
+## Documentation Map
+
+Use the docs by audience:
+
+- [User docs](docs/go/user/README.md)
+  How memory works, what gets saved, and prompt patterns for normal Codex usage.
+- [Operator docs](docs/go/operator/README.md)
+  Client registration, deployment/readiness, packaging, and troubleshooting.
+- [Maintainer docs](docs/go/maintainer/README.md)
+  Source-tree MCP integration, implementation planning, and development tracking.
+
+If you only want the full Go docs index, start at [docs/go/README.md](docs/go/README.md).
 
 ## User Model
 
@@ -29,6 +42,9 @@ After the server is registered, Codex triggers tools such as `memory_bootstrap_s
 ## User Quick Start
 
 The normal user path should use a packaged binary, not `go run`.
+
+Detailed setup examples live in [docs/go/operator/client-examples.md](docs/go/operator/client-examples.md).
+Prompt-level day-to-day usage examples live in [docs/go/user/prompt-examples.md](docs/go/user/prompt-examples.md).
 
 1. Download the release artifact for your platform and unpack it.
 2. Optionally place `codex-mem.example.json` next to your deployment config and adjust paths.
@@ -93,11 +109,11 @@ The current MCP server exposes:
 - `memory_install_agents`
 
 Request and response examples are documented in [example-payloads.md](docs/spec/appendices/example-payloads.md).
-For concrete packaged-binary client setup examples, use [client-examples.md](docs/go/client-examples.md).
-For maintainer-oriented MCP transport and smoke-test guidance from the source tree, use [mcp-integration.md](docs/go/mcp-integration.md).
-For a quick explanation of how memory works, what gets saved, and when scope matters, use [how-memory-works.md](docs/go/how-memory-works.md).
-For end-user prompt templates that cause Codex to pick the memory tools automatically, use [prompt-examples.md](docs/go/prompt-examples.md).
-For release packaging and operator guidance, use [release-readiness.md](docs/go/release-readiness.md).
+For concrete packaged-binary client setup examples, use [client-examples.md](docs/go/operator/client-examples.md).
+For maintainer-oriented MCP transport and smoke-test guidance from the source tree, use [mcp-integration.md](docs/go/maintainer/mcp-integration.md).
+For a quick explanation of how memory works, what gets saved, and when scope matters, use [how-memory-works.md](docs/go/user/how-memory-works.md).
+For end-user prompt templates that cause Codex to pick the memory tools automatically, use [prompt-examples.md](docs/go/user/prompt-examples.md).
+For release packaging and operator guidance, use [release-readiness.md](docs/go/operator/release-readiness.md).
 
 ## First-Run Workflow
 
@@ -126,11 +142,11 @@ See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full
 Use `codex-mem doctor --json` when the output needs to be consumed by scripts.
 The combined readiness gate under `scripts/readiness-check` is for CI and maintainers, not end users.
 
-For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/troubleshooting.md).
+For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/operator/troubleshooting.md).
 
 ## Release Notes
 
 Tagged GitHub Actions releases now publish the per-platform archives plus a SHA256SUMS manifest for verification. Signature-based release verification is intentionally deferred until key management is in place.
 
-The current release/readiness checklist lives in [release-readiness.md](docs/go/release-readiness.md).
+The current release/readiness checklist lives in [release-readiness.md](docs/go/operator/release-readiness.md).
 
