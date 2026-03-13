@@ -10,6 +10,9 @@ It is intended for:
 - checking a client's `initialize` and `tools/list` behavior
 - smoke-testing one real `tools/call` round trip end to end
 
+This document is mostly for maintainers, integrators, and CI.
+Normal end users should primarily consume packaged binaries and register them with Codex.
+
 ## Transport Summary
 
 The current server exposes two transports:
@@ -19,7 +22,7 @@ The current server exposes two transports:
 Start it with:
 
 ```powershell
-go run ./cmd/codex-mem serve
+codex-mem.exe serve
 ```
 
 Characteristics:
@@ -37,7 +40,7 @@ Characteristics:
 Start it with:
 
 ```powershell
-go run ./cmd/codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp
+codex-mem.exe serve-http --listen 127.0.0.1:8080 --path /mcp
 ```
 
 Characteristics:
@@ -62,7 +65,7 @@ go run ./scripts/mcp-smoke-test
 
 What it does:
 
-1. starts `go run ./cmd/codex-mem serve`
+1. starts the stdio server process
 2. sends `initialize`
 3. sends `notifications/initialized`
 4. sends `tools/list`
@@ -112,7 +115,7 @@ That combined check now covers:
 
 If you are wiring a real MCP client, confirm this order:
 
-1. launch `go run ./cmd/codex-mem serve`
+1. launch the `codex-mem` binary with `serve`
 2. send `initialize`
 3. send `notifications/initialized`
 4. send `tools/list`

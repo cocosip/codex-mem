@@ -4,6 +4,9 @@
 
 This document is a practical release/readiness checklist for the current Go implementation of `codex-mem`.
 
+It is written for maintainers and release engineers.
+End users should consume the produced binaries and should not need a local Go toolchain.
+
 Use it before:
 
 - handing the binary to another developer
@@ -30,13 +33,13 @@ Client-specific MCP setup examples live in [client-examples.md](./client-example
 Run:
 
 ```powershell
-go run ./cmd/codex-mem doctor
+codex-mem doctor
 ```
 
 For automation or CI, also run:
 
 ```powershell
-go run ./cmd/codex-mem doctor --json
+codex-mem doctor --json
 ```
 
 For a single combined local readiness check, run:
@@ -73,13 +76,13 @@ Expected:
 Run:
 
 ```powershell
-go run ./cmd/codex-mem serve
+codex-mem serve
 ```
 
 If remote deployment is in scope, also run:
 
 ```powershell
-go run ./cmd/codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp
+codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp
 ```
 
 For an end-to-end client simulation, also run:
@@ -129,8 +132,8 @@ Also verify environment overrides where relevant:
 
 For a quick end-to-end demo:
 
-1. Run `go run ./cmd/codex-mem doctor`
-2. Start `go run ./cmd/codex-mem serve`
+1. Run `codex-mem doctor`
+2. Start `codex-mem serve`
 3. Call `memory_resolve_scope`
 4. Call `memory_start_session`
 5. Call `memory_save_note`
@@ -150,7 +153,7 @@ These do not currently block internal usage:
 
 If the project is being prepared for wider use, the next packaging tasks are:
 
-1. Add a binary build/release workflow and versioning guidance.
-2. Consider wiring `go run ./scripts/readiness-check` into CI or a release checklist runner.
-3. Add a CI or release wrapper that treats both stdio and HTTP smoke tests as required gates.
+1. Promote the packaged binary artifacts as the default documented user path everywhere.
+2. Wire `go run ./scripts/package-release` and `go run ./scripts/readiness-check` into CI or a release checklist runner.
+3. Publish per-platform archives and version metadata as standard release outputs.
 4. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.

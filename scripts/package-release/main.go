@@ -1,0 +1,229 @@
+package main
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+)
+
+type target struct {
+	GOOS   string
+	GOARCH string
+}
+
+var defaultTargets = []target{
+	{GOOS: "windows", GOARCH: "amd64"},
+	{GOOS: "windows", GOARCH: "arm64"},
+	{GOOS: "linux", GOARCH: "amd64"},
+	{GOOS: "linux", GOARCH: "arm64"},
+	{GOOS: "darwin", GOARCH: "amd64"},
+	{GOOS: "darwin", GOARCH: "arm64"},
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	repoRoot, err := os.Getwd()
+	if err != nil {
+		failf("resolve working directory: %v", err)
+	}
+
+	version := firstNonEmpty(os.Getenv("CODEX_MEM_VERSION"), os.Getenv("GITHUB_REF_NAME"), "dev")
+	commit := firstNonEmpty(os.Getenv("CODEX_MEM_COMMIT"), os.Getenv("GITHUB_SHA"), "unknown")
+	date := firstNonEmpty(os.Getenv("CODEX_MEM_BUILD_DATE"), time.Now().UTC().Format(time.RFC3339))
+	distDir := filepath.Join(repoRoot, "dist")
+	if err := os.RemoveAll(distDir); err != nil {
+		failf("reset dist directory: %v", err)
+	}
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		failf("create dist directory: %v", err)
+	}
+
+	for _, target := range defaultTargets {
+		buildTarget(ctx, repoRoot, distDir, version, commit, date, target)
+	}
+
+	fmt.Printf("release packaging complete\n")
+	fmt.Printf("version=%s\n", version)
+	fmt.Printf("targets=%d\n", len(defaultTargets))
+	fmt.Printf("dist=%s\n", distDir)
+}
+
+func buildTarget(ctx context.Context, repoRoot, distDir, version, commit, date string, target target) {
+	baseName := fmt.Sprintf("codex-mem_%s_%s_%s", sanitizeVersion(version), target.GOOS, target.GOARCH)
+	stageDir := filepath.Join(distDir, baseName)
+	if err := os.MkdirAll(stageDir, 0o755); err != nil {
+		failf("create stage dir for %s/%s: %v", target.GOOS, target.GOARCH, err)
+	}
+
+	binaryName := "codex-mem"
+	if target.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(stageDir, binaryName)
+	buildBinary(ctx, repoRoot, binaryPath, version, commit, date, target)
+	copyFile(filepath.Join(repoRoot, "README.md"), filepath.Join(stageDir, "README.md"))
+	copyFile(filepath.Join(repoRoot, "configs", "codex-mem.example.json"), filepath.Join(stageDir, "codex-mem.example.json"))
+
+	if target.GOOS == "windows" {
+		archivePath := filepath.Join(distDir, baseName+".zip")
+		writeZip(archivePath, stageDir)
+	} else {
+		archivePath := filepath.Join(distDir, baseName+".tar.gz")
+		writeTarGz(archivePath, stageDir)
+	}
+}
+
+func buildBinary(ctx context.Context, repoRoot, outputPath, version, commit, date string, target target) {
+	ldflags := fmt.Sprintf("-X codex-mem/internal/buildinfo.Version=%s -X codex-mem/internal/buildinfo.Commit=%s -X codex-mem/internal/buildinfo.Date=%s", version, commit, date)
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", outputPath, "./cmd/codex-mem")
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(),
+		"CGO_ENABLED=0",
+		"GOOS="+target.GOOS,
+		"GOARCH="+target.GOARCH,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		failf("build %s/%s: %v\n%s", target.GOOS, target.GOARCH, err, string(output))
+	}
+}
+
+func writeZip(archivePath, sourceDir string) {
+	file, err := os.Create(archivePath)
+	if err != nil {
+		failf("create zip %s: %v", archivePath, err)
+	}
+	defer file.Close()
+
+	zipWriter := zip.NewWriter(file)
+	defer zipWriter.Close()
+
+	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(filepath.Dir(sourceDir), path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = rel
+		header.Method = zip.Deflate
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		return copyIntoWriter(path, writer)
+	})
+	if err != nil {
+		failf("write zip %s: %v", archivePath, err)
+	}
+}
+
+func writeTarGz(archivePath, sourceDir string) {
+	file, err := os.Create(archivePath)
+	if err != nil {
+		failf("create tar.gz %s: %v", archivePath, err)
+	}
+	defer file.Close()
+
+	gzipWriter := gzip.NewWriter(file)
+	defer gzipWriter.Close()
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
+
+	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(filepath.Dir(sourceDir), path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = rel
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		return copyIntoWriter(path, tarWriter)
+	})
+	if err != nil {
+		failf("write tar.gz %s: %v", archivePath, err)
+	}
+}
+
+func copyIntoWriter(path string, writer io.Writer) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = io.Copy(writer, file)
+	return err
+}
+
+func copyFile(src, dst string) {
+	input, err := os.ReadFile(src)
+	if err != nil {
+		failf("read %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, input, 0o644); err != nil {
+		failf("write %s: %v", dst, err)
+	}
+}
+
+func sanitizeVersion(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "dev"
+	}
+	value = strings.TrimPrefix(value, "refs/tags/")
+	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-", ":", "-")
+	return replacer.Replace(value)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func failf(format string, args ...any) {
+	var buffer bytes.Buffer
+	fmt.Fprintf(&buffer, format+"\n", args...)
+	if runtime.GOOS == "windows" {
+		buffer.WriteString("")
+	}
+	fmt.Fprint(os.Stderr, buffer.String())
+	os.Exit(1)
+}

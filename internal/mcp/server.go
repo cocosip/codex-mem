@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"codex-mem/internal/buildinfo"
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/handoff"
 	"codex-mem/internal/domain/memory"
@@ -282,7 +283,7 @@ func (s *Server) handleRequest(ctx context.Context, request rpcRequest) (rpcResp
 			Capabilities: map[string]any{
 				"tools": map[string]any{"listChanged": false},
 			},
-			ServerInfo: serverInfo{Name: "codex-mem", Version: "0.1.0"},
+			ServerInfo: serverInfo{Name: "codex-mem", Version: buildinfo.Summary()},
 		}
 		return response, true
 	case "notifications/initialized":

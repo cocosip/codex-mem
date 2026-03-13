@@ -10,6 +10,7 @@ This directory contains Go-specific planning and execution documents for the `co
 - [release-readiness.md](./release-readiness.md)
 - [mcp-integration.md](./mcp-integration.md)
 - [client-examples.md](./client-examples.md)
+- [prompt-examples.md](./prompt-examples.md)
 - [troubleshooting.md](./troubleshooting.md)
 
 Language-neutral planning remains here:

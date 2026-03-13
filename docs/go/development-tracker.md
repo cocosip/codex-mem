@@ -125,7 +125,7 @@ Current session focus:
 Immediate next tasks:
 
 1. Decide whether the readiness check should be wrapped by a CI workflow or release script
-2. Decide whether the readiness check should become the default release gate
+2. Finish packaging and documentation cleanup so end users default to binaries instead of `go run`
 3. See whether any client integration work still exposes MCP compatibility polish gaps
 4. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
 
@@ -342,12 +342,19 @@ Current blockers:
 - Blockers: none new.
 - Next step: Decide whether to wire `go run ./scripts/readiness-check` directly into CI or a release script, and whether any additional HTTP transport hardening is needed before that.
 
+### 2026-03-13 Session Update
+
+- Completed: Added [prompt-examples.md](./prompt-examples.md) with concrete user-facing prompts for bootstrap, scope resolution, saving notes, saving handoffs, retrieval, and AGENTS installation; linked it from the Go docs index and root README so users can see how to ask Codex for the right behavior instead of trying to invoke MCP method names manually.
+- In progress: Packaging and user-path documentation cleanup.
+- Blockers: none new.
+- Next step: Finish shifting the remaining docs from `go run`-centric instructions to packaged-binary-first guidance, and land the build/release artifact workflow.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Wire `go run ./scripts/readiness-check` into CI or a release checklist runner.
-2. Keep both stdio and HTTP smoke tests as required gates.
+1. Finish packaged-binary-first documentation and release workflow guidance.
+2. Wire `go run ./scripts/package-release` and `go run ./scripts/readiness-check` into CI or a release checklist runner.
 3. After that, decide whether HTTP transport needs:
    auth hardening
    richer capability signaling
@@ -356,9 +363,9 @@ Recommended next implementation slice:
 
 Why this is the best next step now:
 
-- it builds directly on the new dual-transport readiness coverage
+- it builds directly on the new dual-transport readiness coverage and prompt examples
 - it converts the current manual validation path into an enforceable release gate
-- it improves release-readiness for private deployment scenarios without changing core logic
+- it improves the real user path instead of only maintainer workflows
 - it keeps richer trace work demand-driven instead of speculative
 
 ## Session Handoff Template

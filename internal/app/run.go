@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 
+	"codex-mem/internal/buildinfo"
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
 	"codex-mem/internal/mcp"
@@ -25,6 +26,9 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 	logger.Info("starting command", "command", command)
 
 	switch command {
+	case "version":
+		_, err := fmt.Fprintf(stdout, "codex-mem %s\ncommit=%s\ndate=%s\n", buildinfo.Summary(), buildinfo.Commit, buildinfo.Date)
+		return err
 	case "migrate":
 		instance, err := New(ctx, cfg)
 		if err != nil {
