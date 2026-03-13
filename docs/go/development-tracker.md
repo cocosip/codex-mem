@@ -120,12 +120,12 @@ Tasks:
 
 Current session focus:
 
-- Remote MCP transport, client-integration examples, and packaging follow-up
+- Release-gate automation and packaging follow-up
 
 Immediate next tasks:
 
-1. Decide whether the readiness check should be wrapped by a CI workflow or release script
-2. Finish packaging and documentation cleanup so end users default to binaries instead of `go run`
+1. Decide whether tagged releases should publish archives directly or continue as uploaded workflow artifacts
+2. Decide whether release outputs need checksums or signing metadata
 3. See whether any client integration work still exposes MCP compatibility polish gaps
 4. Revisit richer retrieval or audit traces only if troubleshooting data shows a real need
 
@@ -349,12 +349,19 @@ Current blockers:
 - Blockers: none new.
 - Next step: Finish shifting the remaining docs from `go run`-centric instructions to packaged-binary-first guidance, and land the build/release artifact workflow.
 
+### 2026-03-13 Session Update
+
+- Completed: Wired `go run ./scripts/readiness-check` into the GitHub Actions `build-release` workflow so CI now runs tests, the combined doctor/stdio/HTTP readiness gate, and release packaging in one pipeline; updated [release-readiness.md](./release-readiness.md) to remove the outdated missing-workflow blocker and reflect the new remaining packaging tasks.
+- In progress: Release artifact publication and packaging polish follow-up.
+- Blockers: none new.
+- Next step: Decide whether tagged releases should publish versioned archives directly, and whether release outputs need checksums or signing metadata.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Finish packaged-binary-first documentation and release workflow guidance.
-2. Wire `go run ./scripts/package-release` and `go run ./scripts/readiness-check` into CI or a release checklist runner.
+1. Decide whether tagged releases should publish versioned archives directly, and whether checksums or signing metadata are required.
+2. Keep packaged-binary-first documentation aligned with the actual release/distribution path.
 3. After that, decide whether HTTP transport needs:
    auth hardening
    richer capability signaling
@@ -364,8 +371,8 @@ Recommended next implementation slice:
 Why this is the best next step now:
 
 - it builds directly on the new dual-transport readiness coverage and prompt examples
-- it converts the current manual validation path into an enforceable release gate
-- it improves the real user path instead of only maintainer workflows
+- it builds on the new enforceable CI release gate instead of duplicating it
+- it improves the real user distribution path instead of only maintainer workflows
 - it keeps richer trace work demand-driven instead of speculative
 
 ## Session Handoff Template
@@ -386,3 +393,4 @@ When ending a coding session, append a short update in this format:
 ```text
 Read docs/go/development-tracker.md, docs/go/dev-kickoff.md, and docs/go/implementation-plan.md, then continue the current Go implementation from the listed next tasks and update the tracker as you make progress.
 ```
+

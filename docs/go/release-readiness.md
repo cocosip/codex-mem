@@ -145,7 +145,6 @@ For a quick end-to-end demo:
 
 These do not currently block internal usage:
 
-- no packaged release artifact workflow yet
 - no dedicated README examples for a specific external MCP client
 - `doctor` focuses on readiness and audit posture, not deep retrieval trace introspection
 
@@ -153,7 +152,8 @@ These do not currently block internal usage:
 
 If the project is being prepared for wider use, the next packaging tasks are:
 
-1. Promote the packaged binary artifacts as the default documented user path everywhere.
-2. Wire `go run ./scripts/package-release` and `go run ./scripts/readiness-check` into CI or a release checklist runner.
-3. Publish per-platform archives and version metadata as standard release outputs.
+1. Publish per-platform archives and version metadata as standard release outputs for tagged releases.
+2. Decide whether release automation should also create GitHub Releases, checksums, or signed artifacts.
+3. Add one or more external-client-specific integration examples if a concrete deployment target emerges.
 4. Consider richer retrieval or audit traces only if integration troubleshooting shows a real need.
+

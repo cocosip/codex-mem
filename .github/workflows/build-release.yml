@@ -24,6 +24,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Readiness Check
+        run: go run ./scripts/readiness-check
+
       - name: Package Release Artifacts
         env:
           CODEX_MEM_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
@@ -36,3 +39,4 @@ jobs:
         with:
           name: codex-mem-release-artifacts
           path: dist/*
+
