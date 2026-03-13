@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/scope"
@@ -117,5 +118,33 @@ func TestHandleMemorySaveNoteMapsUncodedErrors(t *testing.T) {
 	}
 	if response.Data != nil {
 		t.Fatalf("expected no data on error, got %+v", response.Data)
+	}
+}
+
+func TestHandleMemoryInstallAgentsPromotesWarningsToEnvelope(t *testing.T) {
+	root := t.TempDir()
+	service := agents.NewService(agents.Options{HomeDir: root})
+	handlers := &Handlers{agentsService: service}
+
+	response := handlers.HandleMemoryInstallAgents(context.Background(), agents.InstallInput{
+		Target: agents.TargetProject,
+		Mode:   agents.ModeSafe,
+		CWD:    root,
+	})
+
+	if !response.Ok {
+		t.Fatalf("expected ok response, got error %+v", response.Error)
+	}
+	if response.Data == nil {
+		t.Fatal("expected response data")
+	}
+	if got, want := len(response.Data.WrittenFiles), 1; got != want {
+		t.Fatalf("written file count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(response.Warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+	if got, want := response.Warnings[0].Code, common.WarnPlaceholdersUnresolved; got != want {
+		t.Fatalf("warning code mismatch: got %q want %q", got, want)
 	}
 }

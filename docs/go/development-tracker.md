@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Begin Phase 4 AGENTS integration on top of the completed retrieval and safety slice.
+Current target: Begin Phase 5 conformance and hardening on top of the completed AGENTS integration slice.
 
 ## Phase Progress
 
@@ -88,16 +88,16 @@ Tasks:
 
 ### Phase 4: AGENTS Integration
 
-Status: todo
+Status: done
 
 Tasks:
 
-- [ ] Package AGENTS templates for runtime use
-- [ ] Implement `memory_install_agents`
-- [ ] Support safe create-if-missing behavior
-- [ ] Support append mode
-- [ ] Support explicit overwrite mode
-- [ ] Implement project/system placeholder filling
+- [x] Package AGENTS templates for runtime use
+- [x] Implement `memory_install_agents`
+- [x] Support safe create-if-missing behavior
+- [x] Support append mode
+- [x] Support explicit overwrite mode
+- [x] Implement project/system placeholder filling
 
 ### Phase 5: Conformance and Hardening
 
@@ -120,14 +120,14 @@ Tasks:
 
 Current session focus:
 
-- Close out Phase 3 warning/error taxonomy work and prepare the handoff into Phase 4
+- Finish Phase 4 AGENTS integration and hand off into Phase 5 validation work
 
 Immediate next tasks:
 
-1. Package AGENTS templates for runtime use
-2. Implement `memory_install_agents` with safe default write behavior
-3. Add conformance-oriented tests for warning visibility and AGENTS safety
-4. Decide whether handoffs need additional lifecycle/archive controls beyond `searchable`
+1. Add conformance tests for AGENTS safe install
+2. Add conformance tests for empty-store bootstrap and same-project recovery
+3. Add identity conflict and migration edge-case tests
+4. Verify provenance and warning visibility end-to-end
 
 ## Decisions Log
 
@@ -153,6 +153,8 @@ Immediate next tasks:
 - Durable notes and handoffs now carry `searchable` controls; non-searchable records stay readable by id but are excluded from recent/bootstrap/search paths and from the note FTS index.
 - Warning/error taxonomy now flows through shared coded-error helpers, retrieval warning codes, and MCP-ready response envelopes that promote warnings to the top level while preserving stable error codes.
 - Phase completion in this tracker refers to implementation status; broader conformance, hardening, and verification status remains tracked separately under Phase 5.
+- AGENTS templates are now embedded for runtime use, and `memory_install_agents` defaults global installs to `~/.codex/AGENTS.md` plus project installs to `<cwd>/AGENTS.md`.
+- AGENTS append mode uses managed comment markers so repeated installs do not duplicate appended template blocks.
 
 ## Blockers
 
@@ -222,6 +224,13 @@ Current blockers:
 - In progress: Phase 4 AGENTS integration planning.
 - Blockers: none new.
 - Next step: Reflect the same config decision in implementation code when the config loader is expanded beyond env/default-only behavior.
+
+### 2026-03-13 Session Update
+
+- Completed: Finished Phase 4 AGENTS integration by embedding global/project templates for runtime use; implementing `memory_install_agents` with `safe`, `append`, and `overwrite` modes; filling project/system/tag/repository placeholders; defaulting global AGENTS installs to `~/.codex/AGENTS.md` and project installs to `<cwd>/AGENTS.md`; wiring the service through app construction and MCP handlers; and adding domain plus MCP tests; verified with `go test ./...`.
+- In progress: Phase 5 conformance and hardening planning.
+- Blockers: Untracked backup files created by the local environment may still remain locked, but they do not affect builds or tests.
+- Next step: Add conformance tests for AGENTS safe install, bootstrap recovery scenarios, and warning/provenance visibility.
 
 ## Session Handoff Template
 

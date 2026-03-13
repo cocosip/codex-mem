@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 
+	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/handoff"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/retrieval"
@@ -16,15 +17,17 @@ type Handlers struct {
 	memoryService    *memory.Service
 	handoffService   *handoff.Service
 	retrievalService *retrieval.Service
+	agentsService    *agents.Service
 }
 
-func NewHandlers(scopeService *scope.Service, sessionService *session.Service, memoryService *memory.Service, handoffService *handoff.Service, retrievalService *retrieval.Service) *Handlers {
+func NewHandlers(scopeService *scope.Service, sessionService *session.Service, memoryService *memory.Service, handoffService *handoff.Service, retrievalService *retrieval.Service, agentsService *agents.Service) *Handlers {
 	return &Handlers{
 		scopeService:     scopeService,
 		sessionService:   sessionService,
 		memoryService:    memoryService,
 		handoffService:   handoffService,
 		retrievalService: retrievalService,
+		agentsService:    agentsService,
 	}
 }
 
@@ -58,4 +61,8 @@ func (h *Handlers) MemoryGetNote(ctx context.Context, input retrieval.GetRecordI
 
 func (h *Handlers) MemorySearch(ctx context.Context, input retrieval.SearchInput) (retrieval.SearchOutput, error) {
 	return h.retrievalService.Search(ctx, input)
+}
+
+func (h *Handlers) MemoryInstallAgents(ctx context.Context, input agents.InstallInput) (agents.InstallOutput, error) {
+	return h.agentsService.Install(ctx, input)
 }

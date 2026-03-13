@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/handoff"
 	"codex-mem/internal/domain/memory"
@@ -60,6 +61,11 @@ type GetRecordData struct {
 
 type SearchData struct {
 	Results []retrieval.SearchResult `json:"results"`
+}
+
+type InstallAgentsData struct {
+	WrittenFiles []agents.FileChange `json:"written_files"`
+	SkippedFiles []agents.FileChange `json:"skipped_files"`
 }
 
 func success[T any](data T, warnings []common.Warning) Response[T] {
@@ -167,5 +173,16 @@ func (h *Handlers) HandleMemorySearch(ctx context.Context, input retrieval.Searc
 	}
 	return success(SearchData{
 		Results: output.Results,
+	}, output.Warnings)
+}
+
+func (h *Handlers) HandleMemoryInstallAgents(ctx context.Context, input agents.InstallInput) Response[InstallAgentsData] {
+	output, err := h.MemoryInstallAgents(ctx, input)
+	if err != nil {
+		return failure[InstallAgentsData](err, common.ErrAgentsWriteDenied, "install AGENTS failed")
+	}
+	return success(InstallAgentsData{
+		WrittenFiles: output.WrittenFiles,
+		SkippedFiles: output.SkippedFiles,
 	}, output.Warnings)
 }

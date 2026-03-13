@@ -7,6 +7,7 @@ import (
 
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
+	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/handoff"
 	"codex-mem/internal/domain/memory"
@@ -26,6 +27,7 @@ type App struct {
 	MemoryService    *memory.Service
 	HandoffService   *handoff.Service
 	RetrievalService *retrieval.Service
+	AgentsService    *agents.Service
 	Handlers         *mcp.Handlers
 }
 
@@ -62,6 +64,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Clock:     clock,
 		IDFactory: ids,
 	})
+	agentsService := agents.NewService(agents.Options{})
 	handoffService := handoff.NewService(handoffRepo, handoff.Options{
 		Clock:     clock,
 		IDFactory: ids,
@@ -77,7 +80,8 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		MemoryService:    memoryService,
 		HandoffService:   handoffService,
 		RetrievalService: retrievalService,
-		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, retrievalService),
+		AgentsService:    agentsService,
+		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, retrievalService, agentsService),
 	}, nil
 }
 
