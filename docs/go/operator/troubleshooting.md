@@ -268,6 +268,53 @@ Best recovery path:
 2. Trim the request down to only required fields.
 3. Add optional fields back one at a time.
 
+### Symptom: HTTP initialize works, but later requests fail with `session not found`
+
+The HTTP transport is now session-aware.
+
+What to check:
+
+- the first `initialize` response should include the `Mcp-Session-Id` header
+- every later HTTP request in the same logical session should send that same `Mcp-Session-Id`
+- if the client silently drops that header, the server treats the next request as a different session context
+
+Recommended recovery:
+
+1. Capture `Mcp-Session-Id` from the initialize response.
+2. Reuse it on `notifications/initialized`, `tools/list`, `tools/call`, and optional `GET /mcp` requests.
+3. If you are using the go-sdk client transports, prefer them over a hand-written HTTP client so session handling is automatic.
+
+### Symptom: `GET /mcp` fails for an HTTP client that expects SSE
+
+What to check:
+
+- `GET /mcp` must include `Accept: text/event-stream`
+- `GET /mcp` must include the active `Mcp-Session-Id`
+- the session must already be initialized through `POST /mcp`
+
+Typical failure modes:
+
+- missing `Accept: text/event-stream` returns a request-format error
+- missing session header returns a bad-request or not-found style error
+- reusing a dead session id after the client or server closed it returns `session not found`
+
+If you are using `github.com/modelcontextprotocol/go-sdk`, the streamable HTTP client handles the standalone SSE connection automatically after initialization.
+
+### Symptom: an HTTP client works briefly, then later requests fail after being idle
+
+Check whether the server was started with `--session-timeout`.
+
+What it means:
+
+- idle HTTP MCP sessions are closed automatically after that duration
+- later requests that reuse the expired `Mcp-Session-Id` will fail because the session no longer exists
+
+Recommended recovery:
+
+1. reconnect and run `initialize` again to obtain a fresh `Mcp-Session-Id`
+2. increase `--session-timeout` if your client legitimately stays idle for longer periods
+3. leave `--session-timeout` unset if you do not want idle expiry at all
+
 ### Symptom: MCP capability checks look incomplete
 
 Use `doctor` to confirm the server-side registration is healthy:
@@ -316,3 +363,4 @@ Move beyond this guide when:
 - a specific MCP client still fails after stdio framing and schema checks pass
 
 Those cases are more likely to need client-specific examples or richer retrieval and audit traces.
+

@@ -103,6 +103,14 @@ Optional origin allowlist:
 codex-mem.exe serve-http --listen 0.0.0.0:8080 --path /mcp --allow-origin https://codex.example.com
 ```
 
+Optional idle session timeout:
+
+```powershell
+codex-mem.exe serve-http --listen 0.0.0.0:8080 --path /mcp --session-timeout 30m
+```
+
+Use this when you want the server to automatically expire inactive HTTP MCP sessions instead of keeping them alive indefinitely.
+
 ### Register the HTTP MCP server with Codex CLI
 
 ```powershell

@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,82 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	internalmcp "codex-mem/internal/mcp"
+
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-const jsonRPCVersion = "2.0"
-
-type rpcRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
-}
-
-type rpcResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
-}
-
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-type initializeParams struct {
-	ProtocolVersion string `json:"protocolVersion"`
-}
-
-type initializeResult struct {
-	ProtocolVersion string `json:"protocolVersion"`
-}
-
-type listToolsResult struct {
-	Tools []toolDefinition `json:"tools"`
-}
-
-type toolDefinition struct {
-	Name string `json:"name"`
-}
-
-type callToolParams struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
-}
-
-type installAgentsRequest struct {
-	Target      string `json:"target"`
-	Mode        string `json:"mode"`
-	CWD         string `json:"cwd,omitempty"`
-	ProjectName string `json:"project_name,omitempty"`
-	SystemName  string `json:"system_name,omitempty"`
-}
-
-type toolCallResult struct {
-	Content           []toolContent   `json:"content"`
-	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
-	IsError           bool            `json:"isError,omitempty"`
-}
-
-type toolContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type installAgentsResponse struct {
-	Ok   bool               `json:"ok"`
-	Data *installAgentsData `json:"data,omitempty"`
-}
-
-type installAgentsData struct {
-	WrittenFiles []fileChange `json:"written_files"`
-	SkippedFiles []fileChange `json:"skipped_files"`
-}
-
-type fileChange struct {
-	Path string `json:"path"`
-}
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -106,86 +34,46 @@ func main() {
 
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/codex-mem", "serve")
 	cmd.Dir = repoRoot
-	cmd.Stderr = new(bytes.Buffer)
 
-	stdin, err := cmd.StdinPipe()
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{
+		Name:    "codex-mem-stdio-smoke",
+		Version: "0.0.1",
+	}, nil)
+	session, err := client.Connect(ctx, &sdkmcp.CommandTransport{Command: cmd}, nil)
 	if err != nil {
-		failf("open stdin pipe: %v", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		failf("open stdout pipe: %v", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		failf("start MCP server: %v", err)
+		failf("connect SDK stdio client: %v", err)
 	}
 	defer func() {
-		_ = stdin.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		_ = session.Close()
 	}()
 
-	encoder := json.NewEncoder(stdin)
-	decoder := json.NewDecoder(stdout)
-
-	writeRequest(encoder, rpcRequest{
-		JSONRPC: jsonRPCVersion,
-		ID:      json.RawMessage(`1`),
-		Method:  "initialize",
-		Params:  mustMarshalRaw(initializeParams{ProtocolVersion: "2025-03-26"}),
-	})
-	initResponse := readResponse(decoder)
-	mustNoRPCError("initialize", initResponse)
-	var initResult initializeResult
-	mustDecode(initResponse.Result, &initResult)
-	if initResult.ProtocolVersion != "2025-03-26" {
-		failf("initialize protocol mismatch: got %q want %q", initResult.ProtocolVersion, "2025-03-26")
+	listResult, err := session.ListTools(ctx, &sdkmcp.ListToolsParams{})
+	if err != nil {
+		failf("tools/list failed: %v", err)
 	}
-
-	writeRequest(encoder, rpcRequest{
-		JSONRPC: jsonRPCVersion,
-		Method:  "notifications/initialized",
-	})
-
-	writeRequest(encoder, rpcRequest{
-		JSONRPC: jsonRPCVersion,
-		ID:      json.RawMessage(`2`),
-		Method:  "tools/list",
-		Params:  json.RawMessage(`{}`),
-	})
-	listResponse := readResponse(decoder)
-	mustNoRPCError("tools/list", listResponse)
-	var listResult listToolsResult
-	mustDecode(listResponse.Result, &listResult)
 	if len(listResult.Tools) != 9 {
 		failf("tools/list count mismatch: got %d want %d", len(listResult.Tools), 9)
 	}
 
-	writeRequest(encoder, rpcRequest{
-		JSONRPC: jsonRPCVersion,
-		ID:      json.RawMessage(`3`),
-		Method:  "tools/call",
-		Params: mustMarshalRaw(callToolParams{
-			Name: "memory_install_agents",
-			Arguments: mustMarshalRaw(installAgentsRequest{
-				Target:      "project",
-				Mode:        "safe",
-				CWD:         tempProject,
-				ProjectName: "mcp-smoke-test",
-				SystemName:  "codex-mem",
-			}),
-		}),
+	callResult, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "memory_install_agents",
+		Arguments: map[string]any{
+			"target":       "project",
+			"mode":         "safe",
+			"cwd":          tempProject,
+			"project_name": "mcp-smoke-test",
+			"system_name":  "codex-mem",
+		},
 	})
-	callResponse := readResponse(decoder)
-	mustNoRPCError("tools/call", callResponse)
-	var callResult toolCallResult
-	mustDecode(callResponse.Result, &callResult)
+	if err != nil {
+		failf("tools/call failed: %v", err)
+	}
 	if callResult.IsError {
 		failf("tool call returned isError=true")
 	}
-	var installResponse installAgentsResponse
-	mustDecode(callResult.StructuredContent, &installResponse)
+
+	var installResponse internalmcp.Response[internalmcp.InstallAgentsData]
+	mustDecodeStructured(callResult.StructuredContent, &installResponse)
 	if !installResponse.Ok || installResponse.Data == nil {
 		failf("structured tool response not ok")
 	}
@@ -201,48 +89,30 @@ func main() {
 		failf("written file path mismatch: got %q want %q", got, agentsPath)
 	}
 
+	initializeResult := session.InitializeResult()
+	protocolVersion := "unknown"
+	if initializeResult != nil {
+		protocolVersion = initializeResult.ProtocolVersion
+	}
+
 	fmt.Printf("mcp smoke test passed\n")
-	fmt.Printf("protocol_version=%s\n", initResult.ProtocolVersion)
+	fmt.Printf("protocol_version=%s\n", protocolVersion)
 	fmt.Printf("tool_count=%d\n", len(listResult.Tools))
 	fmt.Printf("tool_call=memory_install_agents\n")
 	fmt.Printf("written_file=%s\n", agentsPath)
 }
 
+func mustDecodeStructured(value any, target any) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		failf("marshal structured content: %v", err)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		failf("decode structured content: %v", err)
+	}
+}
+
 func failf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
-}
-
-func writeRequest(encoder *json.Encoder, request rpcRequest) {
-	if err := encoder.Encode(request); err != nil {
-		failf("encode request: %v", err)
-	}
-}
-
-func readResponse(decoder *json.Decoder) rpcResponse {
-	var response rpcResponse
-	if err := decoder.Decode(&response); err != nil {
-		failf("decode response: %v", err)
-	}
-	return response
-}
-
-func mustMarshalRaw(value any) json.RawMessage {
-	body, err := json.Marshal(value)
-	if err != nil {
-		failf("marshal raw value: %v", err)
-	}
-	return json.RawMessage(body)
-}
-
-func mustDecode(payload []byte, target any) {
-	if err := json.Unmarshal(payload, target); err != nil {
-		failf("decode payload: %v", err)
-	}
-}
-
-func mustNoRPCError(method string, response rpcResponse) {
-	if response.Error != nil {
-		failf("%s failed: code=%d message=%s", method, response.Error.Code, response.Error.Message)
-	}
 }

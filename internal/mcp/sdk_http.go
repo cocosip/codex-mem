@@ -22,8 +22,9 @@ func NewSDKHTTPHandler(server *sdkmcp.Server, options HTTPOptions) http.Handler 
 	delegate := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
 		return server
 	}, &sdkmcp.StreamableHTTPOptions{
+		EventStore:                 sdkmcp.NewMemoryEventStore(nil),
 		JSONResponse:               true,
-		Stateless:                  true,
+		SessionTimeout:             options.SessionTimeout,
 		DisableLocalhostProtection: true,
 	})
 
@@ -47,20 +48,24 @@ func prepareSDKHTTPRequest(r *http.Request) *http.Request {
 	clone := r.Clone(r.Context())
 	clone.Header = r.Header.Clone()
 
-	if clone.Method != http.MethodPost {
-		return clone
-	}
-	if strings.TrimSpace(clone.Header.Get("Content-Type")) == "" {
-		clone.Header.Set("Content-Type", "application/json")
-	}
-	accept := strings.TrimSpace(clone.Header.Get("Accept"))
-	switch {
-	case accept == "":
-		clone.Header.Set("Accept", "application/json, text/event-stream")
-	case !containsMediaType(accept, "application/json") && !containsMediaType(accept, "application/*"):
-		clone.Header.Set("Accept", accept+", application/json, text/event-stream")
-	case !containsMediaType(accept, "text/event-stream"):
-		clone.Header.Set("Accept", accept+", text/event-stream")
+	switch clone.Method {
+	case http.MethodGet:
+		if strings.TrimSpace(clone.Header.Get("Accept")) == "" {
+			clone.Header.Set("Accept", "text/event-stream")
+		}
+	case http.MethodPost:
+		if strings.TrimSpace(clone.Header.Get("Content-Type")) == "" {
+			clone.Header.Set("Content-Type", "application/json")
+		}
+		accept := strings.TrimSpace(clone.Header.Get("Accept"))
+		switch {
+		case accept == "":
+			clone.Header.Set("Accept", "application/json, text/event-stream")
+		case !containsMediaType(accept, "application/json") && !containsMediaType(accept, "application/*"):
+			clone.Header.Set("Accept", accept+", application/json, text/event-stream")
+		case !containsMediaType(accept, "text/event-stream"):
+			clone.Header.Set("Accept", accept+", text/event-stream")
+		}
 	}
 	return clone
 }

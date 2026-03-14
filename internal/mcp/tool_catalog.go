@@ -452,14 +452,6 @@ func buildTools(handlers *Handlers) []toolDefinition {
 	}
 }
 
-func chooseProtocolVersion(requested string) string {
-	requested = strings.TrimSpace(requested)
-	if requested != "" {
-		return requested
-	}
-	return defaultProtocolVersion
-}
-
 func decodeArgs(raw json.RawMessage, target any) error {
 	payload := raw
 	if len(payload) == 0 || string(payload) == "null" {

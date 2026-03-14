@@ -8,19 +8,39 @@ import (
 	"testing"
 )
 
-func performHTTPRPCRequest(t *testing.T, handler http.Handler, request rpcRequest, origin string, host string) *httptest.ResponseRecorder {
+const mcpSessionIDHeader = "Mcp-Session-Id"
+
+type httpTestRequestOptions struct {
+	Method    string
+	Origin    string
+	Host      string
+	Accept    string
+	SessionID string
+}
+
+func performHTTPRPCRequest(t *testing.T, handler http.Handler, request rpcRequest, options httpTestRequestOptions) *httptest.ResponseRecorder {
 	t.Helper()
 
 	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
-	httpRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	if origin != "" {
-		httpRequest.Header.Set("Origin", origin)
+	method := options.Method
+	if method == "" {
+		method = http.MethodPost
 	}
-	if host != "" {
-		httpRequest.Host = host
+	httpRequest := httptest.NewRequest(method, "/mcp", bytes.NewReader(body))
+	if options.Origin != "" {
+		httpRequest.Header.Set("Origin", options.Origin)
+	}
+	if options.Host != "" {
+		httpRequest.Host = options.Host
+	}
+	if options.Accept != "" {
+		httpRequest.Header.Set("Accept", options.Accept)
+	}
+	if options.SessionID != "" {
+		httpRequest.Header.Set(mcpSessionIDHeader, options.SessionID)
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httpRequest)

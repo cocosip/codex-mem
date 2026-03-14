@@ -128,7 +128,7 @@ Tasks:
 - [x] Keep `internal/mcp/handlers.go` as the transport-agnostic boundary for domain calls
 - [x] Introduce SDK-backed tool registration that preserves the current tool names, descriptions, and JSON schemas
 - [x] Replace the custom stdio server loop with the SDK stdio transport
-- [x] Replace the custom HTTP handler with the SDK streamable HTTP handler in JSON-response-compatible mode
+- [x] Replace the custom HTTP handler with the SDK streamable HTTP handler while preserving JSON-response compatibility and enabling session-aware SSE support
 - [x] Preserve the existing `/mcp` endpoint and configurable origin allowlist behavior
 - [x] Update doctor/smoke-test coverage to validate the SDK-backed stdio and HTTP paths
 - [x] Update maintainer/operator docs to describe the new transport behavior and any stream/SSE capability changes
@@ -222,7 +222,7 @@ Current blockers:
 
 ### 2026-03-13 Session Update
 
-- Completed: Rewrote the Chinese portion of [prompt-examples.md](../user/prompt-examples.md) to use user-facing language such as “当前仓库/项目/范围” instead of leaning on raw `scope` terminology; added [how-memory-works.md](../user/how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
+- Completed: Rewrote the Chinese portion of [prompt-examples.md](../user/prompt-examples.md) to use user-facing language such as “当前仓�?项目/范围�?instead of leaning on raw `scope` terminology; added [how-memory-works.md](../user/how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
 - In progress: User-facing documentation clarity follow-up.
 - Blockers: none new.
 - Next step: Decide whether the quick explainer should be expanded into a full onboarding doc with screenshots or client-specific walkthroughs.
@@ -259,6 +259,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: pick the next feature or operator-facing enhancement without reopening MCP runtime replacement work.
+### 2026-03-14 Session Update
+
+- Completed: Switched the SDK-backed HTTP transport from stateless JSON-only compatibility mode to session-aware streamable HTTP with standalone SSE support on `GET /mcp`; kept JSON POST compatibility for ordinary tool calls; rewrote both source-tree smoke tests to use the go-sdk client transports instead of hand-written JSON-RPC message structs; and re-verified with `go run ./scripts/mcp-smoke-test`, `go run ./scripts/http-mcp-smoke-test`, `go run ./scripts/readiness-check`, and `go test ./...`.
+- In progress: none.
+- Blockers: none.
+- Next step: move back to product-facing work unless a concrete HTTP client compatibility issue appears.
 ## Recommended Next Step
 
 Recommended next implementation slice:
@@ -293,4 +299,5 @@ When ending a coding session, append a short update in this format:
 ```text
 Read docs/go/maintainer/development-tracker.md, docs/go/maintainer/dev-kickoff.md, and docs/go/maintainer/implementation-plan.md, then continue the current Go implementation from the listed next tasks and update the tracker as you make progress.
 ```
+
 

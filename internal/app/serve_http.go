@@ -3,12 +3,14 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type serveHTTPOptions struct {
 	ListenAddr     string
 	EndpointPath   string
 	AllowedOrigins []string
+	SessionTimeout time.Duration
 }
 
 func parseServeHTTPOptions(args []string) (serveHTTPOptions, error) {
@@ -42,6 +44,20 @@ func parseServeHTTPOptions(args []string) (serveHTTPOptions, error) {
 				return serveHTTPOptions{}, err
 			}
 			options.AllowedOrigins = append(options.AllowedOrigins, value)
+			i = next
+		case "--session-timeout":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return serveHTTPOptions{}, err
+			}
+			timeout, err := time.ParseDuration(value)
+			if err != nil {
+				return serveHTTPOptions{}, fmt.Errorf("invalid serve-http session timeout %q", value)
+			}
+			if timeout < 0 {
+				return serveHTTPOptions{}, fmt.Errorf("serve-http session timeout must be non-negative")
+			}
+			options.SessionTimeout = timeout
 			i = next
 		default:
 			return serveHTTPOptions{}, fmt.Errorf("unknown serve-http flag %q", arg)

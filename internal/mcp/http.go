@@ -17,6 +17,7 @@ const defaultHTTPEndpointPath = "/mcp"
 type HTTPOptions struct {
 	EndpointPath   string
 	AllowedOrigins []string
+	SessionTimeout time.Duration
 }
 
 type originValidator struct {

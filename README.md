@@ -77,8 +77,8 @@ They are not MCP tools and are not the normal end-user interaction path.
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`
   Starts the MCP stdio transport and exposes the v1 tools.
-- `codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp`
-  Starts the MCP HTTP transport with JSON response mode for remote clients.
+- `codex-mem serve-http --listen 127.0.0.1:8080 --path /mcp [--session-timeout 30m]`
+  Starts the MCP HTTP transport for remote clients, with optional idle session expiry.
 - `codex-mem version`
   Prints the embedded build version, commit, and build date.
 

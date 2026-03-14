@@ -61,8 +61,11 @@ codex-mem.exe serve-http --listen 127.0.0.1:8080 --path /mcp
 Characteristics:
 
 - same JSON-RPC method surface as stdio
-- `POST /mcp` request handling with JSON response mode
-- `GET /mcp` returns `405` because SSE is not implemented yet
+- `POST /mcp` uses the SDK streamable HTTP transport with JSON responses for ordinary request/response calls
+- `initialize` returns `Mcp-Session-Id`, and HTTP clients must reuse that header on subsequent requests
+- `GET /mcp` opens a standalone `text/event-stream` channel for an active session
+- `DELETE /mcp` closes an active session
+- optional `--session-timeout <duration>` bounds idle HTTP session lifetime
 - optional `--allow-origin <origin>` flags for browser-style origin checks
 
 `doctor` should still report:
@@ -103,7 +106,7 @@ Expected output is shaped like:
 
 ```text
 mcp smoke test passed
-protocol_version=2025-03-26
+protocol_version=...
 tool_count=9
 tool_call=memory_install_agents
 written_file=...
@@ -122,7 +125,8 @@ Expected output is shaped like:
 ```text
 http mcp smoke test passed
 endpoint=http://127.0.0.1:...
-protocol_version=2025-03-26
+session_id=...
+protocol_version=2025-06-18
 tool_count=9
 tool_call=memory_install_agents
 written_file=...
@@ -150,13 +154,21 @@ If you are wiring a real MCP client, confirm this order:
 4. send `tools/list`
 5. send `tools/call`
 
-For HTTP clients, use the same method order over `POST /mcp`.
+For HTTP clients, the equivalent order is:
+
+1. `POST /mcp` with `initialize`
+2. capture the `Mcp-Session-Id` response header
+3. `POST /mcp` with `notifications/initialized` and the same session header
+4. optionally open `GET /mcp` with `Accept: text/event-stream` and the same session header
+5. `POST /mcp` for `tools/list` and `tools/call` with the same session header
 
 Common client mistakes:
 
 - sending `Content-Length`-framed stdio messages instead of newline-delimited JSON
 - omitting `jsonrpc: "2.0"`
 - skipping `initialize`
+- forgetting to reuse `Mcp-Session-Id` on later HTTP requests
+- opening `GET /mcp` without `Accept: text/event-stream`
 - sending tool arguments with unknown fields
 
 ## Representative Request Flow
@@ -199,3 +211,5 @@ Move past the smoke test when you need to validate:
 
 For packaged-binary client setup examples, use [client-examples.md](../operator/client-examples.md).
 For environment and failure diagnosis, use [troubleshooting.md](../operator/troubleshooting.md).
+
+

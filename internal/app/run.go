@@ -111,6 +111,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			mcp.HTTPOptions{
 				EndpointPath:   options.EndpointPath,
 				AllowedOrigins: options.AllowedOrigins,
+				SessionTimeout: options.SessionTimeout,
 			},
 		))
 	default:
