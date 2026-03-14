@@ -265,6 +265,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: move back to product-facing work unless a concrete HTTP client compatibility issue appears.
+### 2026-03-14 Session Update
+
+- Completed: Fixed the remaining `golangci-lint` dead-code issue after the MCP cleanup; added `serve-http --session-timeout <duration>` so operators can automatically expire idle HTTP MCP sessions; wired that timeout through the SDK streamable HTTP handler; updated maintainer/operator docs for HTTP session headers, SSE behavior, and idle expiry; and kept `golangci-lint`, `go test ./...`, `go run ./scripts/mcp-smoke-test`, `go run ./scripts/http-mcp-smoke-test`, and `go run ./scripts/readiness-check` green.
+- In progress: none.
+- Blockers: none.
+- Next step: choose a product-facing feature slice outside MCP transport and operator hardening.
 ## Recommended Next Step
 
 Recommended next implementation slice:
@@ -299,5 +305,6 @@ When ending a coding session, append a short update in this format:
 ```text
 Read docs/go/maintainer/development-tracker.md, docs/go/maintainer/dev-kickoff.md, and docs/go/maintainer/implementation-plan.md, then continue the current Go implementation from the listed next tasks and update the tracker as you make progress.
 ```
+
 
 
