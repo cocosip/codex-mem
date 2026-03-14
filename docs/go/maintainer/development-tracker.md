@@ -186,20 +186,37 @@ Immediate next tasks:
 - Migration order should be stdio parity first, then HTTP parity on the SDK streamable HTTP handler, then removal of obsolete custom transport code.
 - HTTP migration should preserve the current `/mcp` endpoint contract and configurable origin checks while moving toward SDK-managed streamable HTTP behavior.
 - The first migration slice should add a go-sdk-backed server builder and parity tests before changing any CLI transport entrypoint.
-- `modelcontextprotocol/go-sdk` v1.4.1 currently documents stdio as newline-delimited JSON, so the existing `Content-Length` stdio path must not be replaced until compatibility with Codex clients is explicitly verified.
+- `modelcontextprotocol/go-sdk` v1.4.1 documents stdio as newline-delimited JSON, and the `codex-mcp-server` implementation summary for `openai/codex` also describes stdio as line-delimited JSON messages.
+- The repository's existing `Content-Length` stdio framing should now be treated as a legacy in-tree implementation detail rather than the expected Codex-compatible transport shape.
 
 ## Blockers
 
 Current blockers:
 
-- none recorded yet
+- `serve` stdio still uses the legacy `Content-Length` implementation while the target Codex/go-sdk transport shape is newline-delimited JSON.
 
 ### 2026-03-14 Session Update
 
 - Completed: Reviewed the current custom MCP transport wiring in `internal/mcp` and `internal/app/run.go`; drafted a phased migration plan to move to `modelcontextprotocol/go-sdk`; retargeted this tracker from release follow-up to MCP transport migration; added `modelcontextprotocol/go-sdk` v1.4.1 to the module; introduced an SDK-backed server builder that registers the existing nine tools without changing handler/domain boundaries; added in-memory parity coverage for `tools/list` and `memory_install_agents`; switched `serve-http` to an SDK-backed streamable HTTP handler in compatibility-focused JSON-response/stateless mode while preserving `/mcp` and origin validation; added SDK HTTP transport tests; passed `go run ./scripts/http-mcp-smoke-test`; and verified the full repository with `go test ./...`.
-- In progress: Evaluating whether `serve` can safely move to the SDK stdio transport or must keep the current `Content-Length` framing because the SDK documents newline-delimited stdio.
-- Blockers: none new.
-- Next step: Decide the stdio migration strategy, then update maintainer/operator docs and smoke coverage to reflect the SDK-backed HTTP behavior and any remaining custom stdio boundary.
+- In progress: Updating the remaining stdio path from the legacy `Content-Length` framing to the newline-delimited JSON transport shape used by `modelcontextprotocol/go-sdk` and described for `codex-mcp-server`.
+- Blockers: the repository still has legacy stdio code and tests that assume `Content-Length` framing.
+- Next step: Switch `serve` to SDK stdio, update stdio smoke coverage and related docs, then remove or quarantine the old framed stdio implementation.
+
+### 2026-03-14 Session Handoff
+
+- Known good:
+  - `serve-http` is now backed by `modelcontextprotocol/go-sdk` through `internal/mcp/sdk_http.go`.
+  - The SDK-backed HTTP path preserves `/mcp`, preserves the existing origin allowlist behavior, and passes `go run ./scripts/http-mcp-smoke-test`.
+  - The repository passes `go test ./...` after the SDK introduction and HTTP cutover.
+- Known unknown:
+  - `serve` stdio is still on the legacy implementation.
+  - `modelcontextprotocol/go-sdk` v1.4.1 documents stdio as newline-delimited JSON.
+  - The repository's current stdio implementation uses `Content-Length` framing.
+  - Source-tree docs and tests still describe the legacy framing in a few places and must be brought in line with the newline-delimited target.
+- Recommended restart point:
+  - Start by switching `serve` to the SDK stdio transport.
+  - Update the stdio smoke test and any CLI-facing docs that still assume `Content-Length`.
+  - Remove or isolate the legacy framed stdio implementation once parity checks are green.
 
 ### 2026-03-13 Session Update
 
@@ -226,9 +243,9 @@ Current blockers:
 
 Recommended next implementation slice:
 
-1. Add the go-sdk dependency and create an SDK-backed server builder that reuses the current tool handler layer.
-2. Decide whether `serve` can safely move to the SDK stdio transport or must keep the current framing temporarily because of Codex compatibility.
-3. Update maintainer/operator docs and smoke coverage to reflect the SDK-backed HTTP path and the stdio migration decision.
+1. Switch `serve` to the SDK stdio transport so the runtime matches the newline-delimited Codex/go-sdk transport shape.
+2. Update stdio smoke coverage and maintainer/operator docs to stop assuming `Content-Length` framing.
+3. Remove or quarantine the legacy framed stdio implementation once parity is verified.
 4. Update tests and docs, then remove the old custom transport code only after parity is verified.
 
 Why this is the best next step now:

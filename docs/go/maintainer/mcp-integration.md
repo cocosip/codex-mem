@@ -42,7 +42,8 @@ codex-mem.exe serve
 Characteristics:
 
 - JSON-RPC version `2.0`
-- framed stdio messages using `Content-Length`
+- target Codex-compatible stdio shape is line-delimited JSON-RPC messages
+- the current repository still contains a legacy `Content-Length`-framed stdio implementation while the stdio migration is in progress
 - server methods:
   `initialize`
   `ping`
@@ -153,7 +154,7 @@ For HTTP clients, use the same method order over `POST /mcp`.
 
 Common client mistakes:
 
-- sending newline-delimited JSON instead of framed stdio
+- assuming the legacy framed stdio behavior will remain the long-term Codex-compatible transport shape
 - omitting `jsonrpc: "2.0"`
 - skipping `initialize`
 - sending tool arguments with unknown fields

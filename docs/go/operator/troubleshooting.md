@@ -222,24 +222,26 @@ If `serve` appears silent, that can be normal on stdout because stdout is reserv
 
 ### Symptom: `serve` runs, but the client cannot connect or initialize
 
-The Go server uses MCP over stdio with framed JSON-RPC messages.
+The Codex/go-sdk-aligned stdio target is line-delimited JSON-RPC messages.
+This repository is still finishing that stdio migration, so source-tree builds may temporarily still behave like the legacy `Content-Length`-framed implementation until the cutover is completed.
 
 What the client must support:
 
 - stdio transport
-- `Content-Length` framed messages
+- newline-delimited JSON-RPC messages for the target Codex-compatible path
 - JSON-RPC `2.0`
 - `initialize`
 - `tools/list`
 - `tools/call`
 
-If a client expects newline-delimited JSON instead of framed stdio, initialization will fail.
+If a client and server disagree on newline-delimited versus `Content-Length`-framed stdio, initialization may fail.
 
 ### Symptom: the client reports parse errors or protocol errors
 
 Likely causes:
 
-- the client is not using stdio framing correctly
+- the client is not writing exactly one JSON-RPC message per line
+- the client or server is still using the legacy `Content-Length` framing path while the other side expects newline-delimited JSON
 - the client is not sending `jsonrpc: "2.0"`
 - the client is calling unsupported methods
 - tool arguments contain unknown fields and are rejected during decode
@@ -247,7 +249,7 @@ Likely causes:
 What to do:
 
 1. Confirm the client sends `initialize` first.
-2. Confirm the request body is framed with `Content-Length`.
+2. Confirm which stdio transport variant is actually in use for that build: the target newline-delimited path or the legacy `Content-Length` path.
 3. Confirm tool calls use the schemas exposed by `tools/list`.
 4. If the client is custom, compare it against a known-good initialize and ping flow.
 
