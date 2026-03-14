@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file is the fastest entry point for the next session if the goal is to begin actual Go implementation work for `codex-mem`.
+This file is the fastest entry point for the next Go implementation session now that the v1 feature set and MCP SDK migration are already in place for `codex-mem`.
 
 Audience:
 
@@ -13,6 +13,7 @@ Use this when:
 
 - you are about to implement or extend the Go codebase
 - you want the shortest path back into active development work
+- you need a current restart point instead of the original Phase 1 bootstrap guidance
 
 Do not use this for:
 
@@ -27,105 +28,74 @@ Primary references:
 - [Go Implementation Plan](./implementation-plan.md)
 - [Go Development Tracker](./development-tracker.md)
 
-## What Is Already Ready
+## Current Baseline
 
-The following are already defined well enough to begin implementation:
+The repository already has:
 
-- v1 scope and identity model
-- domain model
-- state model
-- tool contracts
-- retrieval policy
-- privacy and retention rules
-- configuration precedence
-- observability and provenance rules
-- v1 baseline and conformance matrix
-- Go implementation plan
+- the v1 scope, session, note, handoff, retrieval, privacy, and AGENTS tool surface implemented
+- SQLite storage, embedded migrations, and FTS-backed retrieval working
+- conformance and hardening coverage for the shipped v1 behavior
+- `serve` and `serve-http` both wired through `modelcontextprotocol/go-sdk`
+- `doctor --json`, stdio smoke test, HTTP smoke test, and readiness check in place
+- the old hand-written MCP runtime removed from the active code path
 
-## What Does Not Need More Design Before Coding
+## What The Next Session Does Not Need To Rebuild
 
-The next session does not need more product-level discussion before starting these:
+Do not restart from early-project tasks such as:
 
-- repository layout
-- initial Go module setup
-- SQLite migration structure
-- core domain types
-- service interfaces
-- MCP handler skeletons
+- Go module initialization
+- repository layout selection
+- SQLite driver or migration-style selection
+- MCP library selection
+- basic MCP transport/runtime scaffolding
 
-## Recommended First Coding Slice
+Those decisions are already made and implemented.
 
-Build this first end-to-end slice:
+Current standing decisions worth preserving:
 
-1. initialize Go module and project layout
-2. add SQLite open + migration support
-3. implement canonical scope and session types
-4. implement `memory_resolve_scope`
-5. implement `memory_start_session`
-6. implement durable storage for sessions
+- repository-local configuration loads from `configs/`
+- configuration loading uses `viper`
+- SQLite uses `modernc.org/sqlite`
+- `modelcontextprotocol/go-sdk` is the only MCP runtime path
 
-This gives the first solid foundation without jumping too early into full retrieval complexity.
+## Recommended Next Coding Slice
 
-## Recommended Second Coding Slice
+Start from a new feature or operator-facing follow-up slice, not from the original Phase 1 foundation plan.
 
-After the first slice works:
+Good default shape:
 
-1. implement `MemoryNote` storage
-2. implement `Handoff` storage
-3. implement `memory_save_note`
-4. implement `memory_save_handoff`
-5. add basic scope consistency validation
+1. read the current tracker to confirm the active target and any open handoff notes
+2. choose one small user-visible or operator-visible improvement
+3. implement it without changing the existing nine-tool surface unless that change is intentional
+4. keep `go test ./...` and the readiness/smoke checks green
+5. update the tracker and this kickoff doc if the restart guidance changes again
 
-## Recommended Third Coding Slice
+## MCP Constraint For Future Work
 
-Then implement the continuity loop:
+If the next session touches MCP behavior:
 
-1. implement latest open handoff lookup
-2. implement recent note lookup
-3. implement `startup_brief` synthesis
-4. implement `memory_bootstrap_session`
-
-## Recommended Fourth Coding Slice
-
-Then implement safe retrieval:
-
-1. add FTS5 support
-2. implement `memory_search`
-3. implement `memory_get_recent`
-4. implement cross-project labeling
-5. enforce privacy and exclusion filtering
-
-## Immediate Open Questions That May Need Small Coding Decisions
-
-These are not product blockers, but the next session may need to choose them during implementation:
-
-- exact SQLite driver choice
-- migration tool style
-- exact MCP library choice
-- exact package naming
-
-These can be decided locally during implementation without reopening the spec.
-
-Configuration decision already made for the Go implementation:
-
-- repository-local configuration should load from `configs/`
-- configuration loading should use `viper`
+1. extend the SDK-backed path instead of adding a parallel custom runtime
+2. preserve the existing handler/domain boundary in `internal/mcp/handlers.go`
+3. preserve the `/mcp` HTTP entrypoint and origin-allowlist behavior unless the change explicitly targets them
+4. verify compatibility with:
+   - `go test ./...`
+   - `go run ./scripts/mcp-smoke-test`
+   - `go run ./scripts/http-mcp-smoke-test`
+   - `go run ./scripts/readiness-check`
 
 ## Best Starting Documents For The Next Session
 
 Read in this order:
 
-1. [V1 Baseline](../../spec/v1-baseline.md)
-2. [Tool Contracts](../../spec/tool-contracts.md)
-3. [Domain Model](../../spec/domain-model.md)
-4. [Retrieval Policy](../../spec/retrieval-policy.md)
-5. [Implementation Backlog](./implementation-backlog.md)
-6. [Go Implementation Plan](./implementation-plan.md)
+1. [Go Development Tracker](./development-tracker.md)
+2. [Go Implementation Plan](./implementation-plan.md)
+3. the relevant spec file under [docs/spec/](../../spec/README.md) for the feature you are changing
+4. [MCP Integration](./mcp-integration.md) if the work touches stdio or HTTP behavior
 
 ## Suggested First Prompt For The Next Session
 
 Use a prompt like:
 
 ```text
-Read docs/go/maintainer/dev-kickoff.md, docs/go/maintainer/implementation-plan.md, and docs/spec/v1-baseline.md, then start implementing the Go project skeleton and the Phase 1 foundation work.
+Read docs/go/maintainer/dev-kickoff.md and docs/go/maintainer/development-tracker.md, confirm the next feature slice, implement it on top of the existing go-sdk-based MCP runtime, and update the tracker as you go.
 ```

@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Migrate MCP transport wiring from the custom in-tree implementation to `modelcontextprotocol/go-sdk` while preserving the existing v1 tool surface and CLI behavior.
+Current target: Start the next product or operator follow-up slice on top of the completed v1 implementation while keeping `modelcontextprotocol/go-sdk` as the only MCP runtime.
 
 ## Phase Progress
 
@@ -138,14 +138,14 @@ Tasks:
 
 Current session focus:
 
-- Plan and track the migration from the custom MCP transport to `modelcontextprotocol/go-sdk`
+- Close out the MCP SDK migration by removing the last hand-written runtime leftovers and resetting maintainer docs to the new baseline.
 
 Immediate next tasks:
 
-1. Add the go-sdk dependency and define the SDK-backed server construction path
-2. Migrate stdio transport first and confirm tool parity with the existing smoke test flow
-3. Migrate HTTP transport onto the SDK streamable handler while keeping the current `/mcp` CLI shape
-4. Refresh transport tests, smoke tests, and docs before removing the old custom runtime
+1. Choose the next feature or operator slice outside MCP transport replacement.
+2. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path.
+3. Do not reintroduce a parallel in-tree MCP runtime.
+4. Only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
 
@@ -188,6 +188,8 @@ Immediate next tasks:
 - The first migration slice should add a go-sdk-backed server builder and parity tests before changing any CLI transport entrypoint.
 - `modelcontextprotocol/go-sdk` v1.4.1 documents stdio as newline-delimited JSON, and the `codex-mcp-server` implementation summary for `openai/codex` also describes stdio as line-delimited JSON messages.
 - The repository's existing `Content-Length` stdio framing should now be treated as a legacy in-tree implementation detail rather than the expected Codex-compatible transport shape.
+- The remaining shared MCP protocol/tool metadata should live in neutral package files, and the old `internal/mcp/server.go` hand-written runtime entrypoint should be removed rather than kept as a dormant fallback.
+- `modelcontextprotocol/go-sdk` is now the only MCP runtime in the repository; future work should extend the SDK-backed path instead of reviving parallel custom transport code.
 
 ## Blockers
 
@@ -251,6 +253,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: move on from transport migration work unless a regression is found.
+### 2026-03-14 Session Update
+
+- Completed: Split the remaining MCP protocol constants/types and tool catalog out of `internal/mcp/server.go` into neutral shared files; deleted the last `server.go` / `server_test.go` naming leftovers from the old hand-written runtime path; kept the SDK-backed stdio and HTTP paths green with `go test ./internal/mcp ./internal/app`.
+- In progress: none.
+- Blockers: none.
+- Next step: pick the next feature or operator-facing enhancement without reopening MCP runtime replacement work.
 ## Recommended Next Step
 
 Recommended next implementation slice:
@@ -262,11 +270,10 @@ Recommended next implementation slice:
 
 Why this is the best next step now:
 
-- the repository already has both stdio and HTTP MCP entrypoints, so transport replacement is now a bounded refactor instead of greenfield work
-- the current custom HTTP path is intentionally minimal and does not implement stream/SSE behavior, which is where the SDK provides the most value
-- the go-sdk server builder and in-memory parity tests are now in place, so the next change can focus on transport wiring instead of tool re-registration
-- keeping the existing handler/domain boundary stable reduces migration risk and avoids unnecessary churn in the core memory services
-- transport parity can be verified with the existing smoke-test structure before any cleanup deletes the fallback implementation
+- the repository already has both stdio and HTTP MCP entrypoints on the SDK-backed path, so transport replacement is no longer the highest-value area
+- the hand-written MCP runtime has been removed, which reduces maintenance cost and ambiguity about which path is authoritative
+- the existing handler/domain boundary remains stable, so new work can focus on user-visible behavior instead of transport churn
+- the readiness check plus stdio/HTTP smoke tests already provide a practical regression harness for future follow-up changes
 
 ## Session Handoff Template
 
