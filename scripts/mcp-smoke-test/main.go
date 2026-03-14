@@ -2,18 +2,13 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -131,15 +126,16 @@ func main() {
 		_ = cmd.Wait()
 	}()
 
-	reader := bufio.NewReader(stdout)
+	encoder := json.NewEncoder(stdin)
+	decoder := json.NewDecoder(stdout)
 
-	writeRequest(stdin, rpcRequest{
+	writeRequest(encoder, rpcRequest{
 		JSONRPC: jsonRPCVersion,
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
 		Params:  mustMarshalRaw(initializeParams{ProtocolVersion: "2025-03-26"}),
 	})
-	initResponse := readResponse(reader)
+	initResponse := readResponse(decoder)
 	mustNoRPCError("initialize", initResponse)
 	var initResult initializeResult
 	mustDecode(initResponse.Result, &initResult)
@@ -147,18 +143,18 @@ func main() {
 		failf("initialize protocol mismatch: got %q want %q", initResult.ProtocolVersion, "2025-03-26")
 	}
 
-	writeRequest(stdin, rpcRequest{
+	writeRequest(encoder, rpcRequest{
 		JSONRPC: jsonRPCVersion,
 		Method:  "notifications/initialized",
 	})
 
-	writeRequest(stdin, rpcRequest{
+	writeRequest(encoder, rpcRequest{
 		JSONRPC: jsonRPCVersion,
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/list",
 		Params:  json.RawMessage(`{}`),
 	})
-	listResponse := readResponse(reader)
+	listResponse := readResponse(decoder)
 	mustNoRPCError("tools/list", listResponse)
 	var listResult listToolsResult
 	mustDecode(listResponse.Result, &listResult)
@@ -166,7 +162,7 @@ func main() {
 		failf("tools/list count mismatch: got %d want %d", len(listResult.Tools), 9)
 	}
 
-	writeRequest(stdin, rpcRequest{
+	writeRequest(encoder, rpcRequest{
 		JSONRPC: jsonRPCVersion,
 		ID:      json.RawMessage(`3`),
 		Method:  "tools/call",
@@ -181,7 +177,7 @@ func main() {
 			}),
 		}),
 	})
-	callResponse := readResponse(reader)
+	callResponse := readResponse(decoder)
 	mustNoRPCError("tools/call", callResponse)
 	var callResult toolCallResult
 	mustDecode(callResponse.Result, &callResult)
@@ -217,76 +213,18 @@ func failf(format string, args ...any) {
 	os.Exit(1)
 }
 
-func writeRequest(w io.Writer, request rpcRequest) {
-	body, err := json.Marshal(request)
-	if err != nil {
-		failf("marshal request: %v", err)
-	}
-	if _, err := fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
-		failf("write frame header: %v", err)
-	}
-	if _, err := w.Write(body); err != nil {
-		failf("write frame body: %v", err)
+func writeRequest(encoder *json.Encoder, request rpcRequest) {
+	if err := encoder.Encode(request); err != nil {
+		failf("encode request: %v", err)
 	}
 }
 
-func readResponse(reader *bufio.Reader) rpcResponse {
-	payload, err := readFrame(reader)
-	if err != nil {
-		failf("read frame: %v", err)
-	}
+func readResponse(decoder *json.Decoder) rpcResponse {
 	var response rpcResponse
-	if err := json.Unmarshal(payload, &response); err != nil {
-		failf("unmarshal response: %v", err)
+	if err := decoder.Decode(&response); err != nil {
+		failf("decode response: %v", err)
 	}
 	return response
-}
-
-func readFrame(reader *bufio.Reader) ([]byte, error) {
-	contentLength := -1
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if errors.Is(err, io.EOF) && line == "" && contentLength == -1 {
-				return nil, io.EOF
-			}
-			return nil, err
-		}
-
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			if contentLength < 0 {
-				continue
-			}
-			break
-		}
-
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if !strings.EqualFold(strings.TrimSpace(parts[0]), "Content-Length") {
-			continue
-		}
-
-		value := strings.TrimSpace(parts[1])
-		parsed, err := strconv.Atoi(value)
-		if err != nil || parsed < 0 {
-			return nil, fmt.Errorf("invalid content-length %q", value)
-		}
-		contentLength = parsed
-	}
-
-	if contentLength < 0 {
-		return nil, fmt.Errorf("missing content-length header")
-	}
-
-	payload := make([]byte, contentLength)
-	if _, err := io.ReadFull(reader, payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
 }
 
 func mustMarshalRaw(value any) json.RawMessage {
@@ -308,5 +246,3 @@ func mustNoRPCError(method string, response rpcResponse) {
 		failf("%s failed: code=%d message=%s", method, response.Error.Code, response.Error.Message)
 	}
 }
-
-

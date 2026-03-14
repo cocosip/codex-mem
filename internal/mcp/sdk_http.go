@@ -18,14 +18,7 @@ func NewSDKHTTPHandler(server *sdkmcp.Server, options HTTPOptions) http.Handler 
 		endpointPath = "/" + endpointPath
 	}
 
-	allowedOrigins := make([]string, 0, len(options.AllowedOrigins))
-	for _, origin := range options.AllowedOrigins {
-		if normalized := normalizeOrigin(origin); normalized != "" {
-			allowedOrigins = append(allowedOrigins, normalized)
-		}
-	}
-
-	validator := &HTTPHandler{allowedOrigins: allowedOrigins}
+	validator := newOriginValidator(options.AllowedOrigins)
 	delegate := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
 		return server
 	}, &sdkmcp.StreamableHTTPOptions{

@@ -60,7 +60,6 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		mcpServer := mcp.NewServer(instance.Handlers)
 		logger.Info("doctor check passed",
 			"database", cfg.File.DatabasePath,
 			"system", cfg.File.DefaultSystemName,
@@ -70,7 +69,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			"fts_ready", runtimeDiagnostics.FTSReady,
 			"json", options.JSON,
 		)
-		report := buildDoctorReport(cfg, runtimeDiagnostics, mcpServer.ToolCount())
+		report := buildDoctorReport(cfg, runtimeDiagnostics, mcp.ToolCount())
 		output := formatDoctorReport(report)
 		if options.JSON {
 			output, err = formatDoctorReportJSON(report)
@@ -89,7 +88,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			_ = instance.Close()
 		}()
 		logger.Info("starting MCP stdio server")
-		return mcp.NewServer(instance.Handlers).Serve(ctx, stdin, stdout)
+		return mcp.ServeStdio(ctx, mcp.NewSDKServer(instance.Handlers), stdin, stdout)
 	case "serve-http":
 		options, err := parseServeHTTPOptions(args[1:])
 		if err != nil {

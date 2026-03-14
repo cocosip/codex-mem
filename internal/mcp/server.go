@@ -1,15 +1,11 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"strconv"
 	"strings"
 
-	"codex-mem/internal/buildinfo"
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/handoff"
 	"codex-mem/internal/domain/memory"
@@ -22,12 +18,6 @@ const (
 	defaultProtocolVersion = "2025-03-26"
 	jsonRPCVersion         = "2.0"
 )
-
-// Server serves the codex-mem MCP protocol over stdio.
-type Server struct {
-	handlers *Handlers
-	tools    map[string]toolDefinition
-}
 
 type toolDefinition struct {
 	Name        string         `json:"name"`
@@ -214,132 +204,12 @@ type installAgentsRequest struct {
 	AllowRelatedProjectMemory *bool    `json:"allow_related_project_memory,omitempty"`
 }
 
-// NewServer constructs a Server with the registered MCP tools.
-func NewServer(handlers *Handlers) *Server {
-	server := &Server{handlers: handlers}
-	server.tools = map[string]toolDefinition{}
-	for _, tool := range server.buildTools() {
-		server.tools[tool.Name] = tool
-	}
-	return server
+// ToolCount returns the number of tools exposed by the codex-mem MCP surface.
+func ToolCount() int {
+	return len(buildTools(nil))
 }
 
-// Serve reads MCP requests from stdin and writes responses to stdout.
-func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
-	reader := bufio.NewReader(stdin)
-	writer := bufio.NewWriter(stdout)
-
-	for {
-		payload, err := readFrame(reader)
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		}
-
-		var request rpcRequest
-		if err := json.Unmarshal(payload, &request); err != nil {
-			if err := writeFrame(writer, rpcResponse{
-				JSONRPC: jsonRPCVersion,
-				Error:   &rpcError{Code: -32700, Message: "parse error"},
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-
-		response, shouldRespond := s.handleRequest(ctx, request)
-		if !shouldRespond {
-			continue
-		}
-		if err := writeFrame(writer, response); err != nil {
-			return err
-		}
-	}
-}
-
-func (s *Server) handleRequest(ctx context.Context, request rpcRequest) (rpcResponse, bool) {
-	response := rpcResponse{
-		JSONRPC: jsonRPCVersion,
-		ID:      request.ID,
-	}
-
-	if request.JSONRPC != "" && request.JSONRPC != jsonRPCVersion {
-		response.Error = &rpcError{Code: -32600, Message: "jsonrpc must be 2.0"}
-		return response, hasResponseID(request)
-	}
-	if strings.TrimSpace(request.Method) == "" {
-		response.Error = &rpcError{Code: -32600, Message: "method is required"}
-		return response, hasResponseID(request)
-	}
-
-	switch request.Method {
-	case "initialize":
-		var params initializeParams
-		if err := decodeArgs(request.Params, &params); err != nil {
-			response.Error = &rpcError{Code: -32602, Message: err.Error()}
-			return response, true
-		}
-		response.Result = initializeResult{
-			ProtocolVersion: chooseProtocolVersion(params.ProtocolVersion),
-			Capabilities: map[string]any{
-				"tools": map[string]any{"listChanged": false},
-			},
-			ServerInfo: serverInfo{Name: "codex-mem", Version: buildinfo.Summary()},
-		}
-		return response, true
-	case "notifications/initialized":
-		return rpcResponse{}, false
-	case "ping":
-		response.Result = map[string]any{}
-		return response, true
-	case "tools/list":
-		response.Result = listToolsResult{Tools: s.listTools()}
-		return response, true
-	case "tools/call":
-		var params callToolParams
-		if err := decodeArgs(request.Params, &params); err != nil {
-			response.Error = &rpcError{Code: -32602, Message: err.Error()}
-			return response, true
-		}
-		tool, ok := s.tools[strings.TrimSpace(params.Name)]
-		if !ok {
-			response.Error = &rpcError{Code: -32602, Message: fmt.Sprintf("unknown tool %q", params.Name)}
-			return response, true
-		}
-		result, err := tool.call(ctx, params.Arguments)
-		if err != nil {
-			response.Error = &rpcError{Code: -32602, Message: err.Error()}
-			return response, true
-		}
-		response.Result = result
-		return response, true
-	default:
-		response.Error = &rpcError{Code: -32601, Message: fmt.Sprintf("method %q not found", request.Method)}
-		return response, hasResponseID(request)
-	}
-}
-
-func (s *Server) listTools() []toolDefinition {
-	tools := s.buildTools()
-	result := make([]toolDefinition, 0, len(tools))
-	for _, tool := range tools {
-		result = append(result, toolDefinition{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: tool.InputSchema,
-		})
-	}
-	return result
-}
-
-// ToolCount returns the number of tools exposed by the server.
-func (s *Server) ToolCount() int {
-	return len(s.listTools())
-}
-
-func (s *Server) buildTools() []toolDefinition {
+func buildTools(handlers *Handlers) []toolDefinition {
 	return []toolDefinition{
 		{
 			Name:        "memory_bootstrap_session",
@@ -362,7 +232,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryBootstrapSession(ctx, retrieval.BootstrapInput{
+				return structuredToolResult(handlers.HandleMemoryBootstrapSession(ctx, retrieval.BootstrapInput{
 					CWD:                    req.CWD,
 					Task:                   req.Task,
 					BranchName:             req.BranchName,
@@ -392,7 +262,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryResolveScope(ctx, scope.ResolveInput{
+				return structuredToolResult(handlers.HandleMemoryResolveScope(ctx, scope.ResolveInput{
 					CWD:             req.CWD,
 					BranchName:      req.BranchName,
 					RepoRemote:      req.RepoRemote,
@@ -417,7 +287,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryStartSession(ctx, session.StartInput{
+				return structuredToolResult(handlers.HandleMemoryStartSession(ctx, session.StartInput{
 					Scope:      req.Scope.full(),
 					Task:       req.Task,
 					BranchName: req.BranchName,
@@ -454,7 +324,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemorySaveNote(ctx, memory.SaveInput{
+				return structuredToolResult(handlers.HandleMemorySaveNote(ctx, memory.SaveInput{
 					Scope:             req.Scope.ref(),
 					SessionID:         req.SessionID,
 					Type:              memory.NoteType(req.Type),
@@ -502,7 +372,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemorySaveHandoff(ctx, handoff.SaveInput{
+				return structuredToolResult(handlers.HandleMemorySaveHandoff(ctx, handoff.SaveInput{
 					Scope:          req.Scope.ref(),
 					SessionID:      req.SessionID,
 					Kind:           handoff.Kind(req.Kind),
@@ -542,7 +412,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemorySearch(ctx, retrieval.SearchInput{
+				return structuredToolResult(handlers.HandleMemorySearch(ctx, retrieval.SearchInput{
 					Query:                  req.Query,
 					Scope:                  req.Scope.ref(),
 					Types:                  req.Types,
@@ -573,7 +443,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryGetRecent(ctx, retrieval.GetRecentInput{
+				return structuredToolResult(handlers.HandleMemoryGetRecent(ctx, retrieval.GetRecentInput{
 					Scope:                  req.Scope.ref(),
 					Limit:                  req.Limit,
 					IncludeHandoffs:        req.IncludeHandoffs,
@@ -598,7 +468,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryGetNote(ctx, retrieval.GetRecordInput{
+				return structuredToolResult(handlers.HandleMemoryGetNote(ctx, retrieval.GetRecordInput{
 					ID:   req.ID,
 					Kind: retrieval.RecordKind(req.Kind),
 				}))
@@ -626,7 +496,7 @@ func (s *Server) buildTools() []toolDefinition {
 				if err := decodeArgs(raw, &req); err != nil {
 					return toolCallResult{}, err
 				}
-				return structuredToolResult(s.handlers.HandleMemoryInstallAgents(ctx, agents.InstallInput{
+				return structuredToolResult(handlers.HandleMemoryInstallAgents(ctx, agents.InstallInput{
 					Target:                    agents.Target(req.Target),
 					Mode:                      agents.Mode(req.Mode),
 					CWD:                       req.CWD,
@@ -801,68 +671,4 @@ func scopeSchema() map[string]any {
 
 func hasResponseID(request rpcRequest) bool {
 	return len(request.ID) > 0
-}
-
-func readFrame(reader *bufio.Reader) ([]byte, error) {
-	contentLength := -1
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF && line == "" && contentLength == -1 {
-				return nil, io.EOF
-			}
-			return nil, err
-		}
-
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			if contentLength < 0 {
-				continue
-			}
-			break
-		}
-
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		key := strings.ToLower(strings.TrimSpace(parts[0]))
-		if key != "content-length" {
-			continue
-		}
-
-		value := strings.TrimSpace(parts[1])
-		parsed, err := strconv.Atoi(value)
-		if err != nil || parsed < 0 {
-			return nil, fmt.Errorf("invalid content-length %q", value)
-		}
-		contentLength = parsed
-	}
-
-	if contentLength < 0 {
-		return nil, fmt.Errorf("missing content-length header")
-	}
-
-	payload := make([]byte, contentLength)
-	if _, err := io.ReadFull(reader, payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
-}
-
-func writeFrame(writer *bufio.Writer, payload any) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal frame: %w", err)
-	}
-
-	if _, err := fmt.Fprintf(writer, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
-		return err
-	}
-	if _, err := writer.Write(body); err != nil {
-		return err
-	}
-	return writer.Flush()
 }

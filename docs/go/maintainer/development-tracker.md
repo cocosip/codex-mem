@@ -118,21 +118,21 @@ Tasks:
 
 ### Phase 6: MCP SDK Migration
 
-Status: doing
+Status: done
 
 Note: This phase replaces the hand-rolled MCP transport/runtime code with `modelcontextprotocol/go-sdk` without changing the domain service contracts or the exposed v1 tool names.
 
 Tasks:
 
 - [x] Add and pin the `modelcontextprotocol/go-sdk` dependency
-- [ ] Keep `internal/mcp/handlers.go` as the transport-agnostic boundary for domain calls
+- [x] Keep `internal/mcp/handlers.go` as the transport-agnostic boundary for domain calls
 - [x] Introduce SDK-backed tool registration that preserves the current tool names, descriptions, and JSON schemas
-- [ ] Replace the custom stdio server loop with the SDK stdio transport
+- [x] Replace the custom stdio server loop with the SDK stdio transport
 - [x] Replace the custom HTTP handler with the SDK streamable HTTP handler in JSON-response-compatible mode
 - [x] Preserve the existing `/mcp` endpoint and configurable origin allowlist behavior
-- [ ] Update doctor/smoke-test coverage to validate the SDK-backed stdio and HTTP paths
-- [ ] Update maintainer/operator docs to describe the new transport behavior and any stream/SSE capability changes
-- [ ] Remove obsolete custom transport code after parity tests pass
+- [x] Update doctor/smoke-test coverage to validate the SDK-backed stdio and HTTP paths
+- [x] Update maintainer/operator docs to describe the new transport behavior and any stream/SSE capability changes
+- [x] Remove obsolete custom transport code after parity tests pass
 
 ## Current Session Plan
 
@@ -193,7 +193,7 @@ Immediate next tasks:
 
 Current blockers:
 
-- `serve` stdio still uses the legacy `Content-Length` implementation while the target Codex/go-sdk transport shape is newline-delimited JSON.
+- none currently
 
 ### 2026-03-14 Session Update
 
@@ -239,14 +239,26 @@ Current blockers:
 - Blockers: none new.
 - Next step: Decide whether the user and operator areas need more task-oriented onboarding guides now that the audience boundaries are enforced by path.
 
+### 2026-03-14 Session Update
+
+- Completed: Switched serve to the go-sdk stdio transport using newline-delimited JSON over sdkmcp.IOTransport; rewrote the stdio smoke test and unit coverage to exchange one JSON-RPC message per line instead of Content-Length frames; refreshed maintainer/operator docs to describe the SDK-backed stdio behavior.
+- In progress: Removing or isolating the remaining obsolete custom MCP request-routing/runtime helpers that are no longer on the CLI path.
+- Blockers: none beyond deciding how far to push the legacy cleanup in this slice.
+- Next step: Extract shared tool/schema registration out of internal/mcp/server.go, then delete or quarantine the remaining unused custom transport code.
+### 2026-03-14 Session Update
+
+- Completed: Extracted the shared MCP tool catalog away from the legacy runtime wiring so doctor and the SDK-backed server share one definition source; removed the obsolete custom HTTP handler/tests; reduced internal/mcp/http.go to shared HTTP/origin helpers plus server startup; and verified the repository with go test ./..., go run ./scripts/mcp-smoke-test, and go run ./scripts/http-mcp-smoke-test.
+- In progress: none.
+- Blockers: none.
+- Next step: move on from transport migration work unless a regression is found.
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Switch `serve` to the SDK stdio transport so the runtime matches the newline-delimited Codex/go-sdk transport shape.
-2. Update stdio smoke coverage and maintainer/operator docs to stop assuming `Content-Length` framing.
-3. Remove or quarantine the legacy framed stdio implementation once parity is verified.
-4. Update tests and docs, then remove the old custom transport code only after parity is verified.
+1. Return to feature or product follow-up work outside the completed MCP transport migration.
+2. Keep the stdio and HTTP smoke tests in the normal regression path.
+3. Only revisit transport internals if a real client compatibility issue appears.
+4. Prefer small, documented follow-ups instead of re-introducing parallel transport implementations.
 
 Why this is the best next step now:
 

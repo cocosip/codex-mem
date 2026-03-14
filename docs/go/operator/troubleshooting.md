@@ -222,8 +222,7 @@ If `serve` appears silent, that can be normal on stdout because stdout is reserv
 
 ### Symptom: `serve` runs, but the client cannot connect or initialize
 
-The Codex/go-sdk-aligned stdio target is line-delimited JSON-RPC messages.
-This repository is still finishing that stdio migration, so source-tree builds may temporarily still behave like the legacy `Content-Length`-framed implementation until the cutover is completed.
+The Codex/go-sdk-backed stdio transport uses newline-delimited JSON-RPC messages.
 
 What the client must support:
 
@@ -234,14 +233,14 @@ What the client must support:
 - `tools/list`
 - `tools/call`
 
-If a client and server disagree on newline-delimited versus `Content-Length`-framed stdio, initialization may fail.
+If a client sends `Content-Length`-framed stdio instead of newline-delimited JSON, initialization will fail.
 
 ### Symptom: the client reports parse errors or protocol errors
 
 Likely causes:
 
 - the client is not writing exactly one JSON-RPC message per line
-- the client or server is still using the legacy `Content-Length` framing path while the other side expects newline-delimited JSON
+- the client is still sending `Content-Length`-framed stdio instead of newline-delimited JSON
 - the client is not sending `jsonrpc: "2.0"`
 - the client is calling unsupported methods
 - tool arguments contain unknown fields and are rejected during decode
@@ -249,7 +248,7 @@ Likely causes:
 What to do:
 
 1. Confirm the client sends `initialize` first.
-2. Confirm which stdio transport variant is actually in use for that build: the target newline-delimited path or the legacy `Content-Length` path.
+2. Confirm the client writes exactly one JSON-RPC message per line and reads newline-delimited responses.
 3. Confirm tool calls use the schemas exposed by `tools/list`.
 4. If the client is custom, compare it against a known-good initialize and ping flow.
 

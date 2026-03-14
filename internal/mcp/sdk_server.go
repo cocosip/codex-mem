@@ -22,8 +22,7 @@ func NewSDKServer(handlers *Handlers) *sdkmcp.Server {
 		},
 	})
 
-	legacy := &Server{handlers: handlers}
-	for _, tool := range legacy.buildTools() {
+	for _, tool := range buildTools(handlers) {
 		tool := tool
 		server.AddTool(&sdkmcp.Tool{
 			Name:        tool.Name,
