@@ -124,12 +124,12 @@ Note: This phase replaces the hand-rolled MCP transport/runtime code with `model
 
 Tasks:
 
-- [ ] Add and pin the `modelcontextprotocol/go-sdk` dependency
+- [x] Add and pin the `modelcontextprotocol/go-sdk` dependency
 - [ ] Keep `internal/mcp/handlers.go` as the transport-agnostic boundary for domain calls
-- [ ] Introduce SDK-backed tool registration that preserves the current tool names, descriptions, and JSON schemas
+- [x] Introduce SDK-backed tool registration that preserves the current tool names, descriptions, and JSON schemas
 - [ ] Replace the custom stdio server loop with the SDK stdio transport
-- [ ] Replace the custom HTTP handler with the SDK streamable HTTP handler in JSON-response-compatible mode
-- [ ] Preserve the existing `/mcp` endpoint and configurable origin allowlist behavior
+- [x] Replace the custom HTTP handler with the SDK streamable HTTP handler in JSON-response-compatible mode
+- [x] Preserve the existing `/mcp` endpoint and configurable origin allowlist behavior
 - [ ] Update doctor/smoke-test coverage to validate the SDK-backed stdio and HTTP paths
 - [ ] Update maintainer/operator docs to describe the new transport behavior and any stream/SSE capability changes
 - [ ] Remove obsolete custom transport code after parity tests pass
@@ -185,6 +185,8 @@ Immediate next tasks:
 - `internal/mcp/handlers.go` and the existing domain request/response envelopes should remain the adapter boundary so domain services do not depend on SDK structs.
 - Migration order should be stdio parity first, then HTTP parity on the SDK streamable HTTP handler, then removal of obsolete custom transport code.
 - HTTP migration should preserve the current `/mcp` endpoint contract and configurable origin checks while moving toward SDK-managed streamable HTTP behavior.
+- The first migration slice should add a go-sdk-backed server builder and parity tests before changing any CLI transport entrypoint.
+- `modelcontextprotocol/go-sdk` v1.4.1 currently documents stdio as newline-delimited JSON, so the existing `Content-Length` stdio path must not be replaced until compatibility with Codex clients is explicitly verified.
 
 ## Blockers
 
@@ -194,10 +196,10 @@ Current blockers:
 
 ### 2026-03-14 Session Update
 
-- Completed: Reviewed the current custom MCP transport wiring in `internal/mcp` and `internal/app/run.go`; drafted a phased migration plan to move to `modelcontextprotocol/go-sdk`; retargeted this tracker from release follow-up to MCP transport migration.
-- In progress: Phase 6 MCP SDK migration planning and execution sequencing.
+- Completed: Reviewed the current custom MCP transport wiring in `internal/mcp` and `internal/app/run.go`; drafted a phased migration plan to move to `modelcontextprotocol/go-sdk`; retargeted this tracker from release follow-up to MCP transport migration; added `modelcontextprotocol/go-sdk` v1.4.1 to the module; introduced an SDK-backed server builder that registers the existing nine tools without changing handler/domain boundaries; added in-memory parity coverage for `tools/list` and `memory_install_agents`; switched `serve-http` to an SDK-backed streamable HTTP handler in compatibility-focused JSON-response/stateless mode while preserving `/mcp` and origin validation; added SDK HTTP transport tests; passed `go run ./scripts/http-mcp-smoke-test`; and verified the full repository with `go test ./...`.
+- In progress: Evaluating whether `serve` can safely move to the SDK stdio transport or must keep the current `Content-Length` framing because the SDK documents newline-delimited stdio.
 - Blockers: none new.
-- Next step: Add the go-sdk dependency and introduce SDK-backed tool registration while keeping the current handler/domain boundary intact.
+- Next step: Decide the stdio migration strategy, then update maintainer/operator docs and smoke coverage to reflect the SDK-backed HTTP behavior and any remaining custom stdio boundary.
 
 ### 2026-03-13 Session Update
 
@@ -225,14 +227,15 @@ Current blockers:
 Recommended next implementation slice:
 
 1. Add the go-sdk dependency and create an SDK-backed server builder that reuses the current tool handler layer.
-2. Switch `serve` to SDK stdio transport and keep the existing `tools/list` and `tools/call` parity checks green.
-3. Switch `serve-http` to the SDK streamable HTTP handler with compatibility-focused configuration for the current `/mcp` endpoint.
+2. Decide whether `serve` can safely move to the SDK stdio transport or must keep the current framing temporarily because of Codex compatibility.
+3. Update maintainer/operator docs and smoke coverage to reflect the SDK-backed HTTP path and the stdio migration decision.
 4. Update tests and docs, then remove the old custom transport code only after parity is verified.
 
 Why this is the best next step now:
 
 - the repository already has both stdio and HTTP MCP entrypoints, so transport replacement is now a bounded refactor instead of greenfield work
 - the current custom HTTP path is intentionally minimal and does not implement stream/SSE behavior, which is where the SDK provides the most value
+- the go-sdk server builder and in-memory parity tests are now in place, so the next change can focus on transport wiring instead of tool re-registration
 - keeping the existing handler/domain boundary stable reduces migration risk and avoids unnecessary churn in the core memory services
 - transport parity can be verified with the existing smoke-test structure before any cleanup deletes the fallback implementation
 

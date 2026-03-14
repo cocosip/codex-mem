@@ -3,7 +3,7 @@ package memory
 
 import (
 	"context"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"codex-mem/internal/domain/common"
@@ -142,7 +142,7 @@ func normalizePaths(values []string) []string {
 		if trimmed == "" {
 			continue
 		}
-		normalized := filepath.ToSlash(filepath.Clean(trimmed))
+		normalized := path.Clean(strings.ReplaceAll(trimmed, "\\", "/"))
 		if _, ok := seen[normalized]; ok {
 			continue
 		}

@@ -107,8 +107,8 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			"path", options.EndpointPath,
 			"allowed_origins", options.AllowedOrigins,
 		)
-		return mcp.ServeHTTP(ctx, options.ListenAddr, mcp.NewHTTPHandler(
-			mcp.NewServer(instance.Handlers),
+		return mcp.ServeHTTP(ctx, options.ListenAddr, mcp.NewSDKHTTPHandler(
+			mcp.NewSDKServer(instance.Handlers),
 			mcp.HTTPOptions{
 				EndpointPath:   options.EndpointPath,
 				AllowedOrigins: options.AllowedOrigins,
@@ -125,5 +125,3 @@ func doctorConfigFileUsed(cfg config.Config) string {
 	}
 	return "none"
 }
-
-
