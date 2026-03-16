@@ -23,6 +23,7 @@ If you are using `codex-mem` day to day:
 If you are deploying or operating the MCP server:
 
 - [Client Examples](./operator/client-examples.md)
+- [Import Ingestion](./operator/import-ingestion.md)
 - [Release Readiness](./operator/release-readiness.md)
 - [Troubleshooting](./operator/troubleshooting.md)
 

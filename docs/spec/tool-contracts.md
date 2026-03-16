@@ -127,6 +127,7 @@ Optional input:
 - `related_project_ids`
 - `status`
 - `source`
+- `privacy_intent`
 
 Required output:
 
@@ -139,6 +140,7 @@ Rules:
 
 - Reject invalid type or importance.
 - Reject scope/session inconsistencies.
+- Reject excluded privacy intents.
 - Preserve provenance.
 
 ## memory_save_handoff
@@ -164,6 +166,7 @@ Optional input:
 - `risks`
 - `files_touched`
 - `related_note_ids`
+- `privacy_intent`
 
 Required output:
 
@@ -176,7 +179,89 @@ Rules:
 
 - Require actionable `next_steps`.
 - Validate kind and status.
+- Reject excluded privacy intents.
 - Warn instead of silently overwriting same-task open handoffs.
+
+## memory_save_import
+
+Purpose:
+
+- persist an import audit record for a secondary artifact
+
+Required input:
+
+- `scope`
+- `session_id`
+- `source`
+
+Optional input:
+
+- `external_id`
+- `payload_hash`
+- `durable_memory_id`
+- `privacy_intent`
+
+Required output:
+
+- `import`
+- `stored_at`
+- `suppressed`
+- `deduplicated`
+- `warnings`
+
+Rules:
+
+- Require at least one durable dedupe key: `external_id` or `payload_hash`.
+- Suppress durable linkage when privacy policy excludes storage.
+- Reuse an existing import audit record when the same artifact was already imported.
+- Preserve provenance even when the imported artifact is suppressed.
+
+## memory_save_imported_note
+
+Purpose:
+
+- materialize an imported artifact into durable note memory and import audit
+
+Required input:
+
+- `scope`
+- `session_id`
+- `source`
+- `type`
+- `title`
+- `content`
+- `importance`
+
+Optional input:
+
+- `external_id`
+- `payload_hash`
+- `tags`
+- `file_paths`
+- `related_project_ids`
+- `status`
+- `privacy_intent`
+
+Required output:
+
+- `import`
+- `materialized`
+- `note_deduplicated`
+- `import_deduplicated`
+- `suppressed`
+- `warnings`
+
+Optional output:
+
+- `note`
+
+Rules:
+
+- Require `external_id` or `payload_hash` so the imported artifact can be audited and deduplicated.
+- Suppress note materialization when privacy policy excludes durable storage.
+- Prefer existing explicit memory over weaker imported duplicates in the same project.
+- Reuse an existing imported note when the same artifact content was already materialized.
+- Keep note creation and import audit atomic when both records are written.
 
 ## memory_search
 

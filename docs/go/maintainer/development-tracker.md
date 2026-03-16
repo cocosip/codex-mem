@@ -301,6 +301,19 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether to keep polishing the import workflow through spec-facing docs and watcher/relay integration, or move on to a different product-facing slice.
+### 2026-03-16 Session Update
+
+- Completed: Added a real CLI-side caller for the imported-note workflow with `codex-mem ingest-imports`. The command resolves scope, starts one ingestion session, reads newline-delimited JSON import events from stdin or `--input`, and routes each event through `memory_save_imported_note` semantics so watcher/relay batches can create imported notes plus audit records without going through MCP. Added app-level coverage for text/JSON summaries and persisted note/import counts.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to keep this CLI batch path as the main watcher/relay bridge for now, or add a more direct integration path on top of the same imported-note service.
+### 2026-03-16 Session Update
+
+- Completed: Updated the normative spec to include `memory_save_import` and `memory_save_imported_note` tool contracts plus example request/response payloads, and added an operator-facing [import-ingestion.md](../operator/import-ingestion.md) guide that documents the `ingest-imports` JSONL schema, example invocations, output shape, and current fail-fast batch semantics.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether `ingest-imports` should remain the main watcher/relay bridge for now or whether a more direct long-lived integration path is worth adding later.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:

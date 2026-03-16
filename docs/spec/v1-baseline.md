@@ -34,6 +34,8 @@ A v1 implementation:
 - MUST support structured notes
 - MUST support structured handoffs
 - MUST distinguish explicit memory from imported or inferred memory
+- SHOULD preserve import-audit provenance for secondary artifacts
+- MAY materialize imported artifacts into durable notes when explicit-memory precedence is preserved
 - MUST support normalized importance `1..5`
 - MUST support note and handoff lifecycle states
 
@@ -52,6 +54,7 @@ A v1 implementation:
 A v1 implementation:
 
 - MUST expose the conceptual tool contracts defined in [tool-contracts.md](./tool-contracts.md)
+- SHOULD keep import-audit and imported-note workflows aligned with the same scope, privacy, and provenance rules as explicit memory
 - MUST preserve scope-safety, warning, and error semantics
 
 ## AGENTS Integration

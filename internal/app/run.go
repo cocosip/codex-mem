@@ -81,6 +81,8 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		}
 		_, err = io.WriteString(stdout, output)
 		return err
+	case "ingest-imports":
+		return runIngestImports(ctx, cfg, stdin, stdout, commandArgs)
 	case "serve":
 		instance, err := New(ctx, cfg)
 		if err != nil {

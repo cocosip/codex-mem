@@ -252,6 +252,124 @@ These examples illustrate intent and semantics. They are not tied to one impleme
 }
 ```
 
+## `memory_save_import`
+
+### Example request
+
+```json
+{
+  "scope": {
+    "system_id": "sys_order_platform",
+    "project_id": "proj_order_web",
+    "workspace_id": "ws_order_web_main"
+  },
+  "session_id": "sess_20260313_001",
+  "source": "watcher_import",
+  "external_id": "watcher:event:392",
+  "payload_hash": "sha256:4db5b7c6f2a9",
+  "privacy_intent": ""
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "import": {
+      "import_id": "import_701",
+      "scope": {
+        "system_id": "sys_order_platform",
+        "project_id": "proj_order_web",
+        "workspace_id": "ws_order_web_main"
+      },
+      "session_id": "sess_20260313_001",
+      "source": "watcher_import",
+      "external_id": "watcher:event:392",
+      "payload_hash": "sha256:4db5b7c6f2a9",
+      "suppressed": false,
+      "imported_at": "2026-03-13T11:18:00Z"
+    },
+    "stored_at": "2026-03-13T11:18:00Z",
+    "suppressed": false,
+    "deduplicated": false
+  },
+  "warnings": []
+}
+```
+
+## `memory_save_imported_note`
+
+### Example request
+
+```json
+{
+  "scope": {
+    "system_id": "sys_order_platform",
+    "project_id": "proj_order_web",
+    "workspace_id": "ws_order_web_main"
+  },
+  "session_id": "sess_20260313_001",
+  "source": "watcher_import",
+  "external_id": "watcher:event:393",
+  "payload_hash": "sha256:b7f650bfe12c",
+  "type": "discovery",
+  "title": "Watcher captured checkout retry regression",
+  "content": "A local watcher run showed the checkout retry button still posts a legacy payment alias after draft restore.",
+  "importance": 4,
+  "tags": ["watcher", "checkout", "validation"],
+  "file_paths": ["src/order/checkout.ts"],
+  "status": "active"
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "note": {
+      "note_id": "note_488",
+      "scope": {
+        "system_id": "sys_order_platform",
+        "project_id": "proj_order_web",
+        "workspace_id": "ws_order_web_main"
+      },
+      "session_id": "sess_20260313_001",
+      "type": "discovery",
+      "title": "Watcher captured checkout retry regression",
+      "content": "A local watcher run showed the checkout retry button still posts a legacy payment alias after draft restore.",
+      "importance": 4,
+      "status": "active",
+      "source": "watcher_import",
+      "created_at": "2026-03-13T11:24:00Z"
+    },
+    "import": {
+      "import_id": "import_702",
+      "scope": {
+        "system_id": "sys_order_platform",
+        "project_id": "proj_order_web",
+        "workspace_id": "ws_order_web_main"
+      },
+      "session_id": "sess_20260313_001",
+      "source": "watcher_import",
+      "external_id": "watcher:event:393",
+      "payload_hash": "sha256:b7f650bfe12c",
+      "durable_memory_id": "note_488",
+      "suppressed": false,
+      "imported_at": "2026-03-13T11:24:00Z"
+    },
+    "materialized": true,
+    "note_deduplicated": false,
+    "import_deduplicated": false,
+    "suppressed": false
+  },
+  "warnings": []
+}
+```
+
 ## `memory_search`
 
 ### Example request
