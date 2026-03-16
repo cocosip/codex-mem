@@ -493,6 +493,57 @@ func TestSearchRanksWorkspaceResultsFirstAndSupportsHandoffs(t *testing.T) {
 	}
 }
 
+func TestSearchPrefersExplicitNotesOverImportedArtifacts(t *testing.T) {
+	currentRef := scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"}
+	now := time.Now().UTC()
+	service := NewService(
+		&fakeScopeResolver{},
+		&fakeSessionStarter{},
+		&fakeMemoryReader{
+			searchNotes: []memory.Note{
+				{
+					ID:         "note_imported",
+					Scope:      currentRef,
+					Type:       memory.NoteTypeDecision,
+					Title:      "Shared validation rule",
+					Content:    "Use metadata-backed validation.",
+					Importance: 4,
+					Status:     memory.StatusActive,
+					Source:     memory.SourceWatcherImport,
+					CreatedAt:  now,
+				},
+				{
+					ID:         "note_explicit",
+					Scope:      currentRef,
+					Type:       memory.NoteTypeDecision,
+					Title:      "Shared validation rule",
+					Content:    "Use metadata-backed validation.",
+					Importance: 4,
+					Status:     memory.StatusActive,
+					Source:     memory.SourceCodexExplicit,
+					CreatedAt:  now.Add(-time.Minute),
+				},
+			},
+		},
+		&fakeHandoffReader{},
+	)
+
+	result, err := service.Search(context.Background(), SearchInput{
+		Query: "validation rule",
+		Scope: currentRef,
+		Limit: 5,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got, want := len(result.Results), 1; got != want {
+		t.Fatalf("result count mismatch: got %d want %d", got, want)
+	}
+	if got, want := result.Results[0].ID, "note_explicit"; got != want {
+		t.Fatalf("expected explicit note to win dedupe, got %q", got)
+	}
+}
+
 func TestSearchReturnsZeroResultsWithoutError(t *testing.T) {
 	currentRef := scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"}
 	service := NewService(&fakeScopeResolver{}, &fakeSessionStarter{}, &fakeMemoryReader{}, &fakeHandoffReader{})

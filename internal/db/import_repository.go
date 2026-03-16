@@ -12,12 +12,17 @@ import (
 
 // ImportRepository provides SQLite-backed persistence for import audit records.
 type ImportRepository struct {
-	db *sql.DB
+	exec sqlExecutor
 }
 
 // NewImportRepository constructs an ImportRepository for the provided database handle.
 func NewImportRepository(db *sql.DB) *ImportRepository {
-	return &ImportRepository{db: db}
+	return &ImportRepository{exec: db}
+}
+
+// NewImportRepositoryTx constructs an ImportRepository bound to an existing SQL transaction.
+func NewImportRepositoryTx(tx *sql.Tx) *ImportRepository {
+	return &ImportRepository{exec: tx}
 }
 
 // FindDuplicate returns the latest project-level import matching the same source and dedupe key.
@@ -36,7 +41,7 @@ func (r *ImportRepository) FindDuplicate(record imports.Record) (*imports.Record
 		return nil, nil
 	}
 
-	row := r.db.QueryRow(`
+	row := r.exec.QueryRow(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, source, external_id,
 			payload_hash, durable_memory_id, suppressed, suppression_reason, imported_at
@@ -59,14 +64,14 @@ func (r *ImportRepository) FindDuplicate(record imports.Record) (*imports.Record
 
 // Create stores an import audit record after validating scope and session relationships.
 func (r *ImportRepository) Create(record imports.Record) error {
-	if err := validateScopeRef(r.db, record.Scope); err != nil {
+	if err := validateScopeRef(r.exec, record.Scope); err != nil {
 		return err
 	}
-	if err := validateSessionScope(r.db, record.SessionID, record.Scope); err != nil {
+	if err := validateSessionScope(r.exec, record.SessionID, record.Scope); err != nil {
 		return err
 	}
 
-	_, err := r.db.Exec(`
+	_, err := r.exec.Exec(`
 		INSERT INTO imports (
 			id, session_id, system_id, project_id, workspace_id, source, external_id,
 			payload_hash, durable_memory_id, suppressed, suppression_reason, imported_at

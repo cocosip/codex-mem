@@ -11,19 +11,30 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+type sqlExecutor interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 // MemoryRepository provides SQLite-backed persistence for memory notes.
 type MemoryRepository struct {
-	db *sql.DB
+	exec sqlExecutor
 }
 
 // NewMemoryRepository constructs a MemoryRepository for the provided database handle.
 func NewMemoryRepository(db *sql.DB) *MemoryRepository {
-	return &MemoryRepository{db: db}
+	return &MemoryRepository{exec: db}
+}
+
+// NewMemoryRepositoryTx constructs a MemoryRepository bound to an existing SQL transaction.
+func NewMemoryRepositoryTx(tx *sql.Tx) *MemoryRepository {
+	return &MemoryRepository{exec: tx}
 }
 
 // FindDuplicate returns the latest note with the same scope, type, title, and content.
 func (r *MemoryRepository) FindDuplicate(note memory.Note) (*memory.Note, error) {
-	row := r.db.QueryRow(`
+	row := r.exec.QueryRow(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
@@ -46,12 +57,37 @@ func (r *MemoryRepository) FindDuplicate(note memory.Note) (*memory.Note, error)
 	}
 }
 
+// FindProjectDuplicate returns the strongest matching searchable note within the same project.
+func (r *MemoryRepository) FindProjectDuplicate(ref scope.Ref, noteType memory.NoteType, title string, content string) (*memory.Note, error) {
+	row := r.exec.QueryRow(`
+		SELECT
+			id, session_id, system_id, project_id, workspace_id, type, title, content,
+			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
+			COALESCE(related_project_ids_json, '[]'), status, source, searchable, COALESCE(exclusion_reason, ''), created_at, updated_at
+		FROM memory_items
+		WHERE system_id = ? AND project_id = ? AND type = ? AND title = ? AND content = ?
+			AND searchable = 1 AND status <> ?
+		ORDER BY CASE WHEN source = ? THEN 0 ELSE 1 END, created_at DESC
+		LIMIT 1
+	`, ref.SystemID, ref.ProjectID, string(noteType), strings.TrimSpace(title), strings.TrimSpace(content), string(memory.StatusSuperseded), string(memory.SourceCodexExplicit))
+
+	record, err := scanNote(row)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	default:
+		return &record, nil
+	}
+}
+
 // Create stores a memory note after validating scope and session relationships.
 func (r *MemoryRepository) Create(note memory.Note) error {
-	if err := validateScopeRef(r.db, note.Scope); err != nil {
+	if err := validateScopeRef(r.exec, note.Scope); err != nil {
 		return err
 	}
-	if err := validateSessionScope(r.db, note.SessionID, note.Scope); err != nil {
+	if err := validateSessionScope(r.exec, note.SessionID, note.Scope); err != nil {
 		return err
 	}
 	if !note.Searchable && strings.TrimSpace(note.ExclusionReason) == "" {
@@ -71,7 +107,7 @@ func (r *MemoryRepository) Create(note memory.Note) error {
 		return err
 	}
 
-	_, err = r.db.Exec(`
+	_, err = r.exec.Exec(`
 		INSERT INTO memory_items (
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, tags_json, file_paths_json, related_project_ids_json, status, source, searchable, exclusion_reason, created_at, updated_at
@@ -104,7 +140,7 @@ func (r *MemoryRepository) Create(note memory.Note) error {
 
 // ListRecentByWorkspace lists recent searchable notes for a workspace.
 func (r *MemoryRepository) ListRecentByWorkspace(workspaceID string, limit int, minImportance int) ([]memory.Note, error) {
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
@@ -126,7 +162,7 @@ func (r *MemoryRepository) ListRecentByWorkspace(workspaceID string, limit int, 
 
 // ListRecentByProject lists recent searchable notes from sibling workspaces in a project.
 func (r *MemoryRepository) ListRecentByProject(projectID string, excludeWorkspaceID string, limit int, minImportance int) ([]memory.Note, error) {
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
@@ -154,7 +190,7 @@ func (r *MemoryRepository) ListRecentByProjects(systemID string, projectIDs []st
 
 	args := append([]any{systemID}, stringsToAny(projectIDs)...)
 	args = append(args, minImportance, positiveLimit(limit))
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
@@ -176,7 +212,7 @@ func (r *MemoryRepository) ListRecentByProjects(systemID string, projectIDs []st
 
 // GetByID loads a note record by its stable identifier.
 func (r *MemoryRepository) GetByID(id string) (*memory.Note, error) {
-	row := r.db.QueryRow(`
+	row := r.exec.QueryRow(`
 		SELECT
 			id, session_id, system_id, project_id, workspace_id, type, title, content,
 			importance, COALESCE(tags_json, '[]'), COALESCE(file_paths_json, '[]'),
@@ -198,7 +234,7 @@ func (r *MemoryRepository) GetByID(id string) (*memory.Note, error) {
 
 // ListRelatedProjectIDs returns recent distinct related project identifiers referenced by notes.
 func (r *MemoryRepository) ListRelatedProjectIDs(projectID string, limit int) ([]string, error) {
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT COALESCE(related_project_ids_json, '[]')
 		FROM memory_items
 		WHERE project_id = ?
@@ -273,7 +309,7 @@ func (r *MemoryRepository) Search(ref scope.Ref, query string, limit int, minImp
 		}
 	}
 
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT
 			m.id, m.session_id, m.system_id, m.project_id, m.workspace_id, m.type, m.title, m.content,
 			m.importance, COALESCE(m.tags_json, '[]'), COALESCE(m.file_paths_json, '[]'),
@@ -328,7 +364,7 @@ func (r *MemoryRepository) SearchProjects(systemID string, projectIDs []string, 
 		}
 	}
 
-	rows, err := r.db.Query(`
+	rows, err := r.exec.Query(`
 		SELECT
 			m.id, m.session_id, m.system_id, m.project_id, m.workspace_id, m.type, m.title, m.content,
 			m.importance, COALESCE(m.tags_json, '[]'), COALESCE(m.file_paths_json, '[]'),

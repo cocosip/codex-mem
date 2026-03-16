@@ -61,6 +61,11 @@ func (h *Handlers) MemorySaveImport(ctx context.Context, input imports.SaveInput
 	return h.importService.SaveImport(ctx, input)
 }
 
+// MemorySaveImportedNote materializes one imported artifact into durable note memory plus import audit.
+func (h *Handlers) MemorySaveImportedNote(ctx context.Context, input imports.SaveImportedNoteInput) (imports.SaveImportedNoteOutput, error) {
+	return h.importService.SaveImportedNote(ctx, input)
+}
+
 // MemoryBootstrapSession starts a session and loads its bootstrap context.
 func (h *Handlers) MemoryBootstrapSession(ctx context.Context, input retrieval.BootstrapInput) (retrieval.BootstrapOutput, error) {
 	return h.retrievalService.BootstrapSession(ctx, input)

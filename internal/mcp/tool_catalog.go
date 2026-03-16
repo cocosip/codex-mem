@@ -109,6 +109,23 @@ type saveImportRequest struct {
 	PrivacyIntent   string       `json:"privacy_intent,omitempty"`
 }
 
+type saveImportedNoteRequest struct {
+	Scope             scopePayload `json:"scope"`
+	SessionID         string       `json:"session_id"`
+	Source            string       `json:"source"`
+	ExternalID        string       `json:"external_id,omitempty"`
+	PayloadHash       string       `json:"payload_hash,omitempty"`
+	Type              string       `json:"type"`
+	Title             string       `json:"title"`
+	Content           string       `json:"content"`
+	Importance        int          `json:"importance"`
+	Tags              []string     `json:"tags,omitempty"`
+	FilePaths         []string     `json:"file_paths,omitempty"`
+	RelatedProjectIDs []string     `json:"related_project_ids,omitempty"`
+	Status            string       `json:"status,omitempty"`
+	PrivacyIntent     string       `json:"privacy_intent,omitempty"`
+}
+
 type bootstrapRequest struct {
 	CWD                    string `json:"cwd"`
 	Task                   string `json:"task,omitempty"`
@@ -375,6 +392,57 @@ func buildTools(handlers *Handlers) []toolDefinition {
 			},
 		},
 		{
+			Name:        "memory_save_imported_note",
+			Description: "Materialize an imported artifact into durable note memory and import audit.",
+			InputSchema: objectSchema(
+				map[string]any{
+					"scope":               scopeRefLikeSchema(),
+					"session_id":          stringSchema("Active session id."),
+					"source":              stringEnumSchema("Import provenance source.", "watcher_import", "relay_import"),
+					"external_id":         stringSchema("Stable external identifier for dedupe and audit."),
+					"payload_hash":        stringSchema("Payload hash used for dedupe when no stable external id exists."),
+					"type":                stringEnumSchema("Canonical note type.", "decision", "bugfix", "discovery", "constraint", "preference", "todo"),
+					"title":               stringSchema("Short note title."),
+					"content":             stringSchema("Detailed durable note content."),
+					"importance":          intSchema("Normalized importance from 1 to 5."),
+					"tags":                stringArraySchema("Normalized note tags."),
+					"file_paths":          stringArraySchema("Relevant file paths."),
+					"related_project_ids": stringArraySchema("Explicit related-project links."),
+					"status":              stringEnumSchema("Note lifecycle state.", "active", "resolved", "superseded"),
+					"privacy_intent":      stringSchema("Explicit privacy handling intent."),
+				},
+				"scope",
+				"session_id",
+				"source",
+				"type",
+				"title",
+				"content",
+				"importance",
+			),
+			call: func(ctx context.Context, raw json.RawMessage) (toolCallResult, error) {
+				var req saveImportedNoteRequest
+				if err := decodeArgs(raw, &req); err != nil {
+					return toolCallResult{}, err
+				}
+				return structuredToolResult(handlers.HandleMemorySaveImportedNote(ctx, imports.SaveImportedNoteInput{
+					Scope:             req.Scope.ref(),
+					SessionID:         req.SessionID,
+					Source:            imports.Source(req.Source),
+					ExternalID:        req.ExternalID,
+					PayloadHash:       req.PayloadHash,
+					Type:              memory.NoteType(req.Type),
+					Title:             req.Title,
+					Content:           req.Content,
+					Importance:        req.Importance,
+					Tags:              req.Tags,
+					FilePaths:         req.FilePaths,
+					RelatedProjectIDs: req.RelatedProjectIDs,
+					Status:            memory.Status(req.Status),
+					PrivacyIntent:     req.PrivacyIntent,
+				}))
+			},
+		},
+		{
 			Name:        "memory_search",
 			Description: "Search durable memory within a scoped boundary.",
 			InputSchema: objectSchema(
@@ -527,6 +595,8 @@ func structuredToolResult(payload any) (toolCallResult, error) {
 	case Response[SaveHandoffData]:
 		isError = !typed.Ok
 	case Response[SaveImportData]:
+		isError = !typed.Ok
+	case Response[SaveImportedNoteData]:
 		isError = !typed.Ok
 	case Response[BootstrapSessionData]:
 		isError = !typed.Ok

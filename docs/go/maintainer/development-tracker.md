@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Maintain the completed v1 implementation, expose import auditing through an MCP tool, and keep `modelcontextprotocol/go-sdk` as the only MCP runtime.
+Current target: Maintain the completed v1 implementation, keep `modelcontextprotocol/go-sdk` as the only MCP runtime, and evolve import auditing into a durable imported-note workflow with explicit-memory precedence.
 
 ## Phase Progress
 
@@ -138,13 +138,13 @@ Tasks:
 
 Current session focus:
 
-- Expose the imports plumbing through MCP, intentionally expanding the tool surface, and decide the next materialization behavior after that.
+- Keep the imports workflow aligned across audit-only and imported-note materialization paths, including explicit-memory precedence.
 
 Immediate next tasks:
 
 1. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path for code-bearing changes.
-2. Keep the new import MCP workflow aligned with the underlying import audit schema and project-scoped dedupe rules.
-3. Expose import audit health through `doctor` so operators can inspect suppression/provenance readiness.
+2. Keep the import MCP workflows aligned with the underlying import audit schema and project-scoped dedupe/precedence rules.
+3. Preserve retrieval preference for explicit memory when imported artifacts overlap with the same project-level durable note.
 4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
@@ -289,6 +289,18 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether imported artifacts should remain audit-only or whether a follow-up tool/workflow should materialize them into durable notes or handoffs.
+### 2026-03-16 Session Update
+
+- Completed: Added `memory_save_imported_note` as an eleven-tool MCP workflow that atomically materializes imported artifacts into durable notes plus import audit. The imports service now suppresses imported-note materialization when a stronger project-level explicit note already exists, links import audit to reused imported notes, and keeps retrieval ranking biased toward explicit notes over imported artifacts. Repository, domain, MCP, doctor-count, and smoke-test expectations were updated for the expanded tool surface.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether imported handoff materialization is worth supporting later, or whether imported artifacts should stay note-only beyond audit records.
+### 2026-03-16 Session Update
+
+- Completed: Made `memory_save_imported_note` truly transactional instead of only sequential. The DB layer now supports tx-bound memory/import repositories plus an imported-note transaction runner, and regression coverage forces an import-audit failure after note creation to verify the note is rolled back instead of being left orphaned.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to keep polishing the import workflow through spec-facing docs and watcher/relay integration, or move on to a different product-facing slice.
 ## Recommended Next Step
 
 Recommended next implementation slice:

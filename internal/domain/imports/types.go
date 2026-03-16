@@ -2,10 +2,12 @@
 package imports
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"codex-mem/internal/domain/common"
+	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/scope"
 )
 
@@ -45,13 +47,14 @@ type Record struct {
 
 // SaveInput is the caller-facing payload for tracking an imported artifact.
 type SaveInput struct {
-	Scope           scope.Ref
-	SessionID       string
-	Source          Source
-	ExternalID      string
-	PayloadHash     string
-	DurableMemoryID string
-	PrivacyIntent   string
+	Scope             scope.Ref
+	SessionID         string
+	Source            Source
+	ExternalID        string
+	PayloadHash       string
+	DurableMemoryID   string
+	PrivacyIntent     string
+	SuppressionReason string
 }
 
 // SaveOutput reports the import audit result and any suppression warnings.
@@ -63,10 +66,54 @@ type SaveOutput struct {
 	Warnings     []common.Warning `json:"warnings"`
 }
 
+// SaveImportedNoteInput materializes one imported artifact into durable note memory plus import audit.
+type SaveImportedNoteInput struct {
+	Scope             scope.Ref
+	SessionID         string
+	Source            Source
+	ExternalID        string
+	PayloadHash       string
+	Type              memory.NoteType
+	Title             string
+	Content           string
+	Importance        int
+	Tags              []string
+	FilePaths         []string
+	RelatedProjectIDs []string
+	Status            memory.Status
+	PrivacyIntent     string
+}
+
+// SaveImportedNoteOutput reports the durable note/import audit outcome for one imported artifact.
+type SaveImportedNoteOutput struct {
+	Note               *memory.Note     `json:"note,omitempty"`
+	Import             Record           `json:"import"`
+	Materialized       bool             `json:"materialized"`
+	NoteDeduplicated   bool             `json:"note_deduplicated"`
+	ImportDeduplicated bool             `json:"import_deduplicated"`
+	Suppressed         bool             `json:"suppressed"`
+	Warnings           []common.Warning `json:"warnings"`
+}
+
 // Repository persists import audit records and detects duplicate imports.
 type Repository interface {
 	FindDuplicate(record Record) (*Record, error)
 	Create(record Record) error
+}
+
+// NoteSaver persists durable notes for imported materialization workflows.
+type NoteSaver interface {
+	SaveNote(ctx context.Context, input memory.SaveInput) (memory.SaveOutput, error)
+}
+
+// ProjectNoteFinder checks for matching durable notes within the same project.
+type ProjectNoteFinder interface {
+	FindProjectDuplicate(ref scope.Ref, noteType memory.NoteType, title string, content string) (*memory.Note, error)
+}
+
+// TransactionRunner executes imported-note materialization with tx-scoped collaborators.
+type TransactionRunner interface {
+	RunSaveImportedNote(ctx context.Context, fn func(repo Repository, noteSaver NoteSaver, projectNoteFinder ProjectNoteFinder) error) error
 }
 
 // Validate ensures the import record contains the minimum durable audit metadata.

@@ -625,6 +625,7 @@ func rankResults(current scope.Ref, query string, intent string, notes []memory.
 
 func noteScore(current scope.Ref, note memory.Note, terms []string, intent string) float64 {
 	score := scopeScore(current, note.Scope) + noteStateScore(note.Status) + float64(note.Importance)*10
+	score += noteSourceScore(note.Source)
 	score += textOverlapScore(terms, note.Title+" "+note.Content)
 	score += recencyScore(note.CreatedAt)
 	switch intent {
@@ -642,6 +643,17 @@ func noteScore(current scope.Ref, note memory.Note, terms []string, intent strin
 		}
 	}
 	return score
+}
+
+func noteSourceScore(source memory.Source) float64 {
+	switch source {
+	case memory.SourceCodexExplicit:
+		return 6
+	case memory.SourceRecoveryGenerated:
+		return -2
+	default:
+		return 0
+	}
 }
 
 func handoffScore(current scope.Ref, record handoff.Handoff, terms []string, intent string) float64 {

@@ -66,7 +66,7 @@ func TestSDKHTTPHandlerPOSTSupportsInitializeListAndToolCall(t *testing.T) {
 	}
 	var listResult listToolsResult
 	decodeJSONValue(t, listRPC.Result, &listResult)
-	if got, want := len(listResult.Tools), 10; got != want {
+	if got, want := len(listResult.Tools), 11; got != want {
 		t.Fatalf("tool count mismatch: got %d want %d", got, want)
 	}
 

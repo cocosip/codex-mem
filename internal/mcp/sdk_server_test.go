@@ -41,7 +41,7 @@ func TestNewSDKServerListsToolsAndCallsTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if got, want := len(listResult.Tools), 10; got != want {
+	if got, want := len(listResult.Tools), 11; got != want {
 		t.Fatalf("tool count mismatch: got %d want %d", got, want)
 	}
 

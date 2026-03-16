@@ -66,7 +66,7 @@ Good default shape:
 
 1. read the current tracker to confirm the active target and any open handoff notes
 2. choose one small user-visible or operator-visible improvement
-3. implement it without changing the existing ten-tool surface unless that change is intentional
+3. implement it without changing the existing eleven-tool surface unless that change is intentional
 4. keep `go test ./...` and the readiness/smoke checks green
 5. update the tracker and this kickoff doc if the restart guidance changes again
 

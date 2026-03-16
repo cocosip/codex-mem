@@ -56,6 +56,16 @@ type SaveImportData struct {
 	Deduplicated bool           `json:"deduplicated"`
 }
 
+// SaveImportedNoteData carries imported-note materialization results in MCP responses.
+type SaveImportedNoteData struct {
+	Note               *memory.Note   `json:"note,omitempty"`
+	Import             imports.Record `json:"import"`
+	Materialized       bool           `json:"materialized"`
+	NoteDeduplicated   bool           `json:"note_deduplicated"`
+	ImportDeduplicated bool           `json:"import_deduplicated"`
+	Suppressed         bool           `json:"suppressed"`
+}
+
 // BootstrapSessionData carries bootstrap-session results in MCP responses.
 type BootstrapSessionData struct {
 	Scope         scope.Scope            `json:"scope"`
@@ -165,6 +175,22 @@ func (h *Handlers) HandleMemorySaveImport(ctx context.Context, input imports.Sav
 		StoredAt:     output.StoredAt,
 		Suppressed:   output.Suppressed,
 		Deduplicated: output.Deduplicated,
+	}, output.Warnings)
+}
+
+// HandleMemorySaveImportedNote adapts imported note materialization into an MCP response envelope.
+func (h *Handlers) HandleMemorySaveImportedNote(ctx context.Context, input imports.SaveImportedNoteInput) Response[SaveImportedNoteData] {
+	output, err := h.MemorySaveImportedNote(ctx, input)
+	if err != nil {
+		return failure[SaveImportedNoteData](err, common.ErrWriteFailed, "save imported note failed")
+	}
+	return success(SaveImportedNoteData{
+		Note:               output.Note,
+		Import:             output.Import,
+		Materialized:       output.Materialized,
+		NoteDeduplicated:   output.NoteDeduplicated,
+		ImportDeduplicated: output.ImportDeduplicated,
+		Suppressed:         output.Suppressed,
 	}, output.Warnings)
 }
 

@@ -51,8 +51,8 @@ func main() {
 	if err != nil {
 		failf("tools/list failed: %v", err)
 	}
-	if len(listResult.Tools) != 10 {
-		failf("tools/list count mismatch: got %d want %d", len(listResult.Tools), 10)
+	if len(listResult.Tools) != 11 {
+		failf("tools/list count mismatch: got %d want %d", len(listResult.Tools), 11)
 	}
 
 	callResult, err := session.CallTool(ctx, &sdkmcp.CallToolParams{

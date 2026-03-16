@@ -90,7 +90,7 @@ Before exposing the server to users, confirm:
    `required_schema_ok=true`
    `fts_ready=true`
    `migrations_pending=0`
-   `mcp_tool_count=10`
+   `mcp_tool_count=11`
 - Codex can register the server successfully
 - Codex can call at least one MCP tool successfully
 
@@ -104,6 +104,7 @@ The current MCP server exposes:
 - `memory_save_note`
 - `memory_save_handoff`
 - `memory_save_import`
+- `memory_save_imported_note`
 - `memory_search`
 - `memory_get_recent`
 - `memory_get_note`

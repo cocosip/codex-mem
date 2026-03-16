@@ -61,6 +61,22 @@ func (s *importRepoStub) Create(_ imports.Record) error {
 	return nil
 }
 
+type importedNoteSaverStub struct {
+	output memory.SaveOutput
+}
+
+func (s importedNoteSaverStub) SaveNote(_ context.Context, _ memory.SaveInput) (memory.SaveOutput, error) {
+	return s.output, nil
+}
+
+type importedProjectNoteFinderStub struct {
+	note *memory.Note
+}
+
+func (s importedProjectNoteFinderStub) FindProjectDuplicate(_ scope.Ref, _ memory.NoteType, _, _ string) (*memory.Note, error) {
+	return s.note, nil
+}
+
 func TestHandleMemorySaveNotePromotesWarningsToEnvelope(t *testing.T) {
 	now := time.Date(2026, 3, 13, 16, 0, 0, 0, time.UTC)
 	existing := &memory.Note{
@@ -176,6 +192,54 @@ func TestHandleMemorySaveImportPromotesWarningsToEnvelope(t *testing.T) {
 	}
 	if got, want := response.Warnings[0].Code, common.WarnImportSuppressed; got != want {
 		t.Fatalf("warning code mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestHandleMemorySaveImportedNoteReturnsStructuredWorkflowResult(t *testing.T) {
+	now := time.Date(2026, 3, 16, 3, 45, 0, 0, time.UTC)
+	importedNote := memory.Note{
+		ID:         "note_imported",
+		Scope:      scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:  "sess_1",
+		Type:       memory.NoteTypeDiscovery,
+		Title:      "Imported discovery",
+		Content:    "Materialized from watcher import.",
+		Importance: 4,
+		Status:     memory.StatusActive,
+		Source:     memory.SourceWatcherImport,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	service := imports.NewService(&importRepoStub{}, imports.Options{
+		Clock:             fixedClock{now: now.Add(time.Minute)},
+		IDFactory:         fixedIDFactory{value: "import_new"},
+		NoteSaver:         importedNoteSaverStub{output: memory.SaveOutput{Note: importedNote, StoredAt: importedNote.CreatedAt}},
+		ProjectNoteFinder: importedProjectNoteFinderStub{},
+	})
+	handlers := &Handlers{importService: service}
+
+	response := handlers.HandleMemorySaveImportedNote(context.Background(), imports.SaveImportedNoteInput{
+		Scope:      importedNote.Scope,
+		SessionID:  importedNote.SessionID,
+		Source:     imports.SourceWatcherImport,
+		ExternalID: "watcher:123",
+		Type:       importedNote.Type,
+		Title:      importedNote.Title,
+		Content:    importedNote.Content,
+		Importance: importedNote.Importance,
+	})
+
+	if !response.Ok {
+		t.Fatalf("expected ok response, got error %+v", response.Error)
+	}
+	if response.Data == nil || response.Data.Note == nil {
+		t.Fatalf("expected note data, got %+v", response.Data)
+	}
+	if !response.Data.Materialized || response.Data.Note.ID != importedNote.ID {
+		t.Fatalf("unexpected imported note response: %+v", response.Data)
+	}
+	if response.Data.Import.ImportedAt.IsZero() {
+		t.Fatalf("expected import audit metadata, got %+v", response.Data.Import)
 	}
 }
 

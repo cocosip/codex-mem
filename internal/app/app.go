@@ -59,6 +59,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	memoryRepo := db.NewMemoryRepository(store)
 	handoffRepo := db.NewHandoffRepository(store)
 	importRepo := db.NewImportRepository(store)
+	importTxRunner := db.NewImportedNoteTransactionRunner(store, clock, ids)
 	scopeService := scope.NewService(scopeRepo, scope.Options{
 		DefaultSystemName: cfg.File.DefaultSystemName,
 	})
@@ -76,8 +77,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		IDFactory: ids,
 	})
 	importService := imports.NewService(importRepo, imports.Options{
-		Clock:     clock,
-		IDFactory: ids,
+		Clock:             clock,
+		IDFactory:         ids,
+		NoteSaver:         memoryService,
+		ProjectNoteFinder: memoryRepo,
+		TransactionRunner: importTxRunner,
 	})
 	retrievalService := retrieval.NewService(scopeService, sessionService, memoryRepo, handoffRepo)
 

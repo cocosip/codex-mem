@@ -15,6 +15,22 @@ import (
 	"codex-mem/internal/domain/session"
 )
 
+type fixedClock struct {
+	now time.Time
+}
+
+func (f fixedClock) Now() time.Time {
+	return f.now
+}
+
+type fixedIDFactory struct {
+	value string
+}
+
+func (f fixedIDFactory) New(_ string) string {
+	return f.value
+}
+
 func TestOpenRunsFoundationMigrationsAndPersistsScopeChain(t *testing.T) {
 	ctx := context.Background()
 	handle, err := Open(ctx, Options{
@@ -213,6 +229,64 @@ func TestMemoryAndHandoffRepositoriesPersistStructuredRecords(t *testing.T) {
 	}
 	if latest == nil || latest.ID != record.ID {
 		t.Fatalf("expected handoff %q, got %+v", record.ID, latest)
+	}
+}
+
+func TestMemoryRepositoryFindProjectDuplicatePrefersExplicitNotes(t *testing.T) {
+	ctx := context.Background()
+	handle, err := Open(ctx, Options{
+		Path:        filepath.Join(t.TempDir(), "codex-mem.db"),
+		DriverName:  "sqlite",
+		BusyTimeout: 2 * time.Second,
+		JournalMode: "WAL",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { closeTestHandle(t, handle) })
+
+	ref, sessionID := seedScopeAndSession(t, handle)
+	siblingRef := seedSameProjectScope(t, handle)
+	memoryRepo := NewMemoryRepository(handle)
+	now := time.Date(2026, 3, 16, 4, 20, 0, 0, time.UTC)
+
+	if err := memoryRepo.Create(memory.Note{
+		ID:         "note_imported",
+		Scope:      siblingRef,
+		SessionID:  seedSessionForScope(t, handle, "sess_imported", siblingRef),
+		Type:       memory.NoteTypeDecision,
+		Title:      "Shared decision",
+		Content:    "Use explicit memory over imported duplicates.",
+		Importance: 4,
+		Status:     memory.StatusActive,
+		Source:     memory.SourceWatcherImport,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}); err != nil {
+		t.Fatalf("Create imported note: %v", err)
+	}
+	if err := memoryRepo.Create(memory.Note{
+		ID:         "note_explicit",
+		Scope:      ref,
+		SessionID:  sessionID,
+		Type:       memory.NoteTypeDecision,
+		Title:      "Shared decision",
+		Content:    "Use explicit memory over imported duplicates.",
+		Importance: 5,
+		Status:     memory.StatusResolved,
+		Source:     memory.SourceCodexExplicit,
+		CreatedAt:  now.Add(time.Minute),
+		UpdatedAt:  now.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("Create explicit note: %v", err)
+	}
+
+	duplicate, err := memoryRepo.FindProjectDuplicate(ref, memory.NoteTypeDecision, "Shared decision", "Use explicit memory over imported duplicates.")
+	if err != nil {
+		t.Fatalf("FindProjectDuplicate: %v", err)
+	}
+	if duplicate == nil || duplicate.ID != "note_explicit" {
+		t.Fatalf("expected explicit note to win, got %+v", duplicate)
 	}
 }
 
@@ -462,6 +536,65 @@ func TestImportRepositoryRejectsSessionScopeMismatch(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected import create to fail for session scope mismatch")
+	}
+}
+
+func TestImportedNoteTransactionRunnerRollsBackNoteWhenImportWriteFails(t *testing.T) {
+	ctx := context.Background()
+	handle, err := Open(ctx, Options{
+		Path:        filepath.Join(t.TempDir(), "codex-mem.db"),
+		DriverName:  "sqlite",
+		BusyTimeout: 2 * time.Second,
+		JournalMode: "WAL",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { closeTestHandle(t, handle) })
+
+	ref, sessionID := seedScopeAndSession(t, handle)
+	importRepo := NewImportRepository(handle)
+	memoryRepo := NewMemoryRepository(handle)
+	now := time.Date(2026, 3, 16, 4, 30, 0, 0, time.UTC)
+
+	if err := importRepo.Create(imports.Record{
+		ID:         "import_conflict",
+		Scope:      ref,
+		SessionID:  sessionID,
+		Source:     imports.SourceWatcherImport,
+		ExternalID: "watcher:existing",
+		ImportedAt: now,
+	}); err != nil {
+		t.Fatalf("Create existing import: %v", err)
+	}
+
+	idFactory := fixedIDFactory{value: "import_conflict"}
+	service := imports.NewService(importRepo, imports.Options{
+		Clock:             fixedClock{now: now.Add(time.Minute)},
+		IDFactory:         idFactory,
+		TransactionRunner: NewImportedNoteTransactionRunner(handle, fixedClock{now: now.Add(time.Minute)}, idFactory),
+	})
+
+	_, err = service.SaveImportedNote(context.Background(), imports.SaveImportedNoteInput{
+		Scope:      ref,
+		SessionID:  sessionID,
+		Source:     imports.SourceRelayImport,
+		ExternalID: "relay:new",
+		Type:       memory.NoteTypeDiscovery,
+		Title:      "Transactional import",
+		Content:    "This note should roll back if import audit fails.",
+		Importance: 4,
+	})
+	if err == nil {
+		t.Fatal("expected imported note workflow to fail on import id collision")
+	}
+
+	note, err := memoryRepo.FindProjectDuplicate(ref, memory.NoteTypeDiscovery, "Transactional import", "This note should roll back if import audit fails.")
+	if err != nil {
+		t.Fatalf("FindProjectDuplicate after rollback: %v", err)
+	}
+	if note != nil {
+		t.Fatalf("expected transactional rollback to remove note, got %+v", note)
 	}
 }
 

@@ -8,7 +8,11 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
-func validateScopeRef(db *sql.DB, ref scope.Ref) error {
+type rowQueryer interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func validateScopeRef(db rowQueryer, ref scope.Ref) error {
 	var matched int
 	err := db.QueryRow(`
 		SELECT COUNT(1)
@@ -26,7 +30,7 @@ func validateScopeRef(db *sql.DB, ref scope.Ref) error {
 	return nil
 }
 
-func validateSessionScope(db *sql.DB, sessionID string, ref scope.Ref) error {
+func validateSessionScope(db rowQueryer, sessionID string, ref scope.Ref) error {
 	var stored scope.Ref
 	err := db.QueryRow(`
 		SELECT system_id, project_id, workspace_id
