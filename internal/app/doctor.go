@@ -9,6 +9,7 @@ import (
 
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
+	"codex-mem/internal/domain/common"
 )
 
 type doctorOptions struct {
@@ -22,6 +23,7 @@ type doctorReport struct {
 	Migrations doctorMigrationsReport `json:"migrations"`
 	Audit      doctorAuditReport      `json:"audit"`
 	Logging    doctorLoggingReport    `json:"logging"`
+	Follow     doctorFollowReport     `json:"follow_imports"`
 	MCP        doctorMCPReport        `json:"mcp"`
 }
 
@@ -87,14 +89,37 @@ type doctorLoggingReport struct {
 	LogStderr     bool   `json:"log_stderr"`
 }
 
+type doctorFollowReport struct {
+	HealthFile            string           `json:"health_file"`
+	HealthPresent         bool             `json:"health_present"`
+	LastUpdatedAt         *time.Time       `json:"last_updated_at,omitempty"`
+	Status                string           `json:"status,omitempty"`
+	Source                string           `json:"source,omitempty"`
+	InputCount            int              `json:"input_count,omitempty"`
+	Continuous            bool             `json:"continuous"`
+	PollIntervalSeconds   int64            `json:"poll_interval_seconds,omitempty"`
+	SnapshotAgeSeconds    int64            `json:"snapshot_age_seconds,omitempty"`
+	HealthStale           bool             `json:"health_stale"`
+	RequestedWatchMode    string           `json:"requested_watch_mode,omitempty"`
+	ActiveWatchMode       string           `json:"active_watch_mode,omitempty"`
+	WatchFallbacks        int              `json:"watch_fallbacks,omitempty"`
+	WatchTransitions      int              `json:"watch_transitions,omitempty"`
+	LastFallbackReason    string           `json:"last_fallback_reason,omitempty"`
+	WatchPollCatchups     int              `json:"watch_poll_catchups,omitempty"`
+	WatchPollCatchupBytes int              `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings              []common.Warning `json:"warnings,omitempty"`
+}
+
 type doctorMCPReport struct {
 	Transport string `json:"transport"`
 	ToolCount int    `json:"tool_count"`
 }
 
 const (
-	doctorJSONFlag = "--json"
-	stringNone     = "none"
+	doctorJSONFlag                    = "--json"
+	stringNone                        = "none"
+	doctorFollowHealthStaleMultiplier = 3
+	doctorFollowHealthMinimumWindow   = 30 * time.Second
 )
 
 func parseDoctorOptions(args []string) (doctorOptions, error) {
@@ -112,7 +137,31 @@ func parseDoctorOptions(args []string) (doctorOptions, error) {
 	return options, nil
 }
 
-func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCount int) doctorReport {
+func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCount int, followHealth *followImportsHealthSnapshot) doctorReport {
+	now := time.Now().UTC()
+	followReport := doctorFollowReport{
+		HealthFile:    followImportsHealthPath(cfg.Meta.LogDir),
+		HealthPresent: followHealth != nil,
+	}
+	if followHealth != nil {
+		age, stale := evaluateFollowImportsHealthStaleness(*followHealth, now)
+		followReport.LastUpdatedAt = &followHealth.UpdatedAt
+		followReport.Status = followHealth.Status
+		followReport.Source = followHealth.Source
+		followReport.InputCount = followHealth.InputCount
+		followReport.Continuous = followHealth.Continuous
+		followReport.PollIntervalSeconds = followHealth.PollIntervalSeconds
+		followReport.SnapshotAgeSeconds = int64(age / time.Second)
+		followReport.HealthStale = stale
+		followReport.RequestedWatchMode = followHealth.RequestedWatchMode
+		followReport.ActiveWatchMode = followHealth.ActiveWatchMode
+		followReport.WatchFallbacks = followHealth.WatchFallbacks
+		followReport.WatchTransitions = followHealth.WatchTransitions
+		followReport.LastFallbackReason = followHealth.LastFallbackReason
+		followReport.WatchPollCatchups = followHealth.WatchPollCatchups
+		followReport.WatchPollCatchupBytes = followHealth.WatchCatchupBytes
+		followReport.Warnings = common.MergeWarnings(append([]common.Warning(nil), followHealth.Warnings...), followImportsHealthStaleWarnings(*followHealth, age, stale))
+	}
 	return doctorReport{
 		Status: "ok",
 		Config: doctorConfigReport{
@@ -172,6 +221,7 @@ func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCou
 			LogCompress:   cfg.File.LogCompress,
 			LogStderr:     cfg.File.LogAlsoStderr,
 		},
+		Follow: followReport,
 		MCP: doctorMCPReport{
 			Transport: "stdio",
 			ToolCount: toolCount,
@@ -229,8 +279,33 @@ func formatDoctorReport(report doctorReport) string {
 		fmt.Sprintf("log_max_age_days=%d", report.Logging.LogMaxAgeDays),
 		fmt.Sprintf("log_compress=%t", report.Logging.LogCompress),
 		fmt.Sprintf("log_stderr=%t", report.Logging.LogStderr),
+		fmt.Sprintf("follow_imports_health_file=%s", report.Follow.HealthFile),
+		fmt.Sprintf("follow_imports_health_present=%t", report.Follow.HealthPresent),
+		fmt.Sprintf("follow_imports_last_updated_at=%s", pointerTimeOrNone(report.Follow.LastUpdatedAt)),
+		fmt.Sprintf("follow_imports_status=%s", fallbackString(report.Follow.Status)),
+		fmt.Sprintf("follow_imports_source=%s", fallbackString(report.Follow.Source)),
+		fmt.Sprintf("follow_imports_input_count=%d", report.Follow.InputCount),
+		fmt.Sprintf("follow_imports_continuous=%t", report.Follow.Continuous),
+		fmt.Sprintf("follow_imports_poll_interval_seconds=%d", report.Follow.PollIntervalSeconds),
+		fmt.Sprintf("follow_imports_snapshot_age_seconds=%d", report.Follow.SnapshotAgeSeconds),
+		fmt.Sprintf("follow_imports_health_stale=%t", report.Follow.HealthStale),
+		fmt.Sprintf("follow_imports_requested_watch_mode=%s", fallbackString(report.Follow.RequestedWatchMode)),
+		fmt.Sprintf("follow_imports_active_watch_mode=%s", fallbackString(report.Follow.ActiveWatchMode)),
+		fmt.Sprintf("follow_imports_watch_fallbacks=%d", report.Follow.WatchFallbacks),
+		fmt.Sprintf("follow_imports_watch_transitions=%d", report.Follow.WatchTransitions),
+		fmt.Sprintf("follow_imports_last_fallback_reason=%s", fallbackString(report.Follow.LastFallbackReason)),
+		fmt.Sprintf("follow_imports_watch_poll_catchups=%d", report.Follow.WatchPollCatchups),
+		fmt.Sprintf("follow_imports_watch_poll_catchup_bytes=%d", report.Follow.WatchPollCatchupBytes),
+		fmt.Sprintf("follow_imports_warnings=%d", len(report.Follow.Warnings)),
 		fmt.Sprintf("mcp_transport=%s", report.MCP.Transport),
 		fmt.Sprintf("mcp_tool_count=%d", report.MCP.ToolCount),
+	}
+	for i, warning := range report.Follow.Warnings {
+		prefix := fmt.Sprintf("follow_imports_warning_%d", i+1)
+		lines = append(lines,
+			fmt.Sprintf("%s_code=%s", prefix, warning.Code),
+			fmt.Sprintf("%s_message=%s", prefix, warning.Message),
+		)
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -259,4 +334,36 @@ func pointerStringOrNone(value *string) string {
 		return stringNone
 	}
 	return *value
+}
+
+func pointerTimeOrNone(value *time.Time) string {
+	if value == nil {
+		return stringNone
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func evaluateFollowImportsHealthStaleness(snapshot followImportsHealthSnapshot, now time.Time) (time.Duration, bool) {
+	age := now.Sub(snapshot.UpdatedAt)
+	if age < 0 {
+		age = 0
+	}
+	if !snapshot.Continuous {
+		return age, false
+	}
+	window := time.Duration(snapshot.PollIntervalSeconds) * time.Second * doctorFollowHealthStaleMultiplier
+	if window < doctorFollowHealthMinimumWindow {
+		window = doctorFollowHealthMinimumWindow
+	}
+	return age, age > window
+}
+
+func followImportsHealthStaleWarnings(snapshot followImportsHealthSnapshot, age time.Duration, stale bool) []common.Warning {
+	if !stale {
+		return nil
+	}
+	return []common.Warning{{
+		Code:    common.WarnFollowImportsHealthStale,
+		Message: fmt.Sprintf("follow-imports health snapshot is stale at %s", age.Truncate(time.Second)),
+	}}
 }

@@ -41,6 +41,10 @@ const (
 	WarnPlaceholdersUnresolved = "WARN_PLACEHOLDERS_UNRESOLVED"
 	// WarnImportSuppressed indicates an import was suppressed due to dedupe or policy.
 	WarnImportSuppressed = "WARN_IMPORT_SUPPRESSED"
+	// WarnFollowImportsPollCatchup indicates follow-imports notify mode repeatedly needed poll safety-net catchup.
+	WarnFollowImportsPollCatchup = "WARN_FOLLOW_IMPORTS_POLL_CATCHUP"
+	// WarnFollowImportsHealthStale indicates the last-known follow-imports health snapshot is stale.
+	WarnFollowImportsHealthStale = "WARN_FOLLOW_IMPORTS_HEALTH_STALE"
 	// ErrInvalidInput indicates caller input failed validation.
 	ErrInvalidInput = "ERR_INVALID_INPUT"
 	// ErrInvalidScope indicates the supplied scope is missing required identity.

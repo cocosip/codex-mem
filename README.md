@@ -73,13 +73,13 @@ These commands are for operators, packagers, and CI.
 They are not MCP tools and are not the normal end-user interaction path.
 
 - `codex-mem doctor`
-  Prints effective config plus runtime readiness and audit diagnostics.
+  Prints effective config plus runtime readiness, audit diagnostics, and the last-known `follow-imports` watch-health snapshot when one has been written, including stale-snapshot detection for continuous follow mode.
 - `codex-mem doctor --json`
   Prints the same diagnostics in machine-readable JSON for automation or CI checks.
 - `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--json] [--continue-on-error] [--failed-output failed.jsonl] [--failed-manifest failed.json]`
   Imports newline-delimited watcher or relay note events into durable imported notes plus audit records, with optional partial-success handling plus retry-oriented failure exports.
 - `codex-mem follow-imports --source watcher_import --input events-a.jsonl [--input events-b.jsonl ...] [--state-file events-a.offset.json --state-file events-b.offset.json ...] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--json]`
-  Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state alongside per-input imported-note results.
+  Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state plus poll-catchup/recovery events and warnings alongside per-input imported-note results.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`
@@ -151,7 +151,7 @@ See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full
 - MCP transport/tool availability
 
 Use `codex-mem doctor --json` when the output needs to be consumed by scripts.
-The combined readiness gate under `scripts/readiness-check` is for CI and maintainers, not end users.
+The combined readiness gate under `scripts/readiness-check` is for CI and maintainers, not end users. It now echoes the last-known `follow-imports` doctor fields as informational runtime summary lines for automation, without turning stale or degraded follow health into a hard startup/readiness failure by itself.
 
 For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/operator/troubleshooting.md).
 

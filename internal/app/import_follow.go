@@ -72,6 +72,9 @@ type followImportsReport struct {
 	LastFallbackReason string               `json:"last_fallback_reason,omitempty"`
 	WatchEventCount    int                  `json:"watch_event_count,omitempty"`
 	WatchEvents        []followImportsEvent `json:"watch_events,omitempty"`
+	WatchPollCatchups  int                  `json:"watch_poll_catchups,omitempty"`
+	WatchCatchupBytes  int                  `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings           []common.Warning     `json:"warnings,omitempty"`
 	Offset             int64                `json:"offset"`
 	ConsumedBytes      int                  `json:"consumed_bytes"`
 	PendingBytes       int                  `json:"pending_bytes"`
@@ -97,9 +100,29 @@ type followImportsAggregateReport struct {
 	LastFallbackReason string                `json:"last_fallback_reason,omitempty"`
 	WatchEventCount    int                   `json:"watch_event_count,omitempty"`
 	WatchEvents        []followImportsEvent  `json:"watch_events,omitempty"`
+	WatchPollCatchups  int                   `json:"watch_poll_catchups,omitempty"`
+	WatchCatchupBytes  int                   `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings           []common.Warning      `json:"warnings,omitempty"`
 	TotalConsumedBytes int                   `json:"total_consumed_bytes"`
 	TotalPendingBytes  int                   `json:"total_pending_bytes"`
 	Inputs             []followImportsReport `json:"inputs"`
+}
+
+type followImportsHealthSnapshot struct {
+	Status              string           `json:"status"`
+	UpdatedAt           time.Time        `json:"updated_at"`
+	Source              string           `json:"source"`
+	InputCount          int              `json:"input_count"`
+	Continuous          bool             `json:"continuous"`
+	PollIntervalSeconds int64            `json:"poll_interval_seconds,omitempty"`
+	RequestedWatchMode  string           `json:"requested_watch_mode,omitempty"`
+	ActiveWatchMode     string           `json:"active_watch_mode,omitempty"`
+	WatchFallbacks      int              `json:"watch_fallbacks,omitempty"`
+	WatchTransitions    int              `json:"watch_transitions,omitempty"`
+	LastFallbackReason  string           `json:"last_fallback_reason,omitempty"`
+	WatchPollCatchups   int              `json:"watch_poll_catchups,omitempty"`
+	WatchCatchupBytes   int              `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings            []common.Warning `json:"warnings,omitempty"`
 }
 
 type followImportsCheckpoint struct {
@@ -134,6 +157,8 @@ type followImportsEvent struct {
 	ActiveWatchMode    string    `json:"active_watch_mode,omitempty"`
 	Reason             string    `json:"reason,omitempty"`
 	Fallbacks          int       `json:"fallbacks,omitempty"`
+	ConsumedInputs     int       `json:"consumed_inputs,omitempty"`
+	ConsumedBytes      int       `json:"consumed_bytes,omitempty"`
 }
 
 type followImportsRuntimeState struct {
@@ -142,10 +167,21 @@ type followImportsRuntimeState struct {
 	Fallbacks          int
 	Transitions        int
 	LastFallbackReason string
+	PollCatchups       int
+	PollCatchupBytes   int
 	PendingEvents      []followImportsEvent
 }
 
+type followImportsRunTrigger string
+
+const (
+	followImportsRunTriggerInitial     followImportsRunTrigger = "initial"
+	followImportsRunTriggerNotifyEvent followImportsRunTrigger = "notify_event"
+	followImportsRunTriggerPollTick    followImportsRunTrigger = "poll_tick"
+)
+
 const followImportsCheckpointWindow = 256
+const followImportsPollCatchupWarningThreshold = 3
 
 func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, args []string) error {
 	options, err := parseFollowImportsOptions(args)
@@ -170,13 +206,22 @@ func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, 
 		Active:    followImportsWatchModePoll,
 	}
 
-	runOnce := func() error {
+	runOnce := func(trigger followImportsRunTrigger) error {
 		reports, err := runFollowImportsInputsOnce(ctx, instance, inputs)
 		if err != nil {
 			return err
 		}
+		if trigger == followImportsRunTriggerPollTick && runtimeState.Active == followImportsWatchModeNotify {
+			consumedInputs, consumedBytes := summarizeFollowImportsConsumption(reports)
+			if consumedBytes > 0 {
+				markFollowImportsPollCatchup(&runtimeState, consumedInputs, consumedBytes)
+			}
+		}
 		if len(reports) == 1 {
 			runtimeState.Apply(&reports[0])
+			if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, newFollowImportsHealthSnapshotFromReport(reports[0], options)); err != nil {
+				return err
+			}
 			if shouldWriteFollowImportsReport(reports[0], options.Once) {
 				return writeFollowImportsReport(stdout, reports[0], options.JSON)
 			}
@@ -185,6 +230,9 @@ func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, 
 
 		report := newFollowImportsAggregateReport(options.Source, reports)
 		runtimeState.ApplyAggregate(&report)
+		if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, newFollowImportsHealthSnapshotFromAggregate(report, options)); err != nil {
+			return err
+		}
 		if shouldWriteFollowImportsAggregateReport(report, options.Once) {
 			return writeFollowImportsAggregateReport(stdout, report, options.JSON)
 		}
@@ -192,7 +240,7 @@ func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, 
 	}
 
 	if options.Once {
-		return runOnce()
+		return runOnce(followImportsRunTriggerInitial)
 	}
 
 	if options.WatchMode == followImportsWatchModePoll {
@@ -206,8 +254,8 @@ func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, 
 	return runFollowImportsNotifyLoop(ctx, watchPaths, options.WatchMode, options.PollInterval, runOnce, &runtimeState)
 }
 
-func runFollowImportsPollingLoop(ctx context.Context, pollInterval time.Duration, runOnce func() error) error {
-	if err := runOnce(); err != nil {
+func runFollowImportsPollingLoop(ctx context.Context, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error) error {
+	if err := runOnce(followImportsRunTriggerInitial); err != nil {
 		return err
 	}
 
@@ -219,14 +267,14 @@ func runFollowImportsPollingLoop(ctx context.Context, pollInterval time.Duration
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := runOnce(); err != nil {
+			if err := runOnce(followImportsRunTriggerPollTick); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func runFollowImportsAutoLoop(ctx context.Context, inputPaths []string, pollInterval time.Duration, runOnce func() error, runtimeState *followImportsRuntimeState) error {
+func runFollowImportsAutoLoop(ctx context.Context, inputPaths []string, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error, runtimeState *followImportsRuntimeState) error {
 	for {
 		watcher, err := newFollowImportsWatcher(inputPaths)
 		if err != nil {
@@ -247,8 +295,8 @@ func runFollowImportsAutoLoop(ctx context.Context, inputPaths []string, pollInte
 	}
 }
 
-func runFollowImportsPollingRecoveryLoop(ctx context.Context, inputPaths []string, pollInterval time.Duration, runOnce func() error, runtimeState *followImportsRuntimeState) error {
-	if err := runOnce(); err != nil {
+func runFollowImportsPollingRecoveryLoop(ctx context.Context, inputPaths []string, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error, runtimeState *followImportsRuntimeState) error {
+	if err := runOnce(followImportsRunTriggerInitial); err != nil {
 		return err
 	}
 
@@ -260,7 +308,7 @@ func runFollowImportsPollingRecoveryLoop(ctx context.Context, inputPaths []strin
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := runOnce(); err != nil {
+			if err := runOnce(followImportsRunTriggerPollTick); err != nil {
 				return err
 			}
 			watcher, err := newFollowImportsWatcher(inputPaths)
@@ -274,7 +322,7 @@ func runFollowImportsPollingRecoveryLoop(ctx context.Context, inputPaths []strin
 	}
 }
 
-func runFollowImportsNotifySession(ctx context.Context, inputPaths []string, watchMode followImportsWatchMode, pollInterval time.Duration, runOnce func() error, runtimeState *followImportsRuntimeState, watcher *fsnotify.Watcher) (bool, error) {
+func runFollowImportsNotifySession(ctx context.Context, inputPaths []string, watchMode followImportsWatchMode, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error, runtimeState *followImportsRuntimeState, watcher *fsnotify.Watcher) (bool, error) {
 	if watcher == nil {
 		return false, fmt.Errorf("follow-imports watcher is required")
 	}
@@ -282,7 +330,7 @@ func runFollowImportsNotifySession(ctx context.Context, inputPaths []string, wat
 		_ = watcher.Close()
 	}()
 	enterFollowImportsNotifyMode(runtimeState)
-	if err := runOnce(); err != nil {
+	if err := runOnce(followImportsRunTriggerInitial); err != nil {
 		return false, err
 	}
 
@@ -309,7 +357,7 @@ func runFollowImportsNotifySession(ctx context.Context, inputPaths []string, wat
 				continue
 			}
 			if shouldTriggerFollowImportsEvent(inputPaths, event) {
-				if err := runOnce(); err != nil {
+				if err := runOnce(followImportsRunTriggerNotifyEvent); err != nil {
 					return false, err
 				}
 			}
@@ -336,14 +384,14 @@ func runFollowImportsNotifySession(ctx context.Context, inputPaths []string, wat
 			slog.Default().Warn("follow-imports watcher error, falling back to polling", "inputs", inputPaths, "err", err, "requested_watch_mode", watchMode, "fallbacks", runtimeStateFallbackCount(runtimeState), "fallback_reason", runtimeStateLastFallback(runtimeState))
 			return true, nil
 		case <-ticker.C:
-			if err := runOnce(); err != nil {
+			if err := runOnce(followImportsRunTriggerPollTick); err != nil {
 				return false, err
 			}
 		}
 	}
 }
 
-func runFollowImportsNotifyLoop(ctx context.Context, inputPaths []string, watchMode followImportsWatchMode, pollInterval time.Duration, runOnce func() error, runtimeState *followImportsRuntimeState) error {
+func runFollowImportsNotifyLoop(ctx context.Context, inputPaths []string, watchMode followImportsWatchMode, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error, runtimeState *followImportsRuntimeState) error {
 	watcher, err := newFollowImportsWatcher(inputPaths)
 	if err != nil {
 		if watchMode == followImportsWatchModeNotify {
@@ -815,6 +863,9 @@ func (s *followImportsRuntimeState) Apply(report *followImportsReport) {
 	report.WatchTransitions = s.Transitions
 	report.LastFallbackReason = s.LastFallbackReason
 	report.WatchEventCount = len(s.PendingEvents)
+	report.WatchPollCatchups = s.PollCatchups
+	report.WatchCatchupBytes = s.PollCatchupBytes
+	report.Warnings = followImportsRuntimeWarnings(s)
 	if report.WatchEventCount > 0 {
 		report.WatchEvents = append([]followImportsEvent(nil), s.PendingEvents...)
 		s.PendingEvents = nil
@@ -831,6 +882,9 @@ func (s *followImportsRuntimeState) ApplyAggregate(report *followImportsAggregat
 	report.WatchTransitions = s.Transitions
 	report.LastFallbackReason = s.LastFallbackReason
 	report.WatchEventCount = len(s.PendingEvents)
+	report.WatchPollCatchups = s.PollCatchups
+	report.WatchCatchupBytes = s.PollCatchupBytes
+	report.Warnings = followImportsRuntimeWarnings(s)
 	if report.WatchEventCount > 0 {
 		report.WatchEvents = append([]followImportsEvent(nil), s.PendingEvents...)
 		s.PendingEvents = nil
@@ -878,6 +932,24 @@ func markFollowImportsRecovery(state *followImportsRuntimeState, reason string) 
 		ActiveWatchMode:    string(state.Active),
 		Reason:             reason,
 		Fallbacks:          state.Fallbacks,
+	})
+}
+
+func markFollowImportsPollCatchup(state *followImportsRuntimeState, consumedInputs int, consumedBytes int) {
+	if state == nil || consumedBytes <= 0 {
+		return
+	}
+	state.PollCatchups++
+	state.PollCatchupBytes += consumedBytes
+	state.PendingEvents = append(state.PendingEvents, followImportsEvent{
+		At:                 time.Now().UTC(),
+		Kind:               "watch_poll_catchup",
+		RequestedWatchMode: string(state.Requested),
+		ActiveWatchMode:    string(state.Active),
+		Reason:             "notify_safety_poll_consumed_bytes",
+		Fallbacks:          state.Fallbacks,
+		ConsumedInputs:     consumedInputs,
+		ConsumedBytes:      consumedBytes,
 	})
 }
 
@@ -948,6 +1020,20 @@ func shouldTriggerFollowImportsEvent(inputPaths []string, event fsnotify.Event) 
 	return false
 }
 
+func followImportsRuntimeWarnings(state *followImportsRuntimeState) []common.Warning {
+	if state == nil {
+		return nil
+	}
+	var warnings []common.Warning
+	if state.PollCatchups >= followImportsPollCatchupWarningThreshold {
+		warnings = append(warnings, common.Warning{
+			Code:    common.WarnFollowImportsPollCatchup,
+			Message: fmt.Sprintf("notify mode required poll catchup %d times and %d bytes so far", state.PollCatchups, state.PollCatchupBytes),
+		})
+	}
+	return warnings
+}
+
 func followImportsPathsEqual(left string, right string) bool {
 	left = filepath.Clean(strings.TrimSpace(left))
 	right = filepath.Clean(strings.TrimSpace(right))
@@ -1001,6 +1087,9 @@ func formatFollowImportsAggregateReport(report followImportsAggregateReport) str
 		fmt.Sprintf("watch_transitions=%d", report.WatchTransitions),
 		fmt.Sprintf("last_fallback_reason=%s", fallbackString(report.LastFallbackReason)),
 		fmt.Sprintf("watch_event_count=%d", report.WatchEventCount),
+		fmt.Sprintf("watch_poll_catchups=%d", report.WatchPollCatchups),
+		fmt.Sprintf("watch_poll_catchup_bytes=%d", report.WatchCatchupBytes),
+		fmt.Sprintf("warnings=%d", len(report.Warnings)),
 		fmt.Sprintf("total_consumed_bytes=%d", report.TotalConsumedBytes),
 		fmt.Sprintf("total_pending_bytes=%d", report.TotalPendingBytes),
 	}
@@ -1014,6 +1103,15 @@ func formatFollowImportsAggregateReport(report followImportsAggregateReport) str
 			fmt.Sprintf("%s_active_watch_mode=%s", prefix, fallbackString(event.ActiveWatchMode)),
 			fmt.Sprintf("%s_reason=%s", prefix, fallbackString(event.Reason)),
 			fmt.Sprintf("%s_fallbacks=%d", prefix, event.Fallbacks),
+			fmt.Sprintf("%s_consumed_inputs=%d", prefix, event.ConsumedInputs),
+			fmt.Sprintf("%s_consumed_bytes=%d", prefix, event.ConsumedBytes),
+		)
+	}
+	for i, warning := range report.Warnings {
+		prefix := fmt.Sprintf("warning_%d", i+1)
+		lines = append(lines,
+			fmt.Sprintf("%s_code=%s", prefix, warning.Code),
+			fmt.Sprintf("%s_message=%s", prefix, warning.Message),
 		)
 	}
 	for i, inputReport := range report.Inputs {
@@ -1037,6 +1135,9 @@ func followImportsReportLines(report followImportsReport) []string {
 		fmt.Sprintf("watch_transitions=%d", report.WatchTransitions),
 		fmt.Sprintf("last_fallback_reason=%s", fallbackString(report.LastFallbackReason)),
 		fmt.Sprintf("watch_event_count=%d", report.WatchEventCount),
+		fmt.Sprintf("watch_poll_catchups=%d", report.WatchPollCatchups),
+		fmt.Sprintf("watch_poll_catchup_bytes=%d", report.WatchCatchupBytes),
+		fmt.Sprintf("warnings=%d", len(report.Warnings)),
 		fmt.Sprintf("offset=%d", report.Offset),
 		fmt.Sprintf("consumed_bytes=%d", report.ConsumedBytes),
 		fmt.Sprintf("pending_bytes=%d", report.PendingBytes),
@@ -1054,6 +1155,15 @@ func followImportsReportLines(report followImportsReport) []string {
 			fmt.Sprintf("%s_active_watch_mode=%s", prefix, fallbackString(event.ActiveWatchMode)),
 			fmt.Sprintf("%s_reason=%s", prefix, fallbackString(event.Reason)),
 			fmt.Sprintf("%s_fallbacks=%d", prefix, event.Fallbacks),
+			fmt.Sprintf("%s_consumed_inputs=%d", prefix, event.ConsumedInputs),
+			fmt.Sprintf("%s_consumed_bytes=%d", prefix, event.ConsumedBytes),
+		)
+	}
+	for i, warning := range report.Warnings {
+		prefix := fmt.Sprintf("warning_%d", i+1)
+		lines = append(lines,
+			fmt.Sprintf("%s_code=%s", prefix, warning.Code),
+			fmt.Sprintf("%s_message=%s", prefix, warning.Message),
 		)
 	}
 	if report.Batch != nil {
@@ -1159,6 +1269,18 @@ func runFollowImportsInputsOnce(ctx context.Context, instance *App, inputs []Fol
 	return reports, nil
 }
 
+func summarizeFollowImportsConsumption(reports []followImportsReport) (int, int) {
+	consumedInputs := 0
+	consumedBytes := 0
+	for _, report := range reports {
+		if report.ConsumedBytes > 0 {
+			consumedInputs++
+			consumedBytes += report.ConsumedBytes
+		}
+	}
+	return consumedInputs, consumedBytes
+}
+
 func newFollowImportsAggregateReport(source imports.Source, reports []followImportsReport) followImportsAggregateReport {
 	aggregate := followImportsAggregateReport{
 		Status:     "idle",
@@ -1232,4 +1354,88 @@ func sanitizeFollowImportsPathLabel(path string) string {
 		return "input"
 	}
 	return label
+}
+
+func followImportsHealthPath(logDir string) string {
+	logDir = strings.TrimSpace(logDir)
+	if logDir == "" {
+		return "follow-imports.health.json"
+	}
+	return filepath.Join(logDir, "follow-imports.health.json")
+}
+
+func saveFollowImportsHealthSnapshot(logDir string, snapshot followImportsHealthSnapshot) error {
+	path := followImportsHealthPath(logDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("prepare follow-imports health directory: %w", err)
+	}
+	body, err := marshalIndented(snapshot)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return fmt.Errorf("write follow-imports health snapshot: %w", err)
+	}
+	return nil
+}
+
+func loadFollowImportsHealthSnapshot(logDir string) (*followImportsHealthSnapshot, error) {
+	path := followImportsHealthPath(logDir)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read follow-imports health snapshot: %w", err)
+	}
+	var snapshot followImportsHealthSnapshot
+	if err := json.Unmarshal(body, &snapshot); err != nil {
+		return nil, fmt.Errorf("decode follow-imports health snapshot: %w", err)
+	}
+	return &snapshot, nil
+}
+
+func newFollowImportsHealthSnapshotFromReport(report followImportsReport, options followImportsOptions) followImportsHealthSnapshot {
+	return followImportsHealthSnapshot{
+		Status:              report.Status,
+		UpdatedAt:           time.Now().UTC(),
+		Source:              report.Source,
+		InputCount:          1,
+		Continuous:          !options.Once,
+		PollIntervalSeconds: followImportsSnapshotPollIntervalSeconds(options),
+		RequestedWatchMode:  report.RequestedWatchMode,
+		ActiveWatchMode:     report.ActiveWatchMode,
+		WatchFallbacks:      report.WatchFallbacks,
+		WatchTransitions:    report.WatchTransitions,
+		LastFallbackReason:  report.LastFallbackReason,
+		WatchPollCatchups:   report.WatchPollCatchups,
+		WatchCatchupBytes:   report.WatchCatchupBytes,
+		Warnings:            append([]common.Warning(nil), report.Warnings...),
+	}
+}
+
+func newFollowImportsHealthSnapshotFromAggregate(report followImportsAggregateReport, options followImportsOptions) followImportsHealthSnapshot {
+	return followImportsHealthSnapshot{
+		Status:              report.Status,
+		UpdatedAt:           time.Now().UTC(),
+		Source:              report.Source,
+		InputCount:          report.InputCount,
+		Continuous:          !options.Once,
+		PollIntervalSeconds: followImportsSnapshotPollIntervalSeconds(options),
+		RequestedWatchMode:  report.RequestedWatchMode,
+		ActiveWatchMode:     report.ActiveWatchMode,
+		WatchFallbacks:      report.WatchFallbacks,
+		WatchTransitions:    report.WatchTransitions,
+		LastFallbackReason:  report.LastFallbackReason,
+		WatchPollCatchups:   report.WatchPollCatchups,
+		WatchCatchupBytes:   report.WatchCatchupBytes,
+		Warnings:            append([]common.Warning(nil), report.Warnings...),
+	}
+}
+
+func followImportsSnapshotPollIntervalSeconds(options followImportsOptions) int64 {
+	if options.Once {
+		return 0
+	}
+	return int64(options.PollInterval / time.Second)
 }

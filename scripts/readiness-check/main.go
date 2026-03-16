@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
+
+const stringNone = "none"
 
 type doctorReport struct {
 	Status  string `json:"status"`
@@ -26,10 +29,32 @@ type doctorReport struct {
 		ExclusionAuditReady bool `json:"exclusion_audit_ready"`
 		ImportAuditReady    bool `json:"import_audit_ready"`
 	} `json:"audit"`
+	Follow struct {
+		HealthPresent         bool            `json:"health_present"`
+		LastUpdatedAt         *time.Time      `json:"last_updated_at"`
+		Status                string          `json:"status"`
+		Source                string          `json:"source"`
+		InputCount            int             `json:"input_count"`
+		Continuous            bool            `json:"continuous"`
+		PollIntervalSeconds   int64           `json:"poll_interval_seconds"`
+		SnapshotAgeSeconds    int64           `json:"snapshot_age_seconds"`
+		HealthStale           bool            `json:"health_stale"`
+		RequestedWatchMode    string          `json:"requested_watch_mode"`
+		ActiveWatchMode       string          `json:"active_watch_mode"`
+		WatchFallbacks        int             `json:"watch_fallbacks"`
+		WatchTransitions      int             `json:"watch_transitions"`
+		WatchPollCatchups     int             `json:"watch_poll_catchups"`
+		WatchPollCatchupBytes int             `json:"watch_poll_catchup_bytes"`
+		Warnings              []doctorWarning `json:"warnings"`
+	} `json:"follow_imports"`
 	MCP struct {
 		Transport string `json:"transport"`
 		ToolCount int    `json:"tool_count"`
 	} `json:"mcp"`
+}
+
+type doctorWarning struct {
+	Code string `json:"code"`
 }
 
 func main() {
@@ -68,18 +93,9 @@ func main() {
 		failf("http mcp smoke test did not report success\nstdout:\n%s\nstderr:\n%s", httpSmokeStdout, httpSmokeStderr)
 	}
 
-	fmt.Println("readiness check passed")
-	fmt.Printf("doctor_status=%s\n", doctor.Status)
-	fmt.Printf("doctor_mcp_transport=%s\n", doctor.MCP.Transport)
-	fmt.Printf("doctor_mcp_tool_count=%d\n", doctor.MCP.ToolCount)
-	fmt.Printf("doctor_schema_ready=%t\n", doctor.Runtime.RequiredSchemaOK)
-	fmt.Printf("doctor_fts_ready=%t\n", doctor.Runtime.FTSReady)
-	fmt.Printf("doctor_migrations_pending=%d\n", doctor.Migrations.Pending)
-	fmt.Printf("doctor_provenance_ready=%t\n", doctor.Audit.NoteProvenanceReady)
-	fmt.Printf("doctor_exclusion_audit_ready=%t\n", doctor.Audit.ExclusionAuditReady)
-	fmt.Printf("doctor_import_audit_ready=%t\n", doctor.Audit.ImportAuditReady)
-	fmt.Printf("stdio_mcp_smoke_test=%s\n", firstLine(smokeStdout))
-	fmt.Printf("http_mcp_smoke_test=%s\n", firstLine(httpSmokeStdout))
+	if err := writeReadinessSummary(os.Stdout, doctor, smokeStdout, httpSmokeStdout); err != nil {
+		failf("write readiness summary: %v", err)
+	}
 }
 
 func runGo(ctx context.Context, dir string, args ...string) (string, string, error) {
@@ -128,6 +144,45 @@ func assertDoctor(report doctorReport) {
 	}
 }
 
+func writeReadinessSummary(w io.Writer, doctor doctorReport, smokeStdout, httpSmokeStdout string) error {
+	lines := []string{
+		"readiness check passed",
+		fmt.Sprintf("doctor_status=%s", doctor.Status),
+		fmt.Sprintf("doctor_mcp_transport=%s", doctor.MCP.Transport),
+		fmt.Sprintf("doctor_mcp_tool_count=%d", doctor.MCP.ToolCount),
+		fmt.Sprintf("doctor_schema_ready=%t", doctor.Runtime.RequiredSchemaOK),
+		fmt.Sprintf("doctor_fts_ready=%t", doctor.Runtime.FTSReady),
+		fmt.Sprintf("doctor_migrations_pending=%d", doctor.Migrations.Pending),
+		fmt.Sprintf("doctor_provenance_ready=%t", doctor.Audit.NoteProvenanceReady),
+		fmt.Sprintf("doctor_exclusion_audit_ready=%t", doctor.Audit.ExclusionAuditReady),
+		fmt.Sprintf("doctor_import_audit_ready=%t", doctor.Audit.ImportAuditReady),
+		fmt.Sprintf("doctor_follow_imports_health_present=%t", doctor.Follow.HealthPresent),
+		fmt.Sprintf("doctor_follow_imports_status=%s", fallbackString(doctor.Follow.Status)),
+		fmt.Sprintf("doctor_follow_imports_source=%s", fallbackString(doctor.Follow.Source)),
+		fmt.Sprintf("doctor_follow_imports_input_count=%d", doctor.Follow.InputCount),
+		fmt.Sprintf("doctor_follow_imports_last_updated_at=%s", timePointerOrNone(doctor.Follow.LastUpdatedAt)),
+		fmt.Sprintf("doctor_follow_imports_continuous=%t", doctor.Follow.Continuous),
+		fmt.Sprintf("doctor_follow_imports_poll_interval_seconds=%d", doctor.Follow.PollIntervalSeconds),
+		fmt.Sprintf("doctor_follow_imports_snapshot_age_seconds=%d", doctor.Follow.SnapshotAgeSeconds),
+		fmt.Sprintf("doctor_follow_imports_health_stale=%t", doctor.Follow.HealthStale),
+		fmt.Sprintf("doctor_follow_imports_requested_watch_mode=%s", fallbackString(doctor.Follow.RequestedWatchMode)),
+		fmt.Sprintf("doctor_follow_imports_active_watch_mode=%s", fallbackString(doctor.Follow.ActiveWatchMode)),
+		fmt.Sprintf("doctor_follow_imports_watch_fallbacks=%d", doctor.Follow.WatchFallbacks),
+		fmt.Sprintf("doctor_follow_imports_watch_transitions=%d", doctor.Follow.WatchTransitions),
+		fmt.Sprintf("doctor_follow_imports_watch_poll_catchups=%d", doctor.Follow.WatchPollCatchups),
+		fmt.Sprintf("doctor_follow_imports_watch_poll_catchup_bytes=%d", doctor.Follow.WatchPollCatchupBytes),
+		fmt.Sprintf("doctor_follow_imports_warning_codes=%s", warningCodes(doctor.Follow.Warnings)),
+		fmt.Sprintf("stdio_mcp_smoke_test=%s", firstLine(smokeStdout)),
+		fmt.Sprintf("http_mcp_smoke_test=%s", firstLine(httpSmokeStdout)),
+	}
+	for _, line := range lines {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func firstLine(value string) string {
 	for _, line := range strings.Split(value, "\n") {
 		line = strings.TrimSpace(line)
@@ -136,6 +191,39 @@ func firstLine(value string) string {
 		}
 	}
 	return "none"
+}
+
+func fallbackString(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return stringNone
+	}
+	return value
+}
+
+func timePointerOrNone(value *time.Time) string {
+	if value == nil {
+		return stringNone
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func warningCodes(warnings []doctorWarning) string {
+	if len(warnings) == 0 {
+		return stringNone
+	}
+	codes := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		code := strings.TrimSpace(warning.Code)
+		if code == "" {
+			continue
+		}
+		codes = append(codes, code)
+	}
+	if len(codes) == 0 {
+		return stringNone
+	}
+	return strings.Join(codes, ",")
 }
 
 func failf(format string, args ...any) {

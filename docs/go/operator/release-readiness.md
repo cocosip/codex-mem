@@ -80,6 +80,8 @@ Confirm:
 - `exclusion_audit_ready=true`
 - `mcp_tool_count=11`
 
+If your deployment uses `follow-imports`, also inspect the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check`. Those lines surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state.
+
 ### 2. Test Suite
 
 Run:

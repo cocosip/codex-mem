@@ -62,6 +62,10 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
+		followHealth, err := loadFollowImportsHealthSnapshot(cfg.Meta.LogDir)
+		if err != nil {
+			return err
+		}
 		logger.Info("doctor check passed",
 			"database", cfg.File.DatabasePath,
 			"system", cfg.File.DefaultSystemName,
@@ -71,7 +75,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			"fts_ready", runtimeDiagnostics.FTSReady,
 			"json", options.JSON,
 		)
-		report := buildDoctorReport(cfg, runtimeDiagnostics, mcp.ToolCount())
+		report := buildDoctorReport(cfg, runtimeDiagnostics, mcp.ToolCount(), followHealth)
 		output := formatDoctorReport(report)
 		if options.JSON {
 			output, err = formatDoctorReportJSON(report)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"codex-mem/internal/config"
+	"codex-mem/internal/domain/common"
 )
 
 func TestRunDoctorPrintsEffectiveConfigSummary(t *testing.T) {
@@ -63,8 +64,140 @@ func TestRunDoctorPrintsEffectiveConfigSummary(t *testing.T) {
 		"import_audit_ready=true",
 		"log_file=" + cfg.File.LogFilePath,
 		"log_stderr=true",
+		"follow_imports_health_file=" + filepath.Join(cfg.Meta.LogDir, "follow-imports.health.json"),
+		"follow_imports_health_present=false",
+		"follow_imports_continuous=false",
+		"follow_imports_poll_interval_seconds=0",
+		"follow_imports_snapshot_age_seconds=0",
+		"follow_imports_health_stale=false",
 		"mcp_transport=stdio",
 		"mcp_tool_count=11",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunDoctorIncludesFollowImportsHealthSnapshot(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		File: config.FileConfig{
+			DatabasePath:      filepath.Join(root, "data", "codex-mem.db"),
+			DefaultSystemName: "codex-mem",
+			SQLiteDriver:      "sqlite",
+			BusyTimeout:       5 * time.Second,
+			JournalMode:       "WAL",
+			LogFilePath:       filepath.Join(root, "logs", "codex-mem.log"),
+			LogMaxSizeMB:      20,
+			LogMaxBackups:     10,
+			LogMaxAgeDays:     30,
+			LogCompress:       true,
+			LogAlsoStderr:     false,
+		},
+		Meta: config.LoadMetadata{
+			ConfigDir:      filepath.Join(root, "configs"),
+			ConfigFilePath: filepath.Join(root, "configs", "codex-mem.json"),
+			LogDir:         filepath.Join(root, "logs"),
+		},
+	}
+
+	snapshot := followImportsHealthSnapshot{
+		Status:              "partial",
+		UpdatedAt:           time.Now().UTC(),
+		Source:              "watcher_import",
+		InputCount:          2,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+		WatchFallbacks:      1,
+		WatchTransitions:    3,
+		LastFallbackReason:  "watcher_error",
+		WatchPollCatchups:   4,
+		WatchCatchupBytes:   256,
+		Warnings: []common.Warning{{
+			Code:    common.WarnFollowImportsPollCatchup,
+			Message: "notify mode required poll catchup 4 times and 256 bytes so far",
+		}},
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, snapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"doctor"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run doctor: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"follow_imports_health_present=true",
+		"follow_imports_status=partial",
+		"follow_imports_source=watcher_import",
+		"follow_imports_input_count=2",
+		"follow_imports_continuous=true",
+		"follow_imports_poll_interval_seconds=5",
+		"follow_imports_health_stale=false",
+		"follow_imports_watch_poll_catchups=4",
+		"follow_imports_watch_poll_catchup_bytes=256",
+		"follow_imports_warnings=1",
+		"follow_imports_warning_1_code=WARN_FOLLOW_IMPORTS_POLL_CATCHUP",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunDoctorFlagsStaleFollowImportsHealthSnapshot(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		File: config.FileConfig{
+			DatabasePath:      filepath.Join(root, "data", "codex-mem.db"),
+			DefaultSystemName: "codex-mem",
+			SQLiteDriver:      "sqlite",
+			BusyTimeout:       5 * time.Second,
+			JournalMode:       "WAL",
+			LogFilePath:       filepath.Join(root, "logs", "codex-mem.log"),
+			LogMaxSizeMB:      20,
+			LogMaxBackups:     10,
+			LogMaxAgeDays:     30,
+			LogCompress:       true,
+			LogAlsoStderr:     false,
+		},
+		Meta: config.LoadMetadata{
+			ConfigDir:      filepath.Join(root, "configs"),
+			ConfigFilePath: filepath.Join(root, "configs", "codex-mem.json"),
+			LogDir:         filepath.Join(root, "logs"),
+		},
+	}
+
+	snapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, snapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"doctor"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run doctor: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"follow_imports_health_present=true",
+		"follow_imports_health_stale=true",
+		"follow_imports_warnings=1",
+		"follow_imports_warning_1_code=WARN_FOLLOW_IMPORTS_HEALTH_STALE",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
@@ -210,6 +343,18 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 		Logging struct {
 			LogStderr bool `json:"log_stderr"`
 		} `json:"logging"`
+		Follow struct {
+			HealthFile          string           `json:"health_file"`
+			HealthPresent       bool             `json:"health_present"`
+			LastUpdatedAt       *time.Time       `json:"last_updated_at"`
+			Continuous          bool             `json:"continuous"`
+			PollIntervalSeconds int64            `json:"poll_interval_seconds"`
+			SnapshotAgeSeconds  int64            `json:"snapshot_age_seconds"`
+			HealthStale         bool             `json:"health_stale"`
+			WatchPollCatchups   int              `json:"watch_poll_catchups"`
+			WatchCatchupBytes   int              `json:"watch_poll_catchup_bytes"`
+			Warnings            []common.Warning `json:"warnings"`
+		} `json:"follow_imports"`
 		MCP struct {
 			Transport string `json:"transport"`
 			ToolCount int    `json:"tool_count"`
@@ -251,6 +396,12 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 	}
 	if report.Logging.LogStderr {
 		t.Fatal("expected log_stderr=false")
+	}
+	if report.Follow.HealthFile == "" || report.Follow.HealthPresent {
+		t.Fatalf("unexpected follow diagnostics: %+v", report.Follow)
+	}
+	if report.Follow.LastUpdatedAt != nil || report.Follow.Continuous || report.Follow.PollIntervalSeconds != 0 || report.Follow.SnapshotAgeSeconds != 0 || report.Follow.HealthStale || report.Follow.WatchPollCatchups != 0 || report.Follow.WatchCatchupBytes != 0 || len(report.Follow.Warnings) != 0 {
+		t.Fatalf("expected empty follow health snapshot, got %+v", report.Follow)
 	}
 	if report.MCP.Transport != "stdio" || report.MCP.ToolCount != 11 {
 		t.Fatalf("unexpected mcp diagnostics: %+v", report.MCP)

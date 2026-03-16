@@ -379,6 +379,36 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the next `follow-imports` slice should focus on explicitly detecting poll-caught dropped events during notify mode, or whether the current fallback-plus-recovery behavior is sufficient for operators.
+### 2026-03-16 Session Update
+
+- Completed: Added explicit notify safety-poll catchup observability to `follow-imports`. The runtime loop now distinguishes notify-event-triggered runs from poll-tick runs, and when notify mode remains active but a poll tick consumes appended bytes, the report emits a structured `watch_poll_catchup` event with consumed input and byte counts. This makes it visible when the polling safety net materially contributed to ingestion even though the watcher never fully fell back.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import slice should escalate `watch_poll_catchup` repeated occurrences into stronger operator warnings/metrics, or whether the current event stream is enough.
+### 2026-03-16 Session Update
+
+- Completed: Escalated repeated notify safety-poll catchup into summary-level warnings. `follow-imports` now keeps cumulative `watch_poll_catchups` and `watch_poll_catchup_bytes` counters in runtime state, surfaces them on both single-input and aggregate reports, and emits `WARN_FOLLOW_IMPORTS_POLL_CATCHUP` once the same process has needed poll catchup at least three times. App coverage now verifies the counters, threshold warning, and text output fields.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import slice should export these watch-health counters through `doctor` or another machine-readable diagnostics surface, or whether keeping them scoped to runtime follow reports is enough.
+### 2026-03-16 Session Update
+
+- Completed: Exposed last-known `follow-imports` watch health through `doctor`. Each emitted follow report now refreshes a `follow-imports.health.json` snapshot in the configured log directory, and `doctor` now reports whether that snapshot exists plus its last-known watch mode, fallback counts, poll-catchup counters, and follow-level warnings. App coverage now verifies both the empty-doctor case and the populated follow-health case.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import slice should age or prune stale follow-health snapshots, or whether simple last-known state is sufficient for operators.
+### 2026-03-16 Session Update
+
+- Completed: Added stale-snapshot detection to the `doctor` follow-health view. Follow-health snapshots now persist whether they came from continuous mode and which poll interval they used, and `doctor` marks a snapshot stale when a continuous follow process has not refreshed it for roughly three poll intervals with a 30-second minimum freshness window. Stale snapshots now add `WARN_FOLLOW_IMPORTS_HEALTH_STALE`, and app coverage verifies both fresh and stale follow-health reporting.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import slice should prune stale health files automatically, or whether operators should keep last-known stale state available until the next follow run overwrites it.
+### 2026-03-16 Session Update
+
+- Completed: Surfaced `doctor` follow-health into the broader `scripts/readiness-check` machine-readable summary without creating a second runtime source of truth. The readiness helper now echoes flat `doctor_follow_imports_*` lines for last-known follow status, staleness, watch mode, fallback/catchup counters, and warning codes straight from `doctor --json`; script-level tests cover both populated and missing follow-health cases; and maintainer/operator docs now call out that these lines are informational by default rather than a hard readiness gate.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether a later slice should add an explicit JSON summary mode for `scripts/readiness-check`, or whether the flat key/value output is enough for current automation consumers.
 
 ## Recommended Next Step
 

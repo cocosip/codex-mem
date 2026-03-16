@@ -144,6 +144,8 @@ That combined check now covers:
 2. stdio MCP smoke test
 3. HTTP MCP smoke test
 
+The summary output from `scripts/readiness-check` also echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. Those fields are informational by default and do not make the readiness helper fail on their own.
+
 ## Manual Client Checklist
 
 If you are wiring a real MCP client, confirm this order:

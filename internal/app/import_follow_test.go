@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"codex-mem/internal/db"
+	"codex-mem/internal/domain/common"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -180,6 +181,8 @@ func TestFollowImportsRuntimeStateApply(t *testing.T) {
 		Fallbacks:          2,
 		Transitions:        1,
 		LastFallbackReason: "watcher_error",
+		PollCatchups:       3,
+		PollCatchupBytes:   96,
 		PendingEvents: []followImportsEvent{
 			{
 				At:                 time.Date(2026, 3, 16, 6, 30, 0, 0, time.UTC),
@@ -214,6 +217,18 @@ func TestFollowImportsRuntimeStateApply(t *testing.T) {
 	if got, want := report.WatchEventCount, 1; got != want {
 		t.Fatalf("watch event count mismatch: got %d want %d", got, want)
 	}
+	if got, want := report.WatchPollCatchups, 3; got != want {
+		t.Fatalf("watch poll catchups mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.WatchCatchupBytes, 96; got != want {
+		t.Fatalf("watch poll catchup bytes mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Warnings[0].Code, common.WarnFollowImportsPollCatchup; got != want {
+		t.Fatalf("warning code mismatch: got %q want %q", got, want)
+	}
 	if len(report.WatchEvents) != 1 {
 		t.Fatalf("watch events mismatch: %+v", report.WatchEvents)
 	}
@@ -234,6 +249,12 @@ func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 		WatchTransitions:   2,
 		LastFallbackReason: "watcher_unavailable",
 		WatchEventCount:    1,
+		WatchPollCatchups:  3,
+		WatchCatchupBytes:  42,
+		Warnings: []common.Warning{{
+			Code:    common.WarnFollowImportsPollCatchup,
+			Message: "notify mode required poll catchup 3 times and 42 bytes so far",
+		}},
 		WatchEvents: []followImportsEvent{
 			{
 				At:                 time.Date(2026, 3, 16, 6, 45, 0, 0, time.UTC),
@@ -243,6 +264,8 @@ func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 				ActiveWatchMode:    "poll",
 				Reason:             "watcher_unavailable",
 				Fallbacks:          1,
+				ConsumedInputs:     1,
+				ConsumedBytes:      42,
 			},
 		},
 	})
@@ -254,8 +277,14 @@ func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 		"watch_transitions=2",
 		"last_fallback_reason=watcher_unavailable",
 		"watch_event_count=1",
+		"watch_poll_catchups=3",
+		"watch_poll_catchup_bytes=42",
+		"warnings=1",
+		"warning_1_code=WARN_FOLLOW_IMPORTS_POLL_CATCHUP",
 		"watch_event_1_kind=watch_fallback",
 		"watch_event_1_previous_watch_mode=notify",
+		"watch_event_1_consumed_inputs=1",
+		"watch_event_1_consumed_bytes=42",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("report output missing %q:\n%s", fragment, output)
@@ -343,6 +372,36 @@ func TestMarkFollowImportsRecoveryRecordsEvent(t *testing.T) {
 	}
 	if got, want := state.PendingEvents[0].Reason, "watcher_recovered"; got != want {
 		t.Fatalf("watch event reason mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestMarkFollowImportsPollCatchupRecordsEvent(t *testing.T) {
+	state := &followImportsRuntimeState{
+		Requested: followImportsWatchModeAuto,
+		Active:    followImportsWatchModeNotify,
+		Fallbacks: 1,
+	}
+
+	markFollowImportsPollCatchup(state, 2, 128)
+
+	if len(state.PendingEvents) != 1 {
+		t.Fatalf("expected one pending event, got %+v", state.PendingEvents)
+	}
+	event := state.PendingEvents[0]
+	if got, want := event.Kind, "watch_poll_catchup"; got != want {
+		t.Fatalf("watch event kind mismatch: got %q want %q", got, want)
+	}
+	if got, want := event.ConsumedInputs, 2; got != want {
+		t.Fatalf("consumed input count mismatch: got %d want %d", got, want)
+	}
+	if got, want := event.ConsumedBytes, 128; got != want {
+		t.Fatalf("consumed byte count mismatch: got %d want %d", got, want)
+	}
+	if got, want := state.PollCatchups, 1; got != want {
+		t.Fatalf("poll catchup count mismatch: got %d want %d", got, want)
+	}
+	if got, want := state.PollCatchupBytes, 128; got != want {
+		t.Fatalf("poll catchup bytes mismatch: got %d want %d", got, want)
 	}
 }
 
@@ -485,6 +544,41 @@ func TestBuildFollowImportsInputsDerivesPerInputFailureBases(t *testing.T) {
 	}
 }
 
+func TestSummarizeFollowImportsConsumption(t *testing.T) {
+	consumedInputs, consumedBytes := summarizeFollowImportsConsumption([]followImportsReport{
+		{ConsumedBytes: 0},
+		{ConsumedBytes: 12},
+		{ConsumedBytes: 8},
+	})
+	if got, want := consumedInputs, 2; got != want {
+		t.Fatalf("consumed input count mismatch: got %d want %d", got, want)
+	}
+	if got, want := consumedBytes, 20; got != want {
+		t.Fatalf("consumed byte count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestFollowImportsRuntimeWarningsThreshold(t *testing.T) {
+	warnings := followImportsRuntimeWarnings(&followImportsRuntimeState{
+		PollCatchups:     3,
+		PollCatchupBytes: 256,
+	})
+	if got, want := len(warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+	if got, want := warnings[0].Code, common.WarnFollowImportsPollCatchup; got != want {
+		t.Fatalf("warning code mismatch: got %q want %q", got, want)
+	}
+
+	noWarnings := followImportsRuntimeWarnings(&followImportsRuntimeState{
+		PollCatchups:     2,
+		PollCatchupBytes: 128,
+	})
+	if len(noWarnings) != 0 {
+		t.Fatalf("expected no warnings below threshold, got %+v", noWarnings)
+	}
+}
+
 func TestRunFollowImportsPollingRecoveryLoopRecoversWatcher(t *testing.T) {
 	root := t.TempDir()
 	inputPath := filepath.Join(root, "watched", "events.jsonl")
@@ -503,7 +597,7 @@ func TestRunFollowImportsPollingRecoveryLoopRecoversWatcher(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(inputPath), 0o755)
 	}()
 
-	err := runFollowImportsPollingRecoveryLoop(ctx, []string{inputPath}, 20*time.Millisecond, func() error {
+	err := runFollowImportsPollingRecoveryLoop(ctx, []string{inputPath}, 20*time.Millisecond, func(trigger followImportsRunTrigger) error {
 		runCount++
 		return nil
 	}, state)
