@@ -53,12 +53,14 @@ func TestRunDoctorPrintsEffectiveConfigSummary(t *testing.T) {
 		"required_schema_ok=true",
 		"fts_ready=true",
 		"migrations_pending=0",
-		"latest_migration_applied=004_searchability_controls.sql",
+		"latest_migration_applied=005_import_records.sql",
 		"note_records=0",
 		"handoff_records=0",
+		"import_records=0",
 		"note_source_invalid=0",
 		"note_provenance_ready=true",
 		"exclusion_audit_ready=true",
+		"import_audit_ready=true",
 		"log_file=" + cfg.File.LogFilePath,
 		"log_stderr=true",
 		"mcp_transport=stdio",
@@ -110,6 +112,9 @@ func TestRunDoctorReportsMissingConfigFileAsNone(t *testing.T) {
 	}
 	if !strings.Contains(output, "note_records=0") {
 		t.Fatalf("expected note_records=0 in output:\n%s", output)
+	}
+	if !strings.Contains(output, "import_records=0") {
+		t.Fatalf("expected import_records=0 in output:\n%s", output)
 	}
 }
 
@@ -197,8 +202,10 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 		} `json:"migrations"`
 		Audit struct {
 			NoteRecords         int  `json:"note_records"`
+			ImportRecords       int  `json:"import_records"`
 			NoteProvenanceReady bool `json:"note_provenance_ready"`
 			ExclusionAuditReady bool `json:"exclusion_audit_ready"`
+			ImportAuditReady    bool `json:"import_audit_ready"`
 		} `json:"audit"`
 		Logging struct {
 			LogStderr bool `json:"log_stderr"`
@@ -236,10 +243,10 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 	if report.Migrations.Pending != 0 {
 		t.Fatalf("expected no pending migrations, got %d", report.Migrations.Pending)
 	}
-	if report.Migrations.LatestApplied == nil || *report.Migrations.LatestApplied != "004_searchability_controls.sql" {
+	if report.Migrations.LatestApplied == nil || *report.Migrations.LatestApplied != "005_import_records.sql" {
 		t.Fatalf("unexpected latest applied migration: %+v", report.Migrations.LatestApplied)
 	}
-	if report.Audit.NoteRecords != 0 || !report.Audit.NoteProvenanceReady || !report.Audit.ExclusionAuditReady {
+	if report.Audit.NoteRecords != 0 || report.Audit.ImportRecords != 0 || !report.Audit.NoteProvenanceReady || !report.Audit.ExclusionAuditReady || !report.Audit.ImportAuditReady {
 		t.Fatalf("unexpected audit diagnostics: %+v", report.Audit)
 	}
 	if report.Logging.LogStderr {

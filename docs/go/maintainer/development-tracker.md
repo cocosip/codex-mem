@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Maintain the completed v1 implementation, keep maintainer/operator guidance aligned with the shipped baseline, and choose the next product or operator follow-up slice while keeping `modelcontextprotocol/go-sdk` as the only MCP runtime.
+Current target: Maintain the completed v1 implementation, land the imports MVP plumbing slice, and keep `modelcontextprotocol/go-sdk` as the only MCP runtime.
 
 ## Phase Progress
 
@@ -138,13 +138,13 @@ Tasks:
 
 Current session focus:
 
-- Keep maintainer and operator guidance aligned with the completed SDK-backed v1 baseline, then move on to the next product or operator follow-up slice.
+- Land the imports MVP plumbing slice without changing the existing nine-tool surface, then choose the next user-facing follow-up on top of it.
 
 Immediate next tasks:
 
-1. Fix stale doc paths or outdated readiness notes when they drift from the shipped layout.
-2. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path for code-bearing changes.
-3. Choose the next feature or operator slice outside MCP transport replacement.
+1. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path for code-bearing changes.
+2. Build imports MVP around durable import audit records, project-scoped dedupe, and privacy suppression.
+3. Expose import audit health through `doctor` so operators can inspect suppression/provenance readiness.
 4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
@@ -277,6 +277,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: choose a small product-facing or operator-facing follow-up slice and keep the regression harness in place for any code-bearing change.
+### 2026-03-16 Session Update
+
+- Completed: Added imports MVP plumbing with embedded `005_import_records.sql`, a new `internal/domain/imports` service, SQLite-backed import audit persistence in `internal/db/import_repository.go`, and `doctor`/runtime diagnostics coverage for import audit counts and readiness.
+- In progress: none.
+- Blockers: none.
+- Next step: choose the first caller for the import plumbing, such as an MCP-exposed import flow, a CLI command, or a watcher-side ingestion path that can create durable memory from imported artifacts.
 ## Recommended Next Step
 
 Recommended next implementation slice:

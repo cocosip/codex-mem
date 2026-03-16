@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 )
 
@@ -52,7 +53,7 @@ func TestInspectRuntimeReportsMigrationAndSchemaReadiness(t *testing.T) {
 	if diagnostics.Migrations.Pending != 0 {
 		t.Fatalf("expected no pending migrations, got %d", diagnostics.Migrations.Pending)
 	}
-	if got, want := diagnostics.Migrations.LatestApplied, "004_searchability_controls.sql"; got != want {
+	if got, want := diagnostics.Migrations.LatestApplied, "005_import_records.sql"; got != want {
 		t.Fatalf("latest applied migration mismatch: got %q want %q", got, want)
 	}
 	if !diagnostics.Audit.NoteProvenanceReady {
@@ -60,6 +61,9 @@ func TestInspectRuntimeReportsMigrationAndSchemaReadiness(t *testing.T) {
 	}
 	if !diagnostics.Audit.ExclusionAuditReady {
 		t.Fatal("expected empty store to be exclusion-audit ready")
+	}
+	if !diagnostics.Audit.ImportAuditReady {
+		t.Fatal("expected empty store to be import-audit ready")
 	}
 }
 
@@ -79,6 +83,7 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	ref, sessionID := seedScopeAndSession(t, handle)
 	memoryRepo := NewMemoryRepository(handle)
 	handoffRepo := NewHandoffRepository(handle)
+	importRepo := NewImportRepository(handle)
 	now := time.Date(2026, 3, 13, 10, 0, 0, 0, time.UTC)
 
 	for _, note := range []struct {
@@ -142,6 +147,30 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Create open handoff: %v", err)
 	}
+	if err := importRepo.Create(imports.Record{
+		ID:              "import_note",
+		Scope:           ref,
+		SessionID:       sessionID,
+		Source:          imports.SourceWatcherImport,
+		ExternalID:      "watcher:1",
+		PayloadHash:     "hash-1",
+		DurableMemoryID: "note_import",
+		ImportedAt:      now.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("Create import_note: %v", err)
+	}
+	if err := importRepo.Create(imports.Record{
+		ID:                "import_blocked",
+		Scope:             ref,
+		SessionID:         sessionID,
+		Source:            imports.SourceRelayImport,
+		ExternalID:        "relay:1",
+		Suppressed:        true,
+		SuppressionReason: "privacy_intent",
+		ImportedAt:        now.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create import_blocked: %v", err)
+	}
 
 	diagnostics, err := InspectRuntime(ctx, handle)
 	if err != nil {
@@ -153,6 +182,9 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	}
 	if got, want := diagnostics.Audit.HandoffRecords, 2; got != want {
 		t.Fatalf("handoff record count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, 2; got != want {
+		t.Fatalf("import record count mismatch: got %d want %d", got, want)
 	}
 	if got, want := diagnostics.Audit.NotesCodexExplicit, 1; got != want {
 		t.Fatalf("explicit note count mismatch: got %d want %d", got, want)
@@ -175,6 +207,18 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	if got, want := diagnostics.Audit.OpenHandoffs, 2; got != want {
 		t.Fatalf("open handoff count mismatch: got %d want %d", got, want)
 	}
+	if got, want := diagnostics.Audit.ImportsWatcherImport, 1; got != want {
+		t.Fatalf("watcher import record count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportsRelayImport, 1; got != want {
+		t.Fatalf("relay import record count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.SuppressedImports, 1; got != want {
+		t.Fatalf("suppressed import count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportsLinkedMemory, 1; got != want {
+		t.Fatalf("linked import count mismatch: got %d want %d", got, want)
+	}
 	if diagnostics.Audit.NotesInvalidSource != 0 {
 		t.Fatalf("expected no invalid note sources, got %d", diagnostics.Audit.NotesInvalidSource)
 	}
@@ -183,5 +227,8 @@ func TestInspectRuntimeReportsAuditCounts(t *testing.T) {
 	}
 	if !diagnostics.Audit.ExclusionAuditReady {
 		t.Fatal("expected exclusion audit to be ready")
+	}
+	if !diagnostics.Audit.ImportAuditReady {
+		t.Fatal("expected import audit to be ready")
 	}
 }

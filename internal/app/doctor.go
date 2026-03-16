@@ -52,21 +52,29 @@ type doctorMigrationsReport struct {
 }
 
 type doctorAuditReport struct {
-	NoteRecords                   int  `json:"note_records"`
-	HandoffRecords                int  `json:"handoff_records"`
-	NotesCodexExplicit            int  `json:"notes_codex_explicit"`
-	NotesWatcherImport            int  `json:"notes_watcher_import"`
-	NotesRelayImport              int  `json:"notes_relay_import"`
-	NotesRecoveryGenerated        int  `json:"notes_recovery_generated"`
-	NotesInvalidSource            int  `json:"notes_invalid_source"`
-	ExcludedNotes                 int  `json:"excluded_notes"`
-	ExcludedHandoffs              int  `json:"excluded_handoffs"`
-	ExcludedNotesMissingReason    int  `json:"excluded_notes_missing_reason"`
-	ExcludedHandoffsMissingReason int  `json:"excluded_handoffs_missing_reason"`
-	RecoveryHandoffs              int  `json:"recovery_handoffs"`
-	OpenHandoffs                  int  `json:"open_handoffs"`
-	NoteProvenanceReady           bool `json:"note_provenance_ready"`
-	ExclusionAuditReady           bool `json:"exclusion_audit_ready"`
+	NoteRecords                    int  `json:"note_records"`
+	HandoffRecords                 int  `json:"handoff_records"`
+	ImportRecords                  int  `json:"import_records"`
+	NotesCodexExplicit             int  `json:"notes_codex_explicit"`
+	NotesWatcherImport             int  `json:"notes_watcher_import"`
+	NotesRelayImport               int  `json:"notes_relay_import"`
+	NotesRecoveryGenerated         int  `json:"notes_recovery_generated"`
+	NotesInvalidSource             int  `json:"notes_invalid_source"`
+	ImportsWatcherImport           int  `json:"imports_watcher_import"`
+	ImportsRelayImport             int  `json:"imports_relay_import"`
+	SuppressedImports              int  `json:"suppressed_imports"`
+	SuppressedImportsMissingReason int  `json:"suppressed_imports_missing_reason"`
+	ImportsMissingDedupeKey        int  `json:"imports_missing_dedupe_key"`
+	ImportsLinkedMemory            int  `json:"imports_linked_memory"`
+	ExcludedNotes                  int  `json:"excluded_notes"`
+	ExcludedHandoffs               int  `json:"excluded_handoffs"`
+	ExcludedNotesMissingReason     int  `json:"excluded_notes_missing_reason"`
+	ExcludedHandoffsMissingReason  int  `json:"excluded_handoffs_missing_reason"`
+	RecoveryHandoffs               int  `json:"recovery_handoffs"`
+	OpenHandoffs                   int  `json:"open_handoffs"`
+	NoteProvenanceReady            bool `json:"note_provenance_ready"`
+	ExclusionAuditReady            bool `json:"exclusion_audit_ready"`
+	ImportAuditReady               bool `json:"import_audit_ready"`
 }
 
 type doctorLoggingReport struct {
@@ -126,21 +134,29 @@ func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCou
 			LatestApplied:   stringPointerOrNil(runtime.Migrations.LatestApplied),
 		},
 		Audit: doctorAuditReport{
-			NoteRecords:                   runtime.Audit.NoteRecords,
-			HandoffRecords:                runtime.Audit.HandoffRecords,
-			NotesCodexExplicit:            runtime.Audit.NotesCodexExplicit,
-			NotesWatcherImport:            runtime.Audit.NotesWatcherImport,
-			NotesRelayImport:              runtime.Audit.NotesRelayImport,
-			NotesRecoveryGenerated:        runtime.Audit.NotesRecoveryGenerated,
-			NotesInvalidSource:            runtime.Audit.NotesInvalidSource,
-			ExcludedNotes:                 runtime.Audit.ExcludedNotes,
-			ExcludedHandoffs:              runtime.Audit.ExcludedHandoffs,
-			ExcludedNotesMissingReason:    runtime.Audit.ExcludedNotesMissingReason,
-			ExcludedHandoffsMissingReason: runtime.Audit.ExcludedHandoffsMissingReason,
-			RecoveryHandoffs:              runtime.Audit.RecoveryHandoffs,
-			OpenHandoffs:                  runtime.Audit.OpenHandoffs,
-			NoteProvenanceReady:           runtime.Audit.NoteProvenanceReady,
-			ExclusionAuditReady:           runtime.Audit.ExclusionAuditReady,
+			NoteRecords:                    runtime.Audit.NoteRecords,
+			HandoffRecords:                 runtime.Audit.HandoffRecords,
+			ImportRecords:                  runtime.Audit.ImportRecords,
+			NotesCodexExplicit:             runtime.Audit.NotesCodexExplicit,
+			NotesWatcherImport:             runtime.Audit.NotesWatcherImport,
+			NotesRelayImport:               runtime.Audit.NotesRelayImport,
+			NotesRecoveryGenerated:         runtime.Audit.NotesRecoveryGenerated,
+			NotesInvalidSource:             runtime.Audit.NotesInvalidSource,
+			ImportsWatcherImport:           runtime.Audit.ImportsWatcherImport,
+			ImportsRelayImport:             runtime.Audit.ImportsRelayImport,
+			SuppressedImports:              runtime.Audit.SuppressedImports,
+			SuppressedImportsMissingReason: runtime.Audit.SuppressedImportsMissingReason,
+			ImportsMissingDedupeKey:        runtime.Audit.ImportsMissingDedupeKey,
+			ImportsLinkedMemory:            runtime.Audit.ImportsLinkedMemory,
+			ExcludedNotes:                  runtime.Audit.ExcludedNotes,
+			ExcludedHandoffs:               runtime.Audit.ExcludedHandoffs,
+			ExcludedNotesMissingReason:     runtime.Audit.ExcludedNotesMissingReason,
+			ExcludedHandoffsMissingReason:  runtime.Audit.ExcludedHandoffsMissingReason,
+			RecoveryHandoffs:               runtime.Audit.RecoveryHandoffs,
+			OpenHandoffs:                   runtime.Audit.OpenHandoffs,
+			NoteProvenanceReady:            runtime.Audit.NoteProvenanceReady,
+			ExclusionAuditReady:            runtime.Audit.ExclusionAuditReady,
+			ImportAuditReady:               runtime.Audit.ImportAuditReady,
 		},
 		Logging: doctorLoggingReport{
 			LogFile:       cfg.File.LogFilePath,
@@ -180,11 +196,18 @@ func formatDoctorReport(report doctorReport) string {
 		fmt.Sprintf("latest_migration_applied=%s", pointerStringOrNone(report.Migrations.LatestApplied)),
 		fmt.Sprintf("note_records=%d", report.Audit.NoteRecords),
 		fmt.Sprintf("handoff_records=%d", report.Audit.HandoffRecords),
+		fmt.Sprintf("import_records=%d", report.Audit.ImportRecords),
 		fmt.Sprintf("note_source_codex_explicit=%d", report.Audit.NotesCodexExplicit),
 		fmt.Sprintf("note_source_watcher_import=%d", report.Audit.NotesWatcherImport),
 		fmt.Sprintf("note_source_relay_import=%d", report.Audit.NotesRelayImport),
 		fmt.Sprintf("note_source_recovery_generated=%d", report.Audit.NotesRecoveryGenerated),
 		fmt.Sprintf("note_source_invalid=%d", report.Audit.NotesInvalidSource),
+		fmt.Sprintf("import_source_watcher_import=%d", report.Audit.ImportsWatcherImport),
+		fmt.Sprintf("import_source_relay_import=%d", report.Audit.ImportsRelayImport),
+		fmt.Sprintf("suppressed_imports=%d", report.Audit.SuppressedImports),
+		fmt.Sprintf("suppressed_imports_missing_reason=%d", report.Audit.SuppressedImportsMissingReason),
+		fmt.Sprintf("imports_missing_dedupe_key=%d", report.Audit.ImportsMissingDedupeKey),
+		fmt.Sprintf("imports_linked_memory=%d", report.Audit.ImportsLinkedMemory),
 		fmt.Sprintf("excluded_notes=%d", report.Audit.ExcludedNotes),
 		fmt.Sprintf("excluded_handoffs=%d", report.Audit.ExcludedHandoffs),
 		fmt.Sprintf("excluded_notes_missing_reason=%d", report.Audit.ExcludedNotesMissingReason),
@@ -193,6 +216,7 @@ func formatDoctorReport(report doctorReport) string {
 		fmt.Sprintf("open_handoffs=%d", report.Audit.OpenHandoffs),
 		fmt.Sprintf("note_provenance_ready=%t", report.Audit.NoteProvenanceReady),
 		fmt.Sprintf("exclusion_audit_ready=%t", report.Audit.ExclusionAuditReady),
+		fmt.Sprintf("import_audit_ready=%t", report.Audit.ImportAuditReady),
 		fmt.Sprintf("log_file=%s", report.Logging.LogFile),
 		fmt.Sprintf("log_level=%s", report.Logging.LogLevel),
 		fmt.Sprintf("log_max_size_mb=%d", report.Logging.LogMaxSizeMB),

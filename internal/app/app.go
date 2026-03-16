@@ -11,6 +11,7 @@ import (
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/retrieval"
 	"codex-mem/internal/domain/scope"
@@ -27,6 +28,7 @@ type App struct {
 	SessionService   *session.Service
 	MemoryService    *memory.Service
 	HandoffService   *handoff.Service
+	ImportService    *imports.Service
 	RetrievalService *retrieval.Service
 	AgentsService    *agents.Service
 	Handlers         *mcp.Handlers
@@ -56,6 +58,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	sessionRepo := db.NewSessionRepository(store)
 	memoryRepo := db.NewMemoryRepository(store)
 	handoffRepo := db.NewHandoffRepository(store)
+	importRepo := db.NewImportRepository(store)
 	scopeService := scope.NewService(scopeRepo, scope.Options{
 		DefaultSystemName: cfg.File.DefaultSystemName,
 	})
@@ -72,6 +75,10 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Clock:     clock,
 		IDFactory: ids,
 	})
+	importService := imports.NewService(importRepo, imports.Options{
+		Clock:     clock,
+		IDFactory: ids,
+	})
 	retrievalService := retrieval.NewService(scopeService, sessionService, memoryRepo, handoffRepo)
 
 	return &App{
@@ -82,6 +89,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		SessionService:   sessionService,
 		MemoryService:    memoryService,
 		HandoffService:   handoffService,
+		ImportService:    importService,
 		RetrievalService: retrievalService,
 		AgentsService:    agentsService,
 		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, retrievalService, agentsService),

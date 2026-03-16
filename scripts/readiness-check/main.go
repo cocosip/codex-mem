@@ -24,6 +24,7 @@ type doctorReport struct {
 	Audit struct {
 		NoteProvenanceReady bool `json:"note_provenance_ready"`
 		ExclusionAuditReady bool `json:"exclusion_audit_ready"`
+		ImportAuditReady    bool `json:"import_audit_ready"`
 	} `json:"audit"`
 	MCP struct {
 		Transport string `json:"transport"`
@@ -76,6 +77,7 @@ func main() {
 	fmt.Printf("doctor_migrations_pending=%d\n", doctor.Migrations.Pending)
 	fmt.Printf("doctor_provenance_ready=%t\n", doctor.Audit.NoteProvenanceReady)
 	fmt.Printf("doctor_exclusion_audit_ready=%t\n", doctor.Audit.ExclusionAuditReady)
+	fmt.Printf("doctor_import_audit_ready=%t\n", doctor.Audit.ImportAuditReady)
 	fmt.Printf("stdio_mcp_smoke_test=%s\n", firstLine(smokeStdout))
 	fmt.Printf("http_mcp_smoke_test=%s\n", firstLine(httpSmokeStdout))
 }
@@ -120,6 +122,9 @@ func assertDoctor(report doctorReport) {
 	}
 	if !report.Audit.ExclusionAuditReady {
 		failf("doctor exclusion_audit_ready=false")
+	}
+	if !report.Audit.ImportAuditReady {
+		failf("doctor import_audit_ready=false")
 	}
 }
 

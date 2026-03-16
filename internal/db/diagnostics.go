@@ -33,21 +33,29 @@ type MigrationDiagnostics struct {
 
 // AuditDiagnostics reports provenance and exclusion audit counts.
 type AuditDiagnostics struct {
-	NoteRecords                   int
-	HandoffRecords                int
-	NotesCodexExplicit            int
-	NotesWatcherImport            int
-	NotesRelayImport              int
-	NotesRecoveryGenerated        int
-	NotesInvalidSource            int
-	ExcludedNotes                 int
-	ExcludedHandoffs              int
-	ExcludedNotesMissingReason    int
-	ExcludedHandoffsMissingReason int
-	RecoveryHandoffs              int
-	OpenHandoffs                  int
-	NoteProvenanceReady           bool
-	ExclusionAuditReady           bool
+	NoteRecords                    int
+	HandoffRecords                 int
+	ImportRecords                  int
+	NotesCodexExplicit             int
+	NotesWatcherImport             int
+	NotesRelayImport               int
+	NotesRecoveryGenerated         int
+	NotesInvalidSource             int
+	ImportsWatcherImport           int
+	ImportsRelayImport             int
+	SuppressedImports              int
+	SuppressedImportsMissingReason int
+	ImportsMissingDedupeKey        int
+	ImportsLinkedMemory            int
+	ExcludedNotes                  int
+	ExcludedHandoffs               int
+	ExcludedNotesMissingReason     int
+	ExcludedHandoffsMissingReason  int
+	RecoveryHandoffs               int
+	OpenHandoffs                   int
+	NoteProvenanceReady            bool
+	ExclusionAuditReady            bool
+	ImportAuditReady               bool
 }
 
 // InspectRuntime inspects the SQLite runtime, schema, migrations, and audit counters.
@@ -195,6 +203,7 @@ func hasRequiredSchema(ctx context.Context, handle *sql.DB) (bool, error) {
 		"sessions",
 		"memory_items",
 		"handoffs",
+		"imports",
 		"schema_migrations",
 	}
 
@@ -279,6 +288,28 @@ func inspectAudit(ctx context.Context, handle *sql.DB) (AuditDiagnostics, error)
 	if err := handle.QueryRowContext(ctx, `
 		SELECT
 			COUNT(1),
+			COALESCE(SUM(CASE WHEN source = 'watcher_import' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN source = 'relay_import' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN suppressed = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN suppressed = 1 AND TRIM(COALESCE(suppression_reason, '')) = '' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN TRIM(COALESCE(external_id, '')) = '' AND TRIM(COALESCE(payload_hash, '')) = '' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN TRIM(COALESCE(durable_memory_id, '')) <> '' THEN 1 ELSE 0 END), 0)
+		FROM imports
+	`).Scan(
+		&audit.ImportRecords,
+		&audit.ImportsWatcherImport,
+		&audit.ImportsRelayImport,
+		&audit.SuppressedImports,
+		&audit.SuppressedImportsMissingReason,
+		&audit.ImportsMissingDedupeKey,
+		&audit.ImportsLinkedMemory,
+	); err != nil {
+		return AuditDiagnostics{}, common.WrapError(common.ErrReadFailed, "inspect import audit diagnostics", err)
+	}
+
+	if err := handle.QueryRowContext(ctx, `
+		SELECT
+			COUNT(1),
 			COALESCE(SUM(CASE WHEN searchable = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN searchable = 0 AND TRIM(COALESCE(exclusion_reason, '')) = '' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN kind = 'recovery' THEN 1 ELSE 0 END), 0),
@@ -296,5 +327,6 @@ func inspectAudit(ctx context.Context, handle *sql.DB) (AuditDiagnostics, error)
 
 	audit.NoteProvenanceReady = audit.NotesInvalidSource == 0
 	audit.ExclusionAuditReady = audit.ExcludedNotesMissingReason == 0 && audit.ExcludedHandoffsMissingReason == 0
+	audit.ImportAuditReady = audit.SuppressedImportsMissingReason == 0 && audit.ImportsMissingDedupeKey == 0
 	return audit, nil
 }

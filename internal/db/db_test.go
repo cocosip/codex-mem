@@ -9,6 +9,7 @@ import (
 
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/scope"
 	"codex-mem/internal/domain/session"
@@ -374,6 +375,93 @@ func TestMemoryAndHandoffRepositoriesSupportRecentAndByIDReads(t *testing.T) {
 	loadedHandoff, err := handoffRepo.GetByID("handoff_ws")
 	if err != nil || loadedHandoff == nil || loadedHandoff.ID != "handoff_ws" {
 		t.Fatalf("GetByID handoff failed: handoff=%+v err=%v", loadedHandoff, err)
+	}
+}
+
+func TestImportRepositoryPersistsAndDedupesProjectScopedRecords(t *testing.T) {
+	ctx := context.Background()
+	handle, err := Open(ctx, Options{
+		Path:        filepath.Join(t.TempDir(), "codex-mem.db"),
+		DriverName:  "sqlite",
+		BusyTimeout: 2 * time.Second,
+		JournalMode: "WAL",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { closeTestHandle(t, handle) })
+
+	ref, sessionID := seedScopeAndSession(t, handle)
+	siblingRef := seedSameProjectScope(t, handle)
+	importRepo := NewImportRepository(handle)
+	now := time.Date(2026, 3, 16, 4, 0, 0, 0, time.UTC)
+
+	record := imports.Record{
+		ID:              "import_test",
+		Scope:           ref,
+		SessionID:       sessionID,
+		Source:          imports.SourceWatcherImport,
+		ExternalID:      "watcher:123",
+		PayloadHash:     "hash-123",
+		DurableMemoryID: "note_test",
+		ImportedAt:      now,
+	}
+	if err := importRepo.Create(record); err != nil {
+		t.Fatalf("Create import record: %v", err)
+	}
+
+	duplicate, err := importRepo.FindDuplicate(imports.Record{
+		Scope:      siblingRef,
+		Source:     imports.SourceWatcherImport,
+		ExternalID: "watcher:123",
+	})
+	if err != nil {
+		t.Fatalf("FindDuplicate external id: %v", err)
+	}
+	if duplicate == nil || duplicate.ID != record.ID {
+		t.Fatalf("expected duplicate import %q by external id, got %+v", record.ID, duplicate)
+	}
+
+	duplicate, err = importRepo.FindDuplicate(imports.Record{
+		Scope:       siblingRef,
+		Source:      imports.SourceWatcherImport,
+		PayloadHash: "hash-123",
+	})
+	if err != nil {
+		t.Fatalf("FindDuplicate payload hash: %v", err)
+	}
+	if duplicate == nil || duplicate.ID != record.ID {
+		t.Fatalf("expected duplicate import %q by payload hash, got %+v", record.ID, duplicate)
+	}
+}
+
+func TestImportRepositoryRejectsSessionScopeMismatch(t *testing.T) {
+	ctx := context.Background()
+	handle, err := Open(ctx, Options{
+		Path:        filepath.Join(t.TempDir(), "codex-mem.db"),
+		DriverName:  "sqlite",
+		BusyTimeout: 2 * time.Second,
+		JournalMode: "WAL",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { closeTestHandle(t, handle) })
+
+	_, sessionID := seedScopeAndSession(t, handle)
+	otherRef := seedAlternateScope(t, handle)
+	importRepo := NewImportRepository(handle)
+
+	err = importRepo.Create(imports.Record{
+		ID:         "import_bad",
+		Scope:      otherRef,
+		SessionID:  sessionID,
+		Source:     imports.SourceRelayImport,
+		ExternalID: "relay:bad",
+		ImportedAt: time.Date(2026, 3, 16, 4, 10, 0, 0, time.UTC),
+	})
+	if err == nil {
+		t.Fatal("expected import create to fail for session scope mismatch")
 	}
 }
 
