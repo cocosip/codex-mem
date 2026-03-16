@@ -10,7 +10,7 @@ It stores structured notes and handoffs in SQLite, restores continuity across re
 - `serve-http` runs a native MCP HTTP server for remote or private deployment.
 - `doctor` reports config, database readiness, migration status, provenance coverage, and MCP tool availability.
 - AGENTS template installation is implemented for global and project workflows.
-- one-shot watcher/relay batch ingestion is available through `ingest-imports`.
+- watcher/relay import ingestion is available as one-shot batches through `ingest-imports` and as a checkpointed long-lived adapter through `follow-imports`.
 
 Normative product docs live in [docs/spec/README.md](docs/spec/README.md).
 Go implementation docs now live under [docs/go/README.md](docs/go/README.md), grouped into user, operator, and maintainer directories.
@@ -24,7 +24,7 @@ Use the docs by audience:
 - [Operator docs](docs/go/operator/README.md)
   Client registration, deployment/readiness, packaging, and troubleshooting.
 - [Import ingestion guide](docs/go/operator/import-ingestion.md)
-  JSONL batch ingestion for watcher and relay artifacts through `ingest-imports`.
+  JSONL batch and checkpointed follow-mode ingestion for watcher and relay artifacts.
 - [Maintainer docs](docs/go/maintainer/README.md)
   Source-tree MCP integration, implementation planning, and development tracking.
 
@@ -76,8 +76,10 @@ They are not MCP tools and are not the normal end-user interaction path.
   Prints effective config plus runtime readiness and audit diagnostics.
 - `codex-mem doctor --json`
   Prints the same diagnostics in machine-readable JSON for automation or CI checks.
-- `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--json]`
-  Imports newline-delimited watcher or relay note events into durable imported notes plus audit records.
+- `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--json] [--continue-on-error] [--failed-output failed.jsonl] [--failed-manifest failed.json]`
+  Imports newline-delimited watcher or relay note events into durable imported notes plus audit records, with optional partial-success handling plus retry-oriented failure exports.
+- `codex-mem follow-imports --source watcher_import --input events.jsonl [--state-file events.offset.json] [--poll-interval 5s] [--once] [--json]`
+  Follows a watcher or relay JSONL file incrementally, checkpoints the last consumed offset, and reuses the same imported-note workflow for newly appended complete lines.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`

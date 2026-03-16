@@ -7,7 +7,7 @@ Start here:
 - [Client Examples](./client-examples.md)
   Real MCP client registration examples for local stdio and remote HTTP.
 - [Import Ingestion](./import-ingestion.md)
-  JSONL batch ingestion for watcher or relay artifacts through `ingest-imports`.
+  JSONL batch ingestion through `ingest-imports` plus checkpointed follow-mode ingestion through `follow-imports`.
 - [Release Readiness](./release-readiness.md)
   Packaging, readiness, and release checklist.
 - [Troubleshooting](./troubleshooting.md)

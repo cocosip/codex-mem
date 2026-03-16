@@ -120,6 +120,7 @@ Responsibilities:
 - initialize services
 - register MCP tools
 - start server mode
+- expose reusable app-level workflows such as import ingestion for future in-process integrations
 
 ### `internal/config`
 

@@ -313,6 +313,36 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether `ingest-imports` should remain the main watcher/relay bridge for now or whether a more direct long-lived integration path is worth adding later.
+### 2026-03-16 Session Update
+
+- Completed: Added `ingest-imports --continue-on-error` so watcher/relay batches can keep importing valid lines while collecting per-line decode/write failures in the text/JSON report. Default behavior remains fail-fast for compatibility, but partial-success mode now reports `status`, attempted/failed counts, and structured line errors; app coverage verifies partial success and the all-failed path.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether partial-success mode is enough for watcher/relay operators for now, or whether they also need richer retry/export behavior for failed lines.
+### 2026-03-16 Session Update
+
+- Completed: Added `ingest-imports --failed-output <path>` for `--continue-on-error` batches so failed raw JSONL lines can be exported unchanged for later replay. The CLI report now includes the resolved failed-output path plus written count, and app coverage verifies both partial-success export and all-failed export behavior.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether failed-line export is enough for operators or whether the next slice should add a richer retry manifest with error metadata alongside the raw replay file.
+### 2026-03-16 Session Update
+
+- Completed: Added `ingest-imports --failed-manifest <path>` so `--continue-on-error` batches can emit a JSON retry manifest with line numbers, error payloads, raw failed lines, and failed-output line numbers. The main report now surfaces the manifest path/count, and app coverage verifies manifest validation plus partial/all-failed export behavior.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the operator path is now sufficient, or whether the next import slice should focus on a more direct watcher/relay integration instead of more CLI/reporting polish.
+### 2026-03-16 Session Update
+
+- Completed: Extracted the import batch workflow into a reusable app-level entrypoint `(*App).IngestImports(...)` so future in-process watcher/relay integrations can reuse the same scope resolution, session creation, imported-note materialization, and failure-export behavior without shelling out to the CLI. The CLI command now delegates to that method, and app coverage verifies the embedded path directly.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to build an actual in-tree watcher/relay adapter on top of `App.IngestImports`, or stop here and treat the reusable app method as sufficient integration scaffolding for now.
+### 2026-03-16 Session Update
+
+- Completed: Added `follow-imports` as a checkpointed long-lived adapter on top of `App.IngestImports(...)`. The new command polls a JSONL file for newly appended complete lines, persists byte-offset state in a sidecar checkpoint file, resets cleanly on truncation, and derives per-batch failed-output / failed-manifest paths so operator retry artifacts are not overwritten.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether polling-based follow mode is sufficient for watcher/relay integration for now, or whether a later slice should add native filesystem notifications, rotation metadata, or multi-input fan-in.
 
 ## Recommended Next Step
 
