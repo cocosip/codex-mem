@@ -1,4 +1,6 @@
 // Package common provides shared error, warning, time, and identifier helpers.
+//
+//revive:disable:var-naming
 package common
 
 import (

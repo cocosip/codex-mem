@@ -1,4 +1,6 @@
 // Package buildinfo exposes version metadata embedded at build time.
+//
+//revive:disable:var-naming
 package buildinfo
 
 import "strings"

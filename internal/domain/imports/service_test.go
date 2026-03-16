@@ -10,6 +10,8 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
+const suppressionReasonPrivacyIntent = "privacy_intent"
+
 type fakeRepository struct {
 	duplicate *Record
 	created   Record
@@ -169,7 +171,7 @@ func TestSaveImportStoresPrivacySuppressionAuditRecord(t *testing.T) {
 	if !result.Suppressed {
 		t.Fatal("expected privacy-blocked import to be suppressed")
 	}
-	if got, want := repo.created.SuppressionReason, "privacy_intent"; got != want {
+	if got, want := repo.created.SuppressionReason, suppressionReasonPrivacyIntent; got != want {
 		t.Fatalf("suppression reason mismatch: got %q want %q", got, want)
 	}
 	if repo.created.DurableMemoryID != "" {
@@ -375,7 +377,7 @@ func TestSaveImportedNotePrivacyIntentSkipsMaterialization(t *testing.T) {
 	if noteSaver.calls != 0 {
 		t.Fatalf("expected note saver to be skipped, got %d calls", noteSaver.calls)
 	}
-	if got, want := repo.created.SuppressionReason, "privacy_intent"; got != want {
+	if got, want := repo.created.SuppressionReason, suppressionReasonPrivacyIntent; got != want {
 		t.Fatalf("suppression reason mismatch: got %q want %q", got, want)
 	}
 }

@@ -14,9 +14,16 @@ import (
 	"codex-mem/internal/db"
 )
 
+const (
+	ingestImportsWatcherSource = "watcher_import"
+	ingestImportsStatusPartial = "partial"
+	ingestImportsErrInvalid    = "ERR_INVALID_INPUT"
+	ingestImportsBrokenLine    = `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`
+)
+
 func TestParseIngestImportsOptions(t *testing.T) {
 	options, err := parseIngestImportsOptions([]string{
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--input", "events.jsonl",
 		"--failed-output", "failed.jsonl",
 		"--failed-manifest", "failed-manifest.json",
@@ -30,7 +37,7 @@ func TestParseIngestImportsOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseIngestImportsOptions: %v", err)
 	}
-	if got, want := string(options.Source), "watcher_import"; got != want {
+	if got, want := string(options.Source), ingestImportsWatcherSource; got != want {
 		t.Fatalf("source mismatch: got %q want %q", got, want)
 	}
 	if got, want := options.InputPath, "events.jsonl"; got != want {
@@ -65,7 +72,7 @@ func TestParseIngestImportsOptionsRejectsMissingSource(t *testing.T) {
 
 func TestParseIngestImportsOptionsRejectsFailedOutputWithoutContinueOnError(t *testing.T) {
 	_, err := parseIngestImportsOptions([]string{
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--failed-output", "failed.jsonl",
 	})
 	if err == nil {
@@ -78,7 +85,7 @@ func TestParseIngestImportsOptionsRejectsFailedOutputWithoutContinueOnError(t *t
 
 func TestParseIngestImportsOptionsRejectsFailedManifestWithoutContinueOnError(t *testing.T) {
 	_, err := parseIngestImportsOptions([]string{
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--failed-manifest", "failed-manifest.json",
 	})
 	if err == nil {
@@ -100,7 +107,7 @@ func TestRunIngestImportsPersistsImportedNotesFromJSONL(t *testing.T) {
 	var stdout bytes.Buffer
 	err := Run(context.Background(), cfg, []string{
 		"ingest-imports",
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--cwd", root,
 		"--repo-remote", "git@github.com:example/codex-mem.git",
 	}, strings.NewReader(input), &stdout)
@@ -206,13 +213,13 @@ func TestRunIngestImportsContinueOnErrorSkipsInvalidLines(t *testing.T) {
 	failedManifestPath := filepath.Join(root, "tmp", "failed-manifest.json")
 	input := strings.Join([]string{
 		`{"external_id":"watcher:1","type":"discovery","title":"Imported discovery","content":"Useful watcher discovery.","importance":4}`,
-		`{"external_id":"watcher:bad","type":"discovery","title":"Broken"`,
+		ingestImportsBrokenLine,
 	}, "\n")
 
 	var stdout bytes.Buffer
 	err := Run(context.Background(), cfg, []string{
 		"ingest-imports",
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--cwd", root,
 		"--repo-remote", "git@github.com:example/codex-mem.git",
 		"--continue-on-error",
@@ -228,101 +235,15 @@ func TestRunIngestImportsContinueOnErrorSkipsInvalidLines(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("unmarshal ingest partial report: %v\n%s", err, stdout.String())
 	}
-	if got, want := report.Status, "partial"; got != want {
-		t.Fatalf("status mismatch: got %q want %q", got, want)
-	}
-	if got, want := report.Attempted, 2; got != want {
-		t.Fatalf("attempted mismatch: got %d want %d", got, want)
-	}
-	if got, want := report.FailedOutput, failedOutputPath; got != want {
-		t.Fatalf("failed output mismatch: got %q want %q", got, want)
-	}
-	if got, want := report.FailedOutputWritten, 1; got != want {
-		t.Fatalf("failed output written mismatch: got %d want %d", got, want)
-	}
-	if got, want := report.FailedManifest, failedManifestPath; got != want {
-		t.Fatalf("failed manifest mismatch: got %q want %q", got, want)
-	}
-	if got, want := report.FailedManifestCount, 1; got != want {
-		t.Fatalf("failed manifest count mismatch: got %d want %d", got, want)
-	}
-	if got, want := report.Processed, 1; got != want {
-		t.Fatalf("processed mismatch: got %d want %d", got, want)
-	}
-	if got, want := report.Failed, 1; got != want {
-		t.Fatalf("failed mismatch: got %d want %d", got, want)
-	}
-	if got, want := len(report.Results), 2; got != want {
-		t.Fatalf("result count mismatch: got %d want %d", got, want)
-	}
-	if report.Results[0].ImportID == "" || report.Results[0].Error != nil {
-		t.Fatalf("expected first result success, got %+v", report.Results[0])
-	}
-	if report.Results[1].Error == nil {
-		t.Fatalf("expected second result error, got %+v", report.Results[1])
-	}
-	if got, want := report.Results[1].Error.Code, "ERR_INVALID_INPUT"; got != want {
-		t.Fatalf("error code mismatch: got %q want %q", got, want)
-	}
+	assertContinueOnErrorReport(t, report, failedOutputPath, failedManifestPath)
 	failedOutputBody, err := os.ReadFile(failedOutputPath)
 	if err != nil {
 		t.Fatalf("ReadFile failed output: %v", err)
 	}
-	if got, want := strings.TrimSpace(string(failedOutputBody)), `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`; got != want {
+	if got, want := strings.TrimSpace(string(failedOutputBody)), ingestImportsBrokenLine; got != want {
 		t.Fatalf("failed output mismatch: got %q want %q", got, want)
 	}
-
-	var manifest struct {
-		Status              string `json:"status"`
-		Source              string `json:"source"`
-		Input               string `json:"input"`
-		FailedOutput        string `json:"failed_output"`
-		FailedOutputWritten int    `json:"failed_output_written"`
-		FailureCount        int    `json:"failure_count"`
-		Failures            []struct {
-			Line             int    `json:"line"`
-			RawLine          string `json:"raw_line"`
-			FailedOutputLine int    `json:"failed_output_line"`
-			Error            struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
-		} `json:"failures"`
-	}
-	manifestBody, err := os.ReadFile(failedManifestPath)
-	if err != nil {
-		t.Fatalf("ReadFile failed manifest: %v", err)
-	}
-	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
-		t.Fatalf("unmarshal failed manifest: %v\n%s", err, string(manifestBody))
-	}
-	if got, want := manifest.Status, "partial"; got != want {
-		t.Fatalf("manifest status mismatch: got %q want %q", got, want)
-	}
-	if got, want := manifest.FailedOutput, failedOutputPath; got != want {
-		t.Fatalf("manifest failed output mismatch: got %q want %q", got, want)
-	}
-	if got, want := manifest.FailedOutputWritten, 1; got != want {
-		t.Fatalf("manifest failed output written mismatch: got %d want %d", got, want)
-	}
-	if got, want := manifest.FailureCount, 1; got != want {
-		t.Fatalf("manifest failure count mismatch: got %d want %d", got, want)
-	}
-	if got, want := len(manifest.Failures), 1; got != want {
-		t.Fatalf("manifest failures len mismatch: got %d want %d", got, want)
-	}
-	if got, want := manifest.Failures[0].Line, 2; got != want {
-		t.Fatalf("manifest line mismatch: got %d want %d", got, want)
-	}
-	if got, want := manifest.Failures[0].RawLine, `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`; got != want {
-		t.Fatalf("manifest raw line mismatch: got %q want %q", got, want)
-	}
-	if got, want := manifest.Failures[0].FailedOutputLine, 1; got != want {
-		t.Fatalf("manifest failed output line mismatch: got %d want %d", got, want)
-	}
-	if got, want := manifest.Failures[0].Error.Code, "ERR_INVALID_INPUT"; got != want {
-		t.Fatalf("manifest error code mismatch: got %q want %q", got, want)
-	}
+	assertContinueOnErrorManifest(t, failedManifestPath, failedOutputPath)
 
 	instance, err := New(context.Background(), cfg)
 	if err != nil {
@@ -334,12 +255,7 @@ func TestRunIngestImportsContinueOnErrorSkipsInvalidLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InspectRuntime: %v", err)
 	}
-	if got, want := diagnostics.Audit.NoteRecords, 1; got != want {
-		t.Fatalf("note count mismatch: got %d want %d", got, want)
-	}
-	if got, want := diagnostics.Audit.ImportRecords, 1; got != want {
-		t.Fatalf("import count mismatch: got %d want %d", got, want)
-	}
+	assertImportAuditCounts(t, diagnostics, 1, 1)
 }
 
 func TestRunIngestImportsContinueOnErrorStillFailsWhenNothingSucceeds(t *testing.T) {
@@ -347,12 +263,12 @@ func TestRunIngestImportsContinueOnErrorStillFailsWhenNothingSucceeds(t *testing
 	cfg := ingestTestConfig(root)
 	failedOutputPath := filepath.Join(root, "failed", "failed.jsonl")
 	failedManifestPath := filepath.Join(root, "failed", "failed-manifest.json")
-	input := `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`
+	input := ingestImportsBrokenLine
 
 	var stdout bytes.Buffer
 	err := Run(context.Background(), cfg, []string{
 		"ingest-imports",
-		"--source", "watcher_import",
+		"--source", ingestImportsWatcherSource,
 		"--cwd", root,
 		"--repo-remote", "git@github.com:example/codex-mem.git",
 		"--continue-on-error",
@@ -416,7 +332,7 @@ func TestRunIngestImportsContinueOnErrorStillFailsWhenNothingSucceeds(t *testing
 	if got, want := manifest.Failures[0].RawLine, input; got != want {
 		t.Fatalf("manifest raw line mismatch: got %q want %q", got, want)
 	}
-	if got, want := manifest.Failures[0].Error.Code, "ERR_INVALID_INPUT"; got != want {
+	if got, want := manifest.Failures[0].Error.Code, ingestImportsErrInvalid; got != want {
 		t.Fatalf("manifest error code mismatch: got %q want %q", got, want)
 	}
 }
@@ -433,8 +349,8 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	failedOutputPath := filepath.Join(root, "embedded", "failed.jsonl")
 	failedManifestPath := filepath.Join(root, "embedded", "failed.json")
 	report, err := instance.IngestImports(context.Background(), IngestImportsInput{
-		Source:             "watcher_import",
-		Reader:             strings.NewReader(strings.Join([]string{`{"external_id":"watcher:ok","type":"discovery","title":"Embedded path","content":"Embedded ingestion path works.","importance":4}`, `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`}, "\n")),
+		Source:             ingestImportsWatcherSource,
+		Reader:             strings.NewReader(strings.Join([]string{`{"external_id":"watcher:ok","type":"discovery","title":"Embedded path","content":"Embedded ingestion path works.","importance":4}`, ingestImportsBrokenLine}, "\n")),
 		InputLabel:         "embedded-test",
 		CWD:                root,
 		RepoRemote:         "git@github.com:example/codex-mem.git",
@@ -446,7 +362,7 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("App.IngestImports: %v", err)
 	}
-	if got, want := report.Status, "partial"; got != want {
+	if got, want := report.Status, ingestImportsStatusPartial; got != want {
 		t.Fatalf("status mismatch: got %q want %q", got, want)
 	}
 	if got, want := report.Input, "embedded-test"; got != want {
@@ -472,7 +388,7 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile failed output: %v", err)
 	}
-	if got, want := strings.TrimSpace(string(failedOutputBody)), `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`; got != want {
+	if got, want := strings.TrimSpace(string(failedOutputBody)), ingestImportsBrokenLine; got != want {
 		t.Fatalf("failed output mismatch: got %q want %q", got, want)
 	}
 
@@ -488,7 +404,7 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
 		t.Fatalf("unmarshal failed manifest: %v\n%s", err, string(manifestBody))
 	}
-	if got, want := manifest.Source, "watcher_import"; got != want {
+	if got, want := manifest.Source, ingestImportsWatcherSource; got != want {
 		t.Fatalf("manifest source mismatch: got %q want %q", got, want)
 	}
 	if got, want := manifest.Input, "embedded-test"; got != want {
@@ -496,6 +412,117 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	}
 	if got, want := manifest.FailureCount, 1; got != want {
 		t.Fatalf("manifest failure count mismatch: got %d want %d", got, want)
+	}
+}
+
+type ingestFailureManifestForTest struct {
+	Status              string `json:"status"`
+	Source              string `json:"source"`
+	Input               string `json:"input"`
+	FailedOutput        string `json:"failed_output"`
+	FailedOutputWritten int    `json:"failed_output_written"`
+	FailureCount        int    `json:"failure_count"`
+	Failures            []struct {
+		Line             int    `json:"line"`
+		RawLine          string `json:"raw_line"`
+		FailedOutputLine int    `json:"failed_output_line"`
+		Error            struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	} `json:"failures"`
+}
+
+func assertContinueOnErrorReport(t *testing.T, report ingestImportsReport, failedOutputPath string, failedManifestPath string) {
+	t.Helper()
+
+	if got, want := report.Status, ingestImportsStatusPartial; got != want {
+		t.Fatalf("status mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.Attempted, 2; got != want {
+		t.Fatalf("attempted mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutput, failedOutputPath; got != want {
+		t.Fatalf("failed output mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.FailedOutputWritten, 1; got != want {
+		t.Fatalf("failed output written mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifest, failedManifestPath; got != want {
+		t.Fatalf("failed manifest mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.FailedManifestCount, 1; got != want {
+		t.Fatalf("failed manifest count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Processed, 1; got != want {
+		t.Fatalf("processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Failed, 1; got != want {
+		t.Fatalf("failed mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Results), 2; got != want {
+		t.Fatalf("result count mismatch: got %d want %d", got, want)
+	}
+	if report.Results[0].ImportID == "" || report.Results[0].Error != nil {
+		t.Fatalf("expected first result success, got %+v", report.Results[0])
+	}
+	if report.Results[1].Error == nil {
+		t.Fatalf("expected second result error, got %+v", report.Results[1])
+	}
+	if got, want := report.Results[1].Error.Code, ingestImportsErrInvalid; got != want {
+		t.Fatalf("error code mismatch: got %q want %q", got, want)
+	}
+}
+
+func assertContinueOnErrorManifest(t *testing.T, path string, failedOutputPath string) {
+	t.Helper()
+
+	manifestBody, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile failed manifest: %v", err)
+	}
+
+	var manifest ingestFailureManifestForTest
+	if err := json.Unmarshal(manifestBody, &manifest); err != nil {
+		t.Fatalf("unmarshal failed manifest: %v\n%s", err, string(manifestBody))
+	}
+	if got, want := manifest.Status, ingestImportsStatusPartial; got != want {
+		t.Fatalf("manifest status mismatch: got %q want %q", got, want)
+	}
+	if got, want := manifest.FailedOutput, failedOutputPath; got != want {
+		t.Fatalf("manifest failed output mismatch: got %q want %q", got, want)
+	}
+	if got, want := manifest.FailedOutputWritten, 1; got != want {
+		t.Fatalf("manifest failed output written mismatch: got %d want %d", got, want)
+	}
+	if got, want := manifest.FailureCount, 1; got != want {
+		t.Fatalf("manifest failure count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(manifest.Failures), 1; got != want {
+		t.Fatalf("manifest failures len mismatch: got %d want %d", got, want)
+	}
+	if got, want := manifest.Failures[0].Line, 2; got != want {
+		t.Fatalf("manifest line mismatch: got %d want %d", got, want)
+	}
+	if got, want := manifest.Failures[0].RawLine, ingestImportsBrokenLine; got != want {
+		t.Fatalf("manifest raw line mismatch: got %q want %q", got, want)
+	}
+	if got, want := manifest.Failures[0].FailedOutputLine, 1; got != want {
+		t.Fatalf("manifest failed output line mismatch: got %d want %d", got, want)
+	}
+	if got, want := manifest.Failures[0].Error.Code, ingestImportsErrInvalid; got != want {
+		t.Fatalf("manifest error code mismatch: got %q want %q", got, want)
+	}
+}
+
+func assertImportAuditCounts(t *testing.T, diagnostics db.RuntimeDiagnostics, noteRecords int, importRecords int) {
+	t.Helper()
+
+	if got, want := diagnostics.Audit.NoteRecords, noteRecords; got != want {
+		t.Fatalf("note count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, importRecords; got != want {
+		t.Fatalf("import count mismatch: got %d want %d", got, want)
 	}
 }
 

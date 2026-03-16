@@ -580,9 +580,9 @@ func formatIngestImportsReport(report ingestImportsReport) string {
 		fmt.Sprintf("status=%s", report.Status),
 		fmt.Sprintf("source=%s", report.Source),
 		fmt.Sprintf("input=%s", report.Input),
-		fmt.Sprintf("failed_output=%s", fallbackString(report.FailedOutput, "none")),
+		fmt.Sprintf("failed_output=%s", fallbackString(report.FailedOutput)),
 		fmt.Sprintf("failed_output_written=%d", report.FailedOutputWritten),
-		fmt.Sprintf("failed_manifest=%s", fallbackString(report.FailedManifest, "none")),
+		fmt.Sprintf("failed_manifest=%s", fallbackString(report.FailedManifest)),
 		fmt.Sprintf("failed_manifest_count=%d", report.FailedManifestCount),
 		fmt.Sprintf("session_id=%s", report.Session.ID),
 		fmt.Sprintf("resolved_by=%s", report.Scope.ResolvedBy),
@@ -636,10 +636,10 @@ func writeIngestFailureManifest(path string, report ingestImportsReport, failure
 	return nil
 }
 
-func fallbackString(value string, fallback string) string {
+func fallbackString(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return fallback
+		return stringNone
 	}
 	return value
 }

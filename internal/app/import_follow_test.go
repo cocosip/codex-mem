@@ -12,9 +12,14 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+const (
+	followImportsWatcherSource = "watcher_import"
+	followImportsFirstEvent    = `{"external_id":"watcher:1","type":"discovery","title":"First","content":"First event.","importance":4}`
+)
+
 func TestParseFollowImportsOptions(t *testing.T) {
 	options, err := parseFollowImportsOptions([]string{
-		"--source", "watcher_import",
+		"--source", followImportsWatcherSource,
 		"--input", "events.jsonl",
 		"--state-file", "events.offset.json",
 		"--failed-output", "failed.jsonl",
@@ -31,7 +36,7 @@ func TestParseFollowImportsOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseFollowImportsOptions: %v", err)
 	}
-	if got, want := string(options.Source), "watcher_import"; got != want {
+	if got, want := string(options.Source), followImportsWatcherSource; got != want {
 		t.Fatalf("source mismatch: got %q want %q", got, want)
 	}
 	if got, want := options.InputPath, "events.jsonl"; got != want {
@@ -55,7 +60,7 @@ func TestParseFollowImportsOptions(t *testing.T) {
 }
 
 func TestParseFollowImportsOptionsRejectsMissingInput(t *testing.T) {
-	_, err := parseFollowImportsOptions([]string{"--source", "watcher_import"})
+	_, err := parseFollowImportsOptions([]string{"--source", followImportsWatcherSource})
 	if err == nil {
 		t.Fatal("expected missing input error")
 	}
@@ -66,7 +71,7 @@ func TestParseFollowImportsOptionsRejectsMissingInput(t *testing.T) {
 
 func TestParseFollowImportsOptionsRejectsInvalidWatchMode(t *testing.T) {
 	_, err := parseFollowImportsOptions([]string{
-		"--source", "watcher_import",
+		"--source", followImportsWatcherSource,
 		"--input", "events.jsonl",
 		"--watch-mode", "interrupts",
 	})
@@ -182,14 +187,14 @@ func TestAppFollowImportsOnceConsumesOnlyCompleteLinesAndPersistsCheckpoint(t *t
 
 	eventsPath := filepath.Join(root, "events.jsonl")
 	statePath := filepath.Join(root, "events.offset.json")
-	first := `{"external_id":"watcher:1","type":"discovery","title":"First","content":"First event.","importance":4}`
+	first := followImportsFirstEvent
 	secondPrefix := `{"external_id":"watcher:2","type":"todo","title":"Second"`
 	if err := os.WriteFile(eventsPath, []byte(first+"\n"+secondPrefix), 0o644); err != nil {
 		t.Fatalf("WriteFile events: %v", err)
 	}
 
 	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -234,7 +239,7 @@ func TestAppFollowImportsOnceConsumesOnlyCompleteLinesAndPersistsCheckpoint(t *t
 	}
 
 	report, err = instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -276,7 +281,7 @@ func TestAppFollowImportsOnceUsesCheckpointRecoveryWhenNoNewLinesExist(t *testin
 	cfg := ingestTestConfig(root)
 	eventsPath := filepath.Join(root, "events.jsonl")
 	statePath := filepath.Join(root, "events.offset.json")
-	event := `{"external_id":"watcher:1","type":"discovery","title":"First","content":"First event.","importance":4}`
+	event := followImportsFirstEvent
 	if err := os.WriteFile(eventsPath, []byte(event+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile events: %v", err)
 	}
@@ -286,7 +291,7 @@ func TestAppFollowImportsOnceUsesCheckpointRecoveryWhenNoNewLinesExist(t *testin
 		t.Fatalf("New first instance: %v", err)
 	}
 	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -311,7 +316,7 @@ func TestAppFollowImportsOnceUsesCheckpointRecoveryWhenNoNewLinesExist(t *testin
 	defer func() { _ = instance.Close() }()
 
 	report, err = instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -353,12 +358,12 @@ func TestAppFollowImportsOnceResetsOffsetAfterTruncation(t *testing.T) {
 
 	eventsPath := filepath.Join(root, "events.jsonl")
 	statePath := filepath.Join(root, "events.offset.json")
-	first := `{"external_id":"watcher:1","type":"discovery","title":"First","content":"First event.","importance":4}`
+	first := followImportsFirstEvent
 	if err := os.WriteFile(eventsPath, []byte(first+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile first events: %v", err)
 	}
 	if _, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -373,7 +378,7 @@ func TestAppFollowImportsOnceResetsOffsetAfterTruncation(t *testing.T) {
 	}
 
 	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -423,7 +428,7 @@ func TestAppFollowImportsOnceWritesBatchScopedFailureExports(t *testing.T) {
 	}
 
 	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:             "watcher_import",
+		Source:             followImportsWatcherSource,
 		InputPath:          eventsPath,
 		StatePath:          statePath,
 		CWD:                root,
@@ -506,7 +511,7 @@ func TestAppFollowImportsOnceResetsOffsetWhenFileIsReplacedWithoutShrinking(t *t
 	}
 
 	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,
@@ -524,7 +529,7 @@ func TestAppFollowImportsOnceResetsOffsetWhenFileIsReplacedWithoutShrinking(t *t
 	}
 
 	report, err = instance.FollowImportsOnce(context.Background(), FollowImportsInput{
-		Source:     "watcher_import",
+		Source:     followImportsWatcherSource,
 		InputPath:  eventsPath,
 		StatePath:  statePath,
 		CWD:        root,

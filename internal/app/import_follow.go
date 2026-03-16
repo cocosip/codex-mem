@@ -776,16 +776,16 @@ func formatFollowImportsReport(report followImportsReport) string {
 		fmt.Sprintf("source=%s", report.Source),
 		fmt.Sprintf("input=%s", report.Input),
 		fmt.Sprintf("state_file=%s", report.StateFile),
-		fmt.Sprintf("requested_watch_mode=%s", fallbackString(report.RequestedWatchMode, "none")),
-		fmt.Sprintf("active_watch_mode=%s", fallbackString(report.ActiveWatchMode, "none")),
+		fmt.Sprintf("requested_watch_mode=%s", fallbackString(report.RequestedWatchMode)),
+		fmt.Sprintf("active_watch_mode=%s", fallbackString(report.ActiveWatchMode)),
 		fmt.Sprintf("watch_fallbacks=%d", report.WatchFallbacks),
-		fmt.Sprintf("last_fallback_reason=%s", fallbackString(report.LastFallbackReason, "none")),
+		fmt.Sprintf("last_fallback_reason=%s", fallbackString(report.LastFallbackReason)),
 		fmt.Sprintf("offset=%d", report.Offset),
 		fmt.Sprintf("consumed_bytes=%d", report.ConsumedBytes),
 		fmt.Sprintf("pending_bytes=%d", report.PendingBytes),
 		fmt.Sprintf("truncated=%t", report.Truncated),
 		fmt.Sprintf("checkpoint_reset=%t", report.CheckpointReset),
-		fmt.Sprintf("reset_reason=%s", fallbackString(report.ResetReason, "none")),
+		fmt.Sprintf("reset_reason=%s", fallbackString(report.ResetReason)),
 	}
 	if report.Batch != nil {
 		lines = append(lines,
@@ -796,8 +796,8 @@ func formatFollowImportsReport(report followImportsReport) string {
 			fmt.Sprintf("failed=%d", report.Batch.Failed),
 			fmt.Sprintf("materialized=%d", report.Batch.Materialized),
 			fmt.Sprintf("suppressed=%d", report.Batch.Suppressed),
-			fmt.Sprintf("failed_output=%s", fallbackString(report.Batch.FailedOutput, "none")),
-			fmt.Sprintf("failed_manifest=%s", fallbackString(report.Batch.FailedManifest, "none")),
+			fmt.Sprintf("failed_output=%s", fallbackString(report.Batch.FailedOutput)),
+			fmt.Sprintf("failed_manifest=%s", fallbackString(report.Batch.FailedManifest)),
 		)
 	}
 	if report.BatchError != nil {

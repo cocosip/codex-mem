@@ -92,13 +92,18 @@ type doctorMCPReport struct {
 	ToolCount int    `json:"tool_count"`
 }
 
+const (
+	doctorJSONFlag = "--json"
+	stringNone     = "none"
+)
+
 func parseDoctorOptions(args []string) (doctorOptions, error) {
 	var options doctorOptions
 	for _, arg := range args {
 		switch strings.TrimSpace(arg) {
 		case "":
 			continue
-		case "--json":
+		case doctorJSONFlag:
 			options.JSON = true
 		default:
 			return doctorOptions{}, fmt.Errorf("unknown doctor flag %q", arg)
@@ -251,7 +256,7 @@ func stringPointerOrNil(value string) *string {
 
 func pointerStringOrNone(value *string) string {
 	if value == nil {
-		return "none"
+		return stringNone
 	}
 	return *value
 }
