@@ -76,6 +76,24 @@ If your release automation prefers a single structured summary payload, run:
 go run ./scripts/readiness-check --json
 ```
 
+If your release automation prefers one failing run to still capture every later phase it can, run:
+
+```powershell
+go run ./scripts/readiness-check --keep-going
+```
+
+If your release automation wants one summary object or text report to also flag slow overall runs or slow attempted phases, run:
+
+```powershell
+go run ./scripts/readiness-check --slow-run-ms=8000 --slow-phase-ms=1000
+```
+
+If your release gate wants specific warning codes to become release-blocking while leaving other warnings informational, run:
+
+```powershell
+go run ./scripts/readiness-check --fail-on-warning-code WARN_FOLLOW_IMPORTS_HEALTH_STALE
+```
+
 Confirm:
 
 - `required_schema_ok=true`
@@ -86,7 +104,7 @@ Confirm:
 - `exclusion_audit_ready=true`
 - `mcp_tool_count=11`
 
-If your deployment uses `follow-imports`, also inspect either the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check` or the embedded `doctor.follow_imports` object from `go run ./scripts/readiness-check --json`. Those fields surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state. The readiness helper now also emits per-phase status for `doctor`, stdio smoke, and HTTP smoke, which is useful when a release gate fails and you need to see which stage stopped before exit.
+If your deployment uses `follow-imports`, also inspect either the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check` or the embedded `doctor.follow_imports` object from `go run ./scripts/readiness-check --json`. Those fields surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state. The readiness helper now also emits overall run timing plus per-phase status and timing for `doctor`, stdio smoke, and HTTP smoke, which is useful when a release gate fails and you need to see which stage stopped and whether either the whole check or one phase is getting slower over time; `--keep-going` is available when you want later phases to continue running after an early failure, `--slow-run-ms` / `--slow-phase-ms` let the report surface slow-run warnings, and `--fail-on-warning-code` lets the release gate opt into failing on selected warning codes without making every warning globally fatal.
 
 ### 2. Test Suite
 

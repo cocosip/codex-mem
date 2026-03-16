@@ -421,6 +421,36 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the next automation-facing slice should add an option to continue running later readiness phases after an earlier failure, or whether fail-fast execution plus explicit phase reporting is enough.
+### 2026-03-16 Session Update
+
+- Completed: Added `--keep-going` to `scripts/readiness-check` so operators can choose between the default fail-fast execution and a mode that still attempts later phases after an earlier failure. The readiness helper now carries `keep_going` through both text and JSON output, tests cover continued execution after both doctor and stdio-phase failures, and maintainer/operator docs now describe when to use the new mode.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether a later readiness slice should also expose per-phase durations or timestamps for automation timelines, or whether the current phase status/summary surface is sufficient.
+### 2026-03-16 Session Update
+
+- Completed: Added per-phase timing metadata to `scripts/readiness-check`. Each phase now records started/completed timestamps plus elapsed milliseconds, the text output now emits stable `phase_*_started_at`, `phase_*_completed_at`, and `phase_*_duration_ms` lines, JSON output carries the same fields in `phases`, and tests now cover both successful timing output and failed/not-run phase cases.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether a later readiness slice should also record an overall command duration and wall-clock window, or whether phase-level timing is enough for current automation consumers.
+### 2026-03-16 Session Update
+
+- Completed: Added overall readiness-run timing metadata on top of the existing phase timing. `scripts/readiness-check` now emits top-level `started_at`, `completed_at`, and `duration_ms` fields in both text and JSON output, tests verify successful and failing runs include the overall timing surface, and the docs now describe that the helper exposes both whole-run and per-phase timing for automation.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether a later readiness slice should start classifying slow overall runs or phases into warnings, or keep timing purely observational for now.
+### 2026-03-16 Session Update
+
+- Completed: Added optional slow-run warning thresholds to `scripts/readiness-check`. `--slow-run-ms` and `--slow-phase-ms` now annotate both text and JSON output with informational readiness warnings plus per-phase warning codes when elapsed time exceeds configured thresholds, while preserving the existing exit-status semantics so slow checks do not fail readiness on their own.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether downstream automation wants fixed local threshold presets or a richer policy layer that can optionally fail on specific warning codes.
+### 2026-03-16 Session Update
+
+- Completed: Added warning-policy escalation to `scripts/readiness-check`. Operators can now pass `--fail-on-warning-code` one or more times, including comma-separated codes, to make specific emitted warning codes fail readiness while leaving the default behavior unchanged. The helper now reports configured fail-on codes, the combined warning-code set it observed, the subset that matched policy, and whether policy caused the final failure in both text and JSON output; tests cover flag parsing, summary serialization, and a clean phase pass that still exits non-zero because a configured doctor follow-health warning code matched.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether maintainers want a small set of documented threshold/policy presets for CI and release workflows, or whether explicit flags remain the right level of control.
 
 ## Recommended Next Step
 

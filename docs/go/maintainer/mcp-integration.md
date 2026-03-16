@@ -144,13 +144,31 @@ For a structured readiness summary object, run:
 go run ./scripts/readiness-check --json
 ```
 
+If you want the helper to keep running later phases after an earlier failure so the final summary includes every phase result it could still gather, run:
+
+```powershell
+go run ./scripts/readiness-check --keep-going
+```
+
+If you want the helper to classify slow overall runs or attempted phases into warnings for automation while keeping those warnings informational, run:
+
+```powershell
+go run ./scripts/readiness-check --slow-run-ms=8000 --slow-phase-ms=1000
+```
+
+If your automation wants to fail readiness only when specific warning codes are present in the final summary, run:
+
+```powershell
+go run ./scripts/readiness-check --fail-on-warning-code WARN_FOLLOW_IMPORTS_HEALTH_STALE
+```
+
 That combined check now covers:
 
 1. `doctor --json`
 2. stdio MCP smoke test
 3. HTTP MCP smoke test
 
-The default text summary from `scripts/readiness-check` echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. The helper also emits explicit `phase_*_status` and `phase_*_summary` lines for the `doctor`, stdio smoke, and HTTP smoke phases, so a failed run still tells automation which phase stopped progress before the command exits non-zero. `--json` returns one structured summary object that embeds the parsed doctor report, compact stdio/HTTP smoke-test summaries, and the same per-phase results. In both modes the follow-health fields are informational by default and do not make the readiness helper fail on their own.
+The default text summary from `scripts/readiness-check` echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. The helper also emits explicit overall `started_at`, `completed_at`, and `duration_ms` fields plus per-phase `phase_*_status`, `phase_*_summary`, and timing lines for the `doctor`, stdio smoke, and HTTP smoke phases, so a failed run still tells automation which phase stopped progress and how long both the whole run and each attempted phase took before the command exits non-zero. `--json` returns one structured summary object that embeds the parsed doctor report, compact stdio/HTTP smoke-test summaries, and the same overall plus per-phase timing results. `--keep-going` keeps attempting later phases after an earlier failure, which is useful when you want one failing run to still capture as much phase state as possible. `--slow-run-ms` and `--slow-phase-ms` add explicit readiness warnings to both text and JSON output when thresholds are exceeded, while `--fail-on-warning-code` lets automation promote selected warning codes, including nested doctor follow-health warning codes, into a failed readiness result without changing the default behavior for everyone else. In all modes the follow-health fields are informational by default unless your own automation explicitly chooses to gate on them.
 
 ## Manual Client Checklist
 
