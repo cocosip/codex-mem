@@ -133,8 +133,8 @@ In a clean repository:
 
 1. Run `memory_install_agents` in safe mode.
 2. Start a session with `memory_bootstrap_session`.
-3. Save one note with `memory_save_note`.
-4. Save one handoff with `memory_save_handoff`.
+3. Save one note with `memory_save_note` in a step where you are testing durable note writes.
+4. Save one handoff with `memory_save_handoff` in a separate step where you are testing continuation writes.
 5. Start a later bootstrap and confirm continuity is recovered.
 
 ### 5. Config Smoke Check
@@ -158,8 +158,8 @@ For a quick end-to-end demo:
 2. Start `codex-mem serve`
 3. Call `memory_resolve_scope`
 4. Call `memory_start_session`
-5. Call `memory_save_note`
-6. Call `memory_save_handoff`
+5. Call `memory_save_note` to verify durable note writes
+6. Call `memory_save_handoff` to verify continuation writes
 7. Call `memory_search`
 8. Call `memory_get_recent`
 

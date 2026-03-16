@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"codex-mem/internal/db"
+	"github.com/fsnotify/fsnotify"
 )
 
 func TestParseFollowImportsOptions(t *testing.T) {
@@ -23,6 +24,7 @@ func TestParseFollowImportsOptions(t *testing.T) {
 		"--repo-remote", "git@github.com:example/codex-mem.git",
 		"--task", "follow imports",
 		"--poll-interval", "10s",
+		"--watch-mode", "notify",
 		"--once",
 		"--json",
 	})
@@ -41,6 +43,9 @@ func TestParseFollowImportsOptions(t *testing.T) {
 	if got, want := options.PollInterval.String(), "10s"; got != want {
 		t.Fatalf("poll interval mismatch: got %q want %q", got, want)
 	}
+	if got, want := string(options.WatchMode), "notify"; got != want {
+		t.Fatalf("watch mode mismatch: got %q want %q", got, want)
+	}
 	if !options.Once {
 		t.Fatal("expected once mode")
 	}
@@ -56,6 +61,113 @@ func TestParseFollowImportsOptionsRejectsMissingInput(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "follow-imports input is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseFollowImportsOptionsRejectsInvalidWatchMode(t *testing.T) {
+	_, err := parseFollowImportsOptions([]string{
+		"--source", "watcher_import",
+		"--input", "events.jsonl",
+		"--watch-mode", "interrupts",
+	})
+	if err == nil {
+		t.Fatal("expected invalid watch mode error")
+	}
+	if !strings.Contains(err.Error(), `invalid follow-imports watch mode "interrupts"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestShouldTriggerFollowImportsEvent(t *testing.T) {
+	inputPath := filepath.Clean(filepath.Join("D:", "Code", "go", "codex-mem", "events.jsonl"))
+
+	tests := []struct {
+		name  string
+		event fsnotify.Event
+		want  bool
+	}{
+		{
+			name:  "write to input",
+			event: fsnotify.Event{Name: inputPath, Op: fsnotify.Write},
+			want:  true,
+		},
+		{
+			name:  "create input",
+			event: fsnotify.Event{Name: inputPath, Op: fsnotify.Create},
+			want:  true,
+		},
+		{
+			name:  "rename input",
+			event: fsnotify.Event{Name: inputPath, Op: fsnotify.Rename},
+			want:  true,
+		},
+		{
+			name:  "chmod ignored",
+			event: fsnotify.Event{Name: inputPath, Op: fsnotify.Chmod},
+			want:  false,
+		},
+		{
+			name:  "sibling file ignored",
+			event: fsnotify.Event{Name: filepath.Join(filepath.Dir(inputPath), "other.jsonl"), Op: fsnotify.Write},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldTriggerFollowImportsEvent(inputPath, tt.event); got != tt.want {
+				t.Fatalf("shouldTriggerFollowImportsEvent() = %t, want %t for %+v", got, tt.want, tt.event)
+			}
+		})
+	}
+}
+
+func TestFollowImportsRuntimeStateApply(t *testing.T) {
+	state := &followImportsRuntimeState{
+		Requested:          followImportsWatchModeAuto,
+		Active:             followImportsWatchModePoll,
+		Fallbacks:          2,
+		LastFallbackReason: "watcher_error",
+	}
+	report := followImportsReport{}
+
+	state.Apply(&report)
+
+	if got, want := report.RequestedWatchMode, "auto"; got != want {
+		t.Fatalf("requested watch mode mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.ActiveWatchMode, "poll"; got != want {
+		t.Fatalf("active watch mode mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.WatchFallbacks, 2; got != want {
+		t.Fatalf("watch fallbacks mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.LastFallbackReason, "watcher_error"; got != want {
+		t.Fatalf("last fallback reason mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
+	output := formatFollowImportsReport(followImportsReport{
+		Status:             "ok",
+		Source:             "watcher_import",
+		Input:              "events.jsonl",
+		StateFile:          "events.offset.json",
+		RequestedWatchMode: "auto",
+		ActiveWatchMode:    "poll",
+		WatchFallbacks:     1,
+		LastFallbackReason: "watcher_unavailable",
+	})
+
+	for _, fragment := range []string{
+		"requested_watch_mode=auto",
+		"active_watch_mode=poll",
+		"watch_fallbacks=1",
+		"last_fallback_reason=watcher_unavailable",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("report output missing %q:\n%s", fragment, output)
+		}
 	}
 }
 
@@ -102,6 +214,9 @@ func TestAppFollowImportsOnceConsumesOnlyCompleteLinesAndPersistsCheckpoint(t *t
 	state := readFollowImportsStateForTest(t, statePath)
 	if got, want := state.Offset, int64(len(first)+1); got != want {
 		t.Fatalf("state offset mismatch: got %d want %d", got, want)
+	}
+	if state.Checkpoint == nil || state.Checkpoint.TailSHA256 == "" {
+		t.Fatalf("expected checkpoint hash after first pass, got %+v", state.Checkpoint)
 	}
 
 	secondSuffix := `,"content":"Second event.","importance":3}`
@@ -208,6 +323,9 @@ func TestAppFollowImportsOnceUsesCheckpointRecoveryWhenNoNewLinesExist(t *testin
 	if got, want := report.Status, "idle"; got != want {
 		t.Fatalf("status mismatch: got %q want %q", got, want)
 	}
+	if report.CheckpointReset {
+		t.Fatalf("did not expect checkpoint reset on idle recovery: %+v", report)
+	}
 	if report.Batch != nil {
 		t.Fatalf("did not expect batch on idle recovery pass: %+v", report.Batch)
 	}
@@ -266,6 +384,9 @@ func TestAppFollowImportsOnceResetsOffsetAfterTruncation(t *testing.T) {
 	}
 	if !report.Truncated {
 		t.Fatalf("expected truncation to be reported: %+v", report)
+	}
+	if !report.CheckpointReset || report.ResetReason != "truncated" {
+		t.Fatalf("expected truncation reset metadata, got %+v", report)
 	}
 	if report.Batch == nil || report.Batch.Processed != 1 {
 		t.Fatalf("expected one processed event after truncation, got %+v", report.Batch)
@@ -361,6 +482,79 @@ func TestAppFollowImportsOnceWritesBatchScopedFailureExports(t *testing.T) {
 	}
 	if got, want := state.Offset, info.Size(); got != want {
 		t.Fatalf("state offset mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestAppFollowImportsOnceResetsOffsetWhenFileIsReplacedWithoutShrinking(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	eventsPath := filepath.Join(root, "events.jsonl")
+	statePath := filepath.Join(root, "events.offset.json")
+	first := `{"external_id":"watcher:1","type":"discovery","title":"Alpha","content":"11111","importance":4}`
+	second := `{"external_id":"watcher:2","type":"discovery","title":"Bravo","content":"22222","importance":4}`
+	if len(first) != len(second) {
+		t.Fatalf("test data must stay same size: %d vs %d", len(first), len(second))
+	}
+	if err := os.WriteFile(eventsPath, []byte(first+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile first events: %v", err)
+	}
+
+	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
+		Source:     "watcher_import",
+		InputPath:  eventsPath,
+		StatePath:  statePath,
+		CWD:        root,
+		RepoRemote: "git@github.com:example/codex-mem.git",
+	})
+	if err != nil {
+		t.Fatalf("FollowImportsOnce first pass: %v", err)
+	}
+	if report.Batch == nil || report.Batch.Processed != 1 {
+		t.Fatalf("expected first event to be processed, got %+v", report.Batch)
+	}
+
+	if err := os.WriteFile(eventsPath, []byte(second+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile replacement events: %v", err)
+	}
+
+	report, err = instance.FollowImportsOnce(context.Background(), FollowImportsInput{
+		Source:     "watcher_import",
+		InputPath:  eventsPath,
+		StatePath:  statePath,
+		CWD:        root,
+		RepoRemote: "git@github.com:example/codex-mem.git",
+	})
+	if err != nil {
+		t.Fatalf("FollowImportsOnce replacement pass: %v", err)
+	}
+	if !report.CheckpointReset {
+		t.Fatalf("expected checkpoint reset on replacement, got %+v", report)
+	}
+	if got, want := report.ResetReason, "file_replaced"; got != want {
+		t.Fatalf("reset reason mismatch: got %q want %q", got, want)
+	}
+	if report.Batch == nil || report.Batch.Processed != 1 {
+		t.Fatalf("expected replacement file to be processed from the start, got %+v", report.Batch)
+	}
+	if report.Truncated {
+		t.Fatalf("did not expect truncation for same-size replacement: %+v", report)
+	}
+
+	diagnostics, err := db.InspectRuntime(context.Background(), instance.DB)
+	if err != nil {
+		t.Fatalf("InspectRuntime: %v", err)
+	}
+	if got, want := diagnostics.Audit.NoteRecords, 2; got != want {
+		t.Fatalf("note count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, 2; got != want {
+		t.Fatalf("import count mismatch: got %d want %d", got, want)
 	}
 }
 

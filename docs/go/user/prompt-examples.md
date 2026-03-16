@@ -109,6 +109,18 @@
 
 - `memory_save_handoff`
 
+### 默认不要双写
+
+如果你不希望同一轮同时写长期 note 和 handoff，可以在提示词里明确说只保存一种：
+
+```text
+这条信息只需要保存成长期记忆，不要另外写 handoff。
+```
+
+```text
+这次只保存任务交接记录，不要另外写长期 note。
+```
+
 ### 查历史信息
 
 #### 提示词：搜索以前的记忆
@@ -292,6 +304,26 @@ Likely tools:
 
 ```text
 Save a checkpoint for this task so I can resume from the current state later.
+```
+
+Likely tools:
+
+- `memory_save_handoff`
+
+#### Prompt: save only a note, not a handoff
+
+```text
+This should be saved only as a durable note for future reuse. Do not also write a handoff.
+```
+
+Likely tools:
+
+- `memory_save_note`
+
+#### Prompt: save only a handoff, not a note
+
+```text
+This should be saved only as a handoff for task continuation. Do not also write a durable note.
 ```
 
 Likely tools:

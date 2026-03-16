@@ -23,7 +23,7 @@ Do not use this for:
 ## Command Shape
 
 Use `ingest-imports` when you already have a bounded batch to replay.
-Use `follow-imports` when another process keeps appending to the same JSONL file and you want `codex-mem` to checkpoint progress between polling passes.
+Use `follow-imports` when another process keeps appending to the same JSONL file and you want `codex-mem` to checkpoint progress between notification or polling passes.
 
 Minimal stdin example:
 
@@ -64,7 +64,13 @@ codex-mem.exe follow-imports --source watcher_import --input .\events.jsonl --on
 Run as a long-lived poller with an explicit checkpoint file:
 
 ```powershell
-codex-mem.exe follow-imports --source relay_import --input .\relay-events.jsonl --state-file .\relay-events.offset.json --poll-interval 10s
+codex-mem.exe follow-imports --source relay_import --input .\relay-events.jsonl --state-file .\relay-events.offset.json --watch-mode poll --poll-interval 10s
+```
+
+Run in notify-first mode and let polling stay as a safety fallback:
+
+```powershell
+codex-mem.exe follow-imports --source watcher_import --input .\events.jsonl --watch-mode auto --poll-interval 5s
 ```
 
 Useful flags:
@@ -95,7 +101,9 @@ Useful flags:
 - `--state-file <path>`
   `follow-imports` only. Optional. Stores the consumed byte offset checkpoint. Defaults to `<input>.offset.json`.
 - `--poll-interval <duration>`
-  `follow-imports` only. Optional. Controls how often the input file is polled for appended complete lines. Defaults to `5s`.
+  `follow-imports` only. Optional. Controls how often the input file is polled for appended complete lines and how often notify mode performs a safety poll. Defaults to `5s`.
+- `--watch-mode auto|notify|poll`
+  `follow-imports` only. Optional. `auto` prefers filesystem notifications and falls back to polling on watcher setup/runtime issues. `notify` requires filesystem notifications and fails if they cannot be used. `poll` disables notifications and uses polling only. Defaults to `auto`.
 - `--once`
   `follow-imports` only. Optional. Runs one poll/ingest pass and exits instead of staying in the polling loop.
 
@@ -172,12 +180,15 @@ JSON mode returns the same summary plus per-line results, including the created 
 When a line fails in `--continue-on-error` mode, that result entry includes a structured `error` payload instead.
 If `--failed-output` is set, the report also includes the resolved output path and how many failed lines were written there.
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
-`follow-imports` reports the input path, checkpoint file, consumed offset, pending trailing bytes, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
+`follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, last fallback reason, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
 
 ## Operational Notes
 
 - `ingest-imports` starts one fresh session for the whole batch after resolving scope.
 - `follow-imports` starts one fresh session per consumed polling batch, not one session for the lifetime of the process.
+- In `auto` mode, `follow-imports` prefers filesystem notifications for lower latency and keeps the poll timer as a safety net in case a platform drops an event.
+- In `notify` mode, watcher setup or runtime failures stop the command instead of silently switching to polling.
+- The follow-mode report now exposes both the requested watch mode and the currently active mode, so operators can tell when `auto` has fallen back to polling and how many fallbacks have happened in the current process.
 - Each event uses the same imported-note workflow as `memory_save_imported_note`.
 - Existing explicit memory wins over weaker imported duplicates in the same project.
 - The default implementation is fail-fast: the first invalid line stops the batch and returns an error.
@@ -185,4 +196,5 @@ If `--failed-manifest` is set, the report also includes the manifest path and ho
 - `--failed-output` writes the original failed JSONL lines without wrapping them, so operators can edit that file and replay it through the same command later.
 - `--failed-manifest` writes a structured JSON sidecar with line numbers, error codes, error messages, raw failed lines, and failed-output line numbers when available.
 - `follow-imports` only consumes complete newline-terminated lines. A partially written trailing line is left in place until a later poll sees its terminating newline.
-- If the followed input file is truncated or rotated to a smaller size, `follow-imports` resets its checkpoint to byte offset `0` and continues from the start of the new file contents.
+- The `follow-imports` checkpoint sidecar stores both the consumed byte offset and a hash of the last consumed boundary bytes so replacement or rotation can be detected even when the new file does not shrink first.
+- If the followed input file is truncated, rotated, or replaced with different bytes before the saved offset, `follow-imports` resets its checkpoint to byte offset `0` and continues from the start of the new file contents.

@@ -9,8 +9,9 @@
 ## Memory Rules
 
 - At the start of a fresh session in this repository, call `memory_bootstrap_session`.
-- Save a memory note when work produces a lasting decision, bugfix insight, reusable discovery, or durable implementation constraint.
-- Save a handoff before pausing, switching tasks, or ending the session.
+- Save a memory note only when work produces a lasting decision, bugfix insight, reusable discovery, or durable implementation constraint that is likely to matter beyond the current task checkpoint.
+- Save a handoff only before pausing, switching tasks, ending the session, or when the user explicitly asks for a checkpoint or resume record.
+- Do not save both in the same turn by default. Write both only when one artifact captures reusable long-term knowledge and the other captures task-specific continuation state.
 
 ## Related Project Policy
 

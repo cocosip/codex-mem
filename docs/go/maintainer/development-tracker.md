@@ -343,6 +343,24 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether polling-based follow mode is sufficient for watcher/relay integration for now, or whether a later slice should add native filesystem notifications, rotation metadata, or multi-input fan-in.
+### 2026-03-16 Session Update
+
+- Completed: Strengthened `follow-imports` checkpoint recovery so it no longer relies only on `size < offset` truncation detection. The sidecar now stores a hash of the last consumed boundary bytes plus file metadata, and follow mode resets to offset `0` when the current file no longer matches that checkpoint, including same-size replacement cases. App coverage now verifies checkpoint hashes, normal restart recovery, truncation resets, and replacement without shrink.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current boundary-hash approach is enough for production watcher/relay rotation patterns, or whether a later slice should add stronger file identity metadata or native filesystem notifications.
+### 2026-03-16 Session Update
+
+- Completed: Added filesystem notification support to `follow-imports` with a new `--watch-mode auto|notify|poll` operator switch. Auto mode now prefers `fsnotify` on the input directory and still keeps the polling timer as a safety net, notify mode fails hard on watcher setup/runtime errors, and poll mode preserves the previous timer-only behavior. App coverage now includes watch-mode parsing and event filtering for input-file notifications.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether `follow-imports` needs richer observability for watcher fallbacks and dropped-event recovery, or whether the current auto/notify/poll split is enough for operators.
+### 2026-03-16 Session Update
+
+- Completed: Added follow-mode observability for watcher state. `follow-imports` reports now include the requested watch mode, the currently active mode, fallback count, and last fallback reason, so operators can tell when auto mode has degraded to polling. Text output and JSON output both expose those fields, and app coverage verifies runtime-state injection plus report formatting.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next long-lived import slice should expose these watch-state transitions as structured metrics/events, or move on to multi-input fan-in support.
 
 ## Recommended Next Step
 

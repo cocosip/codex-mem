@@ -4,8 +4,9 @@
 
 - At the beginning of each fresh session, call `memory_bootstrap_session` with the current working directory and the task if it is already known.
 - Use the returned `startup_brief` as the primary continuation context instead of trying to reconstruct prior state from raw history.
-- During work, save a memory note after important decisions, confirmed bugfixes, meaningful discoveries, durable constraints, or lasting user preferences.
-- Before ending or pausing a session, save a handoff with the current task state, next steps, touched files, open questions, and risks.
+- During work, save a memory note only after important decisions, confirmed bugfixes, meaningful discoveries, durable constraints, or lasting user preferences that are likely to matter beyond the current task checkpoint.
+- Before ending or pausing a session, save a handoff with the current task state, next steps, touched files, open questions, and risks, or when the user explicitly asks for a checkpoint/resume record.
+- Do not save both in the same turn by default. Write both only when one artifact captures reusable long-term knowledge and the other captures task-specific continuation state.
 
 ## Memory Scope Safety
 
