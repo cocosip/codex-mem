@@ -24,6 +24,7 @@ Do not use this for:
 
 Use `ingest-imports` when you already have a bounded batch to replay.
 Use `follow-imports` when another process keeps appending to the same JSONL file and you want `codex-mem` to checkpoint progress between notification or polling passes.
+`follow-imports` can now fan in multiple files by repeating `--input`.
 
 Minimal stdin example:
 
@@ -73,13 +74,19 @@ Run in notify-first mode and let polling stay as a safety fallback:
 codex-mem.exe follow-imports --source watcher_import --input .\events.jsonl --watch-mode auto --poll-interval 5s
 ```
 
+Follow two growing JSONL files in one process:
+
+```powershell
+codex-mem.exe follow-imports --source watcher_import --input .\events-a.jsonl --input .\events-b.jsonl --watch-mode auto --poll-interval 5s --json
+```
+
 Useful flags:
 
 - `--source watcher_import|relay_import`
   Required. Declares the provenance source for every event in the input stream.
 - `--input <path>`
   Optional for `ingest-imports`. Reads JSONL from a file instead of stdin.
-  Required for `follow-imports`.
+  Required for `follow-imports`. Repeat it to follow multiple files in one process.
 - `--cwd <path>`
   Optional. Resolves scope from a specific workspace root.
 - `--branch-name <name>`
@@ -100,6 +107,7 @@ Useful flags:
   For `follow-imports`, each polling batch derives a range-suffixed manifest path from the provided base path.
 - `--state-file <path>`
   `follow-imports` only. Optional. Stores the consumed byte offset checkpoint. Defaults to `<input>.offset.json`.
+  When `follow-imports` uses multiple `--input` flags, either omit `--state-file` and let each input use its own default sidecar, or repeat `--state-file` once per `--input` in the same order.
 - `--poll-interval <duration>`
   `follow-imports` only. Optional. Controls how often the input file is polled for appended complete lines and how often notify mode performs a safety poll. Defaults to `5s`.
 - `--watch-mode auto|notify|poll`
@@ -180,15 +188,21 @@ JSON mode returns the same summary plus per-line results, including the created 
 When a line fails in `--continue-on-error` mode, that result entry includes a structured `error` payload instead.
 If `--failed-output` is set, the report also includes the resolved output path and how many failed lines were written there.
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
-`follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, last fallback reason, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
+Single-input `follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, transition count, last fallback reason, any structured watch events since the previous emitted report, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
+Multi-input `follow-imports` returns one aggregate report with command-level watch state, per-process watch events, total consumed and pending bytes, and one nested per-input report for each followed file.
 
 ## Operational Notes
 
 - `ingest-imports` starts one fresh session for the whole batch after resolving scope.
 - `follow-imports` starts one fresh session per consumed polling batch, not one session for the lifetime of the process.
+- When `follow-imports` fans in multiple files, each input keeps its own checkpoint sidecar and each consumed input still starts its own ingestion session for that batch.
 - In `auto` mode, `follow-imports` prefers filesystem notifications for lower latency and keeps the poll timer as a safety net in case a platform drops an event.
+- In `auto` mode, if watcher setup fails or a running watcher later closes/errors, `follow-imports` falls back to polling and keeps retrying watcher setup on later poll intervals. When watcher setup succeeds again, the process switches back to notify mode instead of staying degraded forever.
 - In `notify` mode, watcher setup or runtime failures stop the command instead of silently switching to polling.
 - The follow-mode report now exposes both the requested watch mode and the currently active mode, so operators can tell when `auto` has fallen back to polling and how many fallbacks have happened in the current process.
+- Follow-mode reports now also emit structured watch events when the active mode changes, a fallback occurs, or auto mode successfully recovers from polling back to notify. In JSON mode these appear under `watch_events`; in text mode they are flattened as `watch_event_<n>_*` lines.
+- A watch-state transition or fallback now forces one emitted `follow-imports` report even when the ingestion pass itself is otherwise idle, so long-lived operators can observe notify activation and fallback transitions without waiting for the next imported batch.
+- When multi-input follow mode shares `--failed-output` or `--failed-manifest` base paths, `codex-mem` derives per-input file names before adding the byte-range suffix so retry artifacts from different inputs do not overwrite each other.
 - Each event uses the same imported-note workflow as `memory_save_imported_note`.
 - Existing explicit memory wins over weaker imported duplicates in the same project.
 - The default implementation is fail-fast: the first invalid line stops the batch and returns an error.

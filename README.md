@@ -78,8 +78,8 @@ They are not MCP tools and are not the normal end-user interaction path.
   Prints the same diagnostics in machine-readable JSON for automation or CI checks.
 - `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--json] [--continue-on-error] [--failed-output failed.jsonl] [--failed-manifest failed.json]`
   Imports newline-delimited watcher or relay note events into durable imported notes plus audit records, with optional partial-success handling plus retry-oriented failure exports.
-- `codex-mem follow-imports --source watcher_import --input events.jsonl [--state-file events.offset.json] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--json]`
-  Follows a watcher or relay JSONL file incrementally, prefers filesystem notifications with polling fallback by default, checkpoints the last consumed offset, and reports the requested/active watch mode plus fallback state alongside imported-note results.
+- `codex-mem follow-imports --source watcher_import --input events-a.jsonl [--input events-b.jsonl ...] [--state-file events-a.offset.json --state-file events-b.offset.json ...] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--json]`
+  Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state alongside per-input imported-note results.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`

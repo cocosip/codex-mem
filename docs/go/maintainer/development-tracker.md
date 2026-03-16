@@ -361,6 +361,24 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the next long-lived import slice should expose these watch-state transitions as structured metrics/events, or move on to multi-input fan-in support.
+### 2026-03-16 Session Update
+
+- Completed: Extended `follow-imports` watch observability from state snapshots to structured events. Reports now carry cumulative watch transition counts plus per-report `watch_events` entries for notify activation and polling fallbacks, and long-lived follow mode emits an otherwise-idle report when one of those watch events occurs so operators do not have to wait for the next imported batch to see a mode change.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import follow-up should focus on multi-input fan-in support or on stronger dropped-event / watcher-recovery behavior on top of the new watch-event surface.
+### 2026-03-16 Session Update
+
+- Completed: Added multi-input fan-in support to `follow-imports`. Operators can now repeat `--input` in one process, each input keeps its own checkpoint sidecar, notify mode watches the union of parent directories, and multi-input runs emit an aggregate report with command-level watch state plus one nested per-input report. Shared failed-output and failed-manifest base paths now derive input-specific filenames before the byte-range suffix so retry artifacts from different inputs do not collide.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next `follow-imports` slice should strengthen dropped-event / watcher-recovery behavior now that multi-input fan-in and watch-event observability are both in place.
+### 2026-03-16 Session Update
+
+- Completed: Strengthened `follow-imports` auto-mode recovery so watcher failures no longer leave the process permanently degraded to polling. Auto mode now retries watcher setup on later poll intervals, emits a structured `watch_recovery` event when notify mode is restored, and switches back to filesystem notifications once the watcher path becomes available again. App coverage now verifies the recovery event helpers plus polling-loop watcher recovery.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next `follow-imports` slice should focus on explicitly detecting poll-caught dropped events during notify mode, or whether the current fallback-plus-recovery behavior is sufficient for operators.
 
 ## Recommended Next Step
 
