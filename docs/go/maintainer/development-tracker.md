@@ -1,6 +1,6 @@
-# codex-mem Go Development Tracker
+﻿# codex-mem Go Development Tracker
 
-Last updated: 2026-03-14
+Last updated: 2026-03-16
 Status: active
 
 ## Purpose
@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Start the next product or operator follow-up slice on top of the completed v1 implementation while keeping `modelcontextprotocol/go-sdk` as the only MCP runtime.
+Current target: Maintain the completed v1 implementation, keep maintainer/operator guidance aligned with the shipped baseline, and choose the next product or operator follow-up slice while keeping `modelcontextprotocol/go-sdk` as the only MCP runtime.
 
 ## Phase Progress
 
@@ -138,14 +138,14 @@ Tasks:
 
 Current session focus:
 
-- Close out the MCP SDK migration by removing the last hand-written runtime leftovers and resetting maintainer docs to the new baseline.
+- Keep maintainer and operator guidance aligned with the completed SDK-backed v1 baseline, then move on to the next product or operator follow-up slice.
 
 Immediate next tasks:
 
-1. Choose the next feature or operator slice outside MCP transport replacement.
-2. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path.
-3. Do not reintroduce a parallel in-tree MCP runtime.
-4. Only revisit transport internals if a real client compatibility issue appears.
+1. Fix stale doc paths or outdated readiness notes when they drift from the shipped layout.
+2. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path for code-bearing changes.
+3. Choose the next feature or operator slice outside MCP transport replacement.
+4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
 
@@ -222,7 +222,7 @@ Current blockers:
 
 ### 2026-03-13 Session Update
 
-- Completed: Rewrote the Chinese portion of [prompt-examples.md](../user/prompt-examples.md) to use user-facing language such as “当前仓�?项目/范围�?instead of leaning on raw `scope` terminology; added [how-memory-works.md](../user/how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
+- Completed: Rewrote the Chinese portion of [prompt-examples.md](../user/prompt-examples.md) to use more user-facing wording for the current repository/project context instead of leaning on raw `scope` terminology; added [how-memory-works.md](../user/how-memory-works.md) as a quick explainer for what mem does, what gets saved, when scope matters, and which commands are for normal users versus operators; linked the new explainer from the Go docs index and the root README.
 - In progress: User-facing documentation clarity follow-up.
 - Blockers: none new.
 - Next step: Decide whether the quick explainer should be expanded into a full onboarding doc with screenshots or client-specific walkthroughs.
@@ -271,6 +271,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: choose a product-facing feature slice outside MCP transport and operator hardening.
+### 2026-03-16 Session Update
+
+- Completed: Refreshed root `AGENTS.md` to point at the moved `docs/go/maintainer/` planning documents; updated this tracker so the current target/session plan reflects the completed SDK-backed v1 baseline instead of an already-finished transport migration; and synced [release-readiness.md](../operator/release-readiness.md) with the current HTTP session, SSE, and session-timeout behavior.
+- In progress: none.
+- Blockers: none.
+- Next step: choose a small product-facing or operator-facing follow-up slice and keep the regression harness in place for any code-bearing change.
 ## Recommended Next Step
 
 Recommended next implementation slice:

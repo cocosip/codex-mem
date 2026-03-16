@@ -33,12 +33,14 @@ Use it before:
 
 ## Current Readiness Snapshot
 
-As of 2026-03-13, the Go implementation includes:
+As of 2026-03-16, the Go implementation includes:
 
 - SQLite-backed durable storage with embedded migrations
 - scoped continuity tools and retrieval tools
 - AGENTS template installation
 - MCP stdio and HTTP transports for all v1 tools
+- session-aware streamable HTTP with standalone SSE support on `GET /mcp`
+- optional idle HTTP session expiry via `serve-http --session-timeout <duration>`
 - `doctor` diagnostics for config, runtime readiness, and provenance/audit posture
 
 The operational troubleshooting guide lives in [troubleshooting.md](./troubleshooting.md).
@@ -123,7 +125,7 @@ Confirm that an MCP client can:
 - list tools through `tools/list`
 - call at least `memory_install_agents`
 - call at least one continuity tool such as `memory_bootstrap_session`
-- if using HTTP transport, reach the configured `/mcp` endpoint successfully
+- if using HTTP transport, reuse `Mcp-Session-Id` on later requests and reach the configured `/mcp` endpoint successfully
 
 ### 4. Onboarding Smoke Check
 
@@ -167,6 +169,7 @@ These do not currently block internal usage:
 
 - no dedicated README examples for a specific external MCP client
 - `doctor` focuses on readiness and audit posture, not deep retrieval trace introspection
+- release artifacts publish checksums but not detached signatures yet
 
 ## Recommended Next Packaging Tasks
 

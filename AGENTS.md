@@ -25,10 +25,10 @@
 ## Project-Specific Notes
 
 - Treat `docs/spec/` as the normative v1 reference.
-- Treat `docs/implementation-backlog.md` as the language-neutral execution plan.
-- Treat `docs/go/implementation-plan.md` as the Go-oriented engineering plan.
-- Treat `docs/go/development-tracker.md` as the current Go execution tracker.
-- If the task is to begin implementation work, read `docs/go/dev-kickoff.md` first.
+- Treat `docs/go/maintainer/implementation-backlog.md` as the language-neutral execution plan.
+- Treat `docs/go/maintainer/implementation-plan.md` as the Go-oriented engineering plan.
+- Treat `docs/go/maintainer/development-tracker.md` as the current Go execution tracker.
+- If the task is to begin implementation work, read `docs/go/maintainer/dev-kickoff.md` first.
 - Keep durable memory focused on high-value notes and handoffs rather than transcript-style logs.
 
 ## System Relationships
