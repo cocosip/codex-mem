@@ -21,8 +21,10 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		"config_file_used", cfg.Meta.ConfigFileUsed,
 	)
 	command := "doctor"
+	commandArgs := []string{}
 	if len(args) > 0 {
 		command = args[0]
+		commandArgs = args[1:]
 	}
 	logger.Info("starting command", "command", command)
 
@@ -42,7 +44,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		_, err = fmt.Fprintf(stdout, "migrations applied successfully to %s\n", cfg.File.DatabasePath)
 		return err
 	case "doctor":
-		options, err := parseDoctorOptions(args[1:])
+		options, err := parseDoctorOptions(commandArgs)
 		if err != nil {
 			return err
 		}
@@ -90,7 +92,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		logger.Info("starting MCP stdio server")
 		return mcp.ServeStdio(ctx, mcp.NewSDKServer(instance.Handlers), stdin, stdout)
 	case "serve-http":
-		options, err := parseServeHTTPOptions(args[1:])
+		options, err := parseServeHTTPOptions(commandArgs)
 		if err != nil {
 			return err
 		}

@@ -113,6 +113,43 @@ func TestRunDoctorReportsMissingConfigFileAsNone(t *testing.T) {
 	}
 }
 
+func TestRunDefaultsToDoctorWhenNoCommandIsProvided(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		File: config.FileConfig{
+			DatabasePath:      filepath.Join(root, "data", "codex-mem.db"),
+			DefaultSystemName: "codex-mem",
+			SQLiteDriver:      "sqlite",
+			BusyTimeout:       5 * time.Second,
+			JournalMode:       "WAL",
+			LogFilePath:       filepath.Join(root, "logs", "codex-mem.log"),
+			LogMaxSizeMB:      20,
+			LogMaxBackups:     10,
+			LogMaxAgeDays:     30,
+			LogCompress:       true,
+			LogAlsoStderr:     true,
+		},
+		Meta: config.LoadMetadata{
+			ConfigDir:      filepath.Join(root, "configs"),
+			ConfigFilePath: filepath.Join(root, "configs", "codex-mem.json"),
+			LogDir:         filepath.Join(root, "logs"),
+		},
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, nil, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run default doctor: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "doctor ok") {
+		t.Fatalf("expected doctor output when no command is provided:\n%s", output)
+	}
+	if !strings.Contains(output, "config_file_used=none") {
+		t.Fatalf("expected default doctor path to report config_file_used=none:\n%s", output)
+	}
+}
+
 func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
