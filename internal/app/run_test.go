@@ -364,6 +364,55 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 		t.Fatalf("unmarshal doctor JSON: %v\n%s", err, stdout.String())
 	}
 
+	assertDoctorJSONDiagnostics(t, cfg, report)
+}
+
+func assertDoctorJSONDiagnostics(t *testing.T, cfg config.Config, report struct {
+	Status string `json:"status"`
+	Config struct {
+		Precedence     string  `json:"precedence"`
+		ConfigFileUsed *string `json:"config_file_used"`
+		Database       string  `json:"database"`
+	} `json:"config"`
+	Runtime struct {
+		BusyTimeoutMS    int64  `json:"busy_timeout_ms"`
+		JournalMode      string `json:"journal_mode"`
+		RequiredSchemaOK bool   `json:"required_schema_ok"`
+		FTSReady         bool   `json:"fts_ready"`
+	} `json:"runtime"`
+	Migrations struct {
+		Pending       int     `json:"pending"`
+		LatestApplied *string `json:"latest_applied"`
+	} `json:"migrations"`
+	Audit struct {
+		NoteRecords         int  `json:"note_records"`
+		ImportRecords       int  `json:"import_records"`
+		NoteProvenanceReady bool `json:"note_provenance_ready"`
+		ExclusionAuditReady bool `json:"exclusion_audit_ready"`
+		ImportAuditReady    bool `json:"import_audit_ready"`
+	} `json:"audit"`
+	Logging struct {
+		LogStderr bool `json:"log_stderr"`
+	} `json:"logging"`
+	Follow struct {
+		HealthFile          string           `json:"health_file"`
+		HealthPresent       bool             `json:"health_present"`
+		LastUpdatedAt       *time.Time       `json:"last_updated_at"`
+		Continuous          bool             `json:"continuous"`
+		PollIntervalSeconds int64            `json:"poll_interval_seconds"`
+		SnapshotAgeSeconds  int64            `json:"snapshot_age_seconds"`
+		HealthStale         bool             `json:"health_stale"`
+		WatchPollCatchups   int              `json:"watch_poll_catchups"`
+		WatchCatchupBytes   int              `json:"watch_poll_catchup_bytes"`
+		Warnings            []common.Warning `json:"warnings"`
+	} `json:"follow_imports"`
+	MCP struct {
+		Transport string `json:"transport"`
+		ToolCount int    `json:"tool_count"`
+	} `json:"mcp"`
+}) {
+	t.Helper()
+
 	if report.Status != "ok" {
 		t.Fatalf("status mismatch: got %q", report.Status)
 	}

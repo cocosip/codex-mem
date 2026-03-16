@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,30 @@ import (
 )
 
 const stringNone = "none"
+
+type readinessOptions struct {
+	JSON bool
+}
+
+type readinessReport struct {
+	Status  string                 `json:"status"`
+	Summary string                 `json:"summary"`
+	Doctor  *doctorReport          `json:"doctor,omitempty"`
+	Stdio   readinessSmokeTest     `json:"stdio_mcp_smoke_test"`
+	HTTP    readinessSmokeTest     `json:"http_mcp_smoke_test"`
+	Phases  []readinessPhaseResult `json:"phases"`
+}
+
+type readinessSmokeTest struct {
+	Status  string `json:"status"`
+	Summary string `json:"summary"`
+}
+
+type readinessPhaseResult struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Summary string `json:"summary"`
+}
 
 type doctorReport struct {
 	Status  string `json:"status"`
@@ -57,45 +82,52 @@ type doctorWarning struct {
 	Code string `json:"code"`
 }
 
+const (
+	readinessStatusOK     = "ok"
+	readinessStatusFailed = "failed"
+	readinessStatusNotRun = "not_run"
+
+	readinessPhaseDoctor = "doctor"
+	readinessPhaseStdio  = "stdio_mcp_smoke_test"
+	readinessPhaseHTTP   = "http_mcp_smoke_test"
+)
+
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+
+	options, err := parseOptions(os.Args[1:])
+	if err != nil {
+		failf("%v", err)
+	}
 
 	repoRoot, err := os.Getwd()
 	if err != nil {
 		failf("resolve working directory: %v", err)
 	}
 
-	doctorStdout, doctorStderr, err := runGo(ctx, repoRoot, "run", "./cmd/codex-mem", "doctor", "--json")
-	if err != nil {
-		failf("doctor check failed: %v\n%s", err, strings.TrimSpace(doctorStderr))
-	}
-
-	var doctor doctorReport
-	if err := json.Unmarshal([]byte(doctorStdout), &doctor); err != nil {
-		failf("decode doctor JSON: %v\nstdout:\n%s\nstderr:\n%s", err, doctorStdout, doctorStderr)
-	}
-	assertDoctor(doctor)
-
-	smokeStdout, smokeStderr, err := runGo(ctx, repoRoot, "run", "./scripts/mcp-smoke-test")
-	if err != nil {
-		failf("stdio mcp smoke test failed: %v\nstdout:\n%s\nstderr:\n%s", err, smokeStdout, smokeStderr)
-	}
-	if !strings.Contains(smokeStdout, "mcp smoke test passed") {
-		failf("stdio mcp smoke test did not report success\nstdout:\n%s\nstderr:\n%s", smokeStdout, smokeStderr)
-	}
-
-	httpSmokeStdout, httpSmokeStderr, err := runGo(ctx, repoRoot, "run", "./scripts/http-mcp-smoke-test")
-	if err != nil {
-		failf("http mcp smoke test failed: %v\nstdout:\n%s\nstderr:\n%s", err, httpSmokeStdout, httpSmokeStderr)
-	}
-	if !strings.Contains(httpSmokeStdout, "http mcp smoke test passed") {
-		failf("http mcp smoke test did not report success\nstdout:\n%s\nstderr:\n%s", httpSmokeStdout, httpSmokeStderr)
-	}
-
-	if err := writeReadinessSummary(os.Stdout, doctor, smokeStdout, httpSmokeStdout); err != nil {
+	report, runErr := runReadinessCheck(ctx, repoRoot)
+	if err := writeReadinessOutput(os.Stdout, report, options); err != nil {
 		failf("write readiness summary: %v", err)
 	}
+	if runErr != nil {
+		os.Exit(1)
+	}
+}
+
+func parseOptions(args []string) (readinessOptions, error) {
+	var options readinessOptions
+	for _, arg := range args {
+		switch strings.TrimSpace(arg) {
+		case "":
+			continue
+		case "--json":
+			options.JSON = true
+		default:
+			return readinessOptions{}, fmt.Errorf("unknown readiness-check flag %q", arg)
+		}
+	}
+	return options, nil
 }
 
 func runGo(ctx context.Context, dir string, args ...string) (string, string, error) {
@@ -111,69 +143,217 @@ func runGo(ctx context.Context, dir string, args ...string) (string, string, err
 	return string(stdout), "", nil
 }
 
-func assertDoctor(report doctorReport) {
-	if report.Status != "ok" {
-		failf("doctor status mismatch: got %q", report.Status)
+func runReadinessCheck(ctx context.Context, repoRoot string) (readinessReport, error) {
+	report := newReadinessReport()
+
+	doctorStdout, doctorStderr, err := runGo(ctx, repoRoot, "run", "./cmd/codex-mem", "doctor", "--json")
+	if err != nil {
+		failure := fmt.Errorf("doctor check failed: %v", err)
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseDoctor, readinessStatusFailed, summarizeCommandFailure(failure.Error(), doctorStdout, doctorStderr))
+		return report, failure
 	}
-	if report.MCP.Transport != "stdio" {
-		failf("doctor mcp transport mismatch: got %q", report.MCP.Transport)
+
+	var doctor doctorReport
+	if err := json.Unmarshal([]byte(doctorStdout), &doctor); err != nil {
+		failure := fmt.Errorf("decode doctor JSON: %v", err)
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseDoctor, readinessStatusFailed, summarizeCommandFailure(failure.Error(), doctorStdout, doctorStderr))
+		return report, failure
 	}
-	if report.MCP.ToolCount != 11 {
-		failf("doctor tool count mismatch: got %d want 11", report.MCP.ToolCount)
+	if err := validateDoctor(doctor); err != nil {
+		report.Doctor = &doctor
+		report.Status = readinessStatusFailed
+		report.Summary = err.Error()
+		setReadinessPhase(&report, readinessPhaseDoctor, readinessStatusFailed, err.Error())
+		return report, err
 	}
-	if !report.Runtime.ForeignKeys {
-		failf("doctor foreign_keys=false")
+	report.Doctor = &doctor
+	setReadinessPhase(&report, readinessPhaseDoctor, readinessStatusOK, "doctor --json passed")
+
+	smokeStdout, smokeStderr, err := runGo(ctx, repoRoot, "run", "./scripts/mcp-smoke-test")
+	if err != nil {
+		failure := fmt.Errorf("stdio mcp smoke test failed: %v", err)
+		report.Stdio = readinessSmokeTest{
+			Status:  readinessStatusFailed,
+			Summary: summarizeCommandFailure(failure.Error(), smokeStdout, smokeStderr),
+		}
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseStdio, readinessStatusFailed, report.Stdio.Summary)
+		return report, failure
 	}
-	if !report.Runtime.RequiredSchemaOK {
-		failf("doctor required_schema_ok=false")
+	if !strings.Contains(smokeStdout, "mcp smoke test passed") {
+		failure := errors.New("stdio mcp smoke test did not report success")
+		report.Stdio = readinessSmokeTest{
+			Status:  readinessStatusFailed,
+			Summary: summarizeCommandFailure(failure.Error(), smokeStdout, smokeStderr),
+		}
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseStdio, readinessStatusFailed, report.Stdio.Summary)
+		return report, failure
 	}
-	if !report.Runtime.FTSReady {
-		failf("doctor fts_ready=false")
+	report.Stdio = readinessSmokeTest{
+		Status:  readinessStatusOK,
+		Summary: firstLine(smokeStdout),
 	}
-	if report.Migrations.Pending != 0 {
-		failf("doctor migrations pending: %d", report.Migrations.Pending)
+	setReadinessPhase(&report, readinessPhaseStdio, readinessStatusOK, report.Stdio.Summary)
+
+	httpSmokeStdout, httpSmokeStderr, err := runGo(ctx, repoRoot, "run", "./scripts/http-mcp-smoke-test")
+	if err != nil {
+		failure := fmt.Errorf("http mcp smoke test failed: %v", err)
+		report.HTTP = readinessSmokeTest{
+			Status:  readinessStatusFailed,
+			Summary: summarizeCommandFailure(failure.Error(), httpSmokeStdout, httpSmokeStderr),
+		}
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseHTTP, readinessStatusFailed, report.HTTP.Summary)
+		return report, failure
 	}
-	if !report.Audit.NoteProvenanceReady {
-		failf("doctor note_provenance_ready=false")
+	if !strings.Contains(httpSmokeStdout, "http mcp smoke test passed") {
+		failure := errors.New("http mcp smoke test did not report success")
+		report.HTTP = readinessSmokeTest{
+			Status:  readinessStatusFailed,
+			Summary: summarizeCommandFailure(failure.Error(), httpSmokeStdout, httpSmokeStderr),
+		}
+		report.Status = readinessStatusFailed
+		report.Summary = failure.Error()
+		setReadinessPhase(&report, readinessPhaseHTTP, readinessStatusFailed, report.HTTP.Summary)
+		return report, failure
 	}
-	if !report.Audit.ExclusionAuditReady {
-		failf("doctor exclusion_audit_ready=false")
+	report.HTTP = readinessSmokeTest{
+		Status:  readinessStatusOK,
+		Summary: firstLine(httpSmokeStdout),
 	}
-	if !report.Audit.ImportAuditReady {
-		failf("doctor import_audit_ready=false")
-	}
+	setReadinessPhase(&report, readinessPhaseHTTP, readinessStatusOK, report.HTTP.Summary)
+
+	report.Status = readinessStatusOK
+	report.Summary = "all readiness phases passed"
+	return report, nil
 }
 
-func writeReadinessSummary(w io.Writer, doctor doctorReport, smokeStdout, httpSmokeStdout string) error {
+func newReadinessReport() readinessReport {
+	report := readinessReport{
+		Status:  readinessStatusNotRun,
+		Summary: "readiness phases have not run",
+		Stdio: readinessSmokeTest{
+			Status:  readinessStatusNotRun,
+			Summary: stringNone,
+		},
+		HTTP: readinessSmokeTest{
+			Status:  readinessStatusNotRun,
+			Summary: stringNone,
+		},
+		Phases: []readinessPhaseResult{
+			{Name: readinessPhaseDoctor, Status: readinessStatusNotRun, Summary: stringNone},
+			{Name: readinessPhaseStdio, Status: readinessStatusNotRun, Summary: stringNone},
+			{Name: readinessPhaseHTTP, Status: readinessStatusNotRun, Summary: stringNone},
+		},
+	}
+	return report
+}
+
+func setReadinessPhase(report *readinessReport, name, status, summary string) {
+	for i := range report.Phases {
+		if report.Phases[i].Name == name {
+			report.Phases[i].Status = status
+			report.Phases[i].Summary = fallbackString(summary)
+			return
+		}
+	}
+	report.Phases = append(report.Phases, readinessPhaseResult{
+		Name:    name,
+		Status:  status,
+		Summary: fallbackString(summary),
+	})
+}
+
+func validateDoctor(report doctorReport) error {
+	if report.Status != "ok" {
+		return fmt.Errorf("doctor status mismatch: got %q", report.Status)
+	}
+	if report.MCP.Transport != "stdio" {
+		return fmt.Errorf("doctor mcp transport mismatch: got %q", report.MCP.Transport)
+	}
+	if report.MCP.ToolCount != 11 {
+		return fmt.Errorf("doctor tool count mismatch: got %d want 11", report.MCP.ToolCount)
+	}
+	if !report.Runtime.ForeignKeys {
+		return errors.New("doctor foreign_keys=false")
+	}
+	if !report.Runtime.RequiredSchemaOK {
+		return errors.New("doctor required_schema_ok=false")
+	}
+	if !report.Runtime.FTSReady {
+		return errors.New("doctor fts_ready=false")
+	}
+	if report.Migrations.Pending != 0 {
+		return fmt.Errorf("doctor migrations pending: %d", report.Migrations.Pending)
+	}
+	if !report.Audit.NoteProvenanceReady {
+		return errors.New("doctor note_provenance_ready=false")
+	}
+	if !report.Audit.ExclusionAuditReady {
+		return errors.New("doctor exclusion_audit_ready=false")
+	}
+	if !report.Audit.ImportAuditReady {
+		return errors.New("doctor import_audit_ready=false")
+	}
+	return nil
+}
+
+func writeReadinessOutput(w io.Writer, report readinessReport, options readinessOptions) error {
+	if options.JSON {
+		return writeReadinessJSON(w, report)
+	}
+	return writeReadinessSummary(w, report)
+}
+
+func writeReadinessSummary(w io.Writer, report readinessReport) error {
+	doctor := report.Doctor
 	lines := []string{
-		"readiness check passed",
-		fmt.Sprintf("doctor_status=%s", doctor.Status),
-		fmt.Sprintf("doctor_mcp_transport=%s", doctor.MCP.Transport),
-		fmt.Sprintf("doctor_mcp_tool_count=%d", doctor.MCP.ToolCount),
-		fmt.Sprintf("doctor_schema_ready=%t", doctor.Runtime.RequiredSchemaOK),
-		fmt.Sprintf("doctor_fts_ready=%t", doctor.Runtime.FTSReady),
-		fmt.Sprintf("doctor_migrations_pending=%d", doctor.Migrations.Pending),
-		fmt.Sprintf("doctor_provenance_ready=%t", doctor.Audit.NoteProvenanceReady),
-		fmt.Sprintf("doctor_exclusion_audit_ready=%t", doctor.Audit.ExclusionAuditReady),
-		fmt.Sprintf("doctor_import_audit_ready=%t", doctor.Audit.ImportAuditReady),
-		fmt.Sprintf("doctor_follow_imports_health_present=%t", doctor.Follow.HealthPresent),
-		fmt.Sprintf("doctor_follow_imports_status=%s", fallbackString(doctor.Follow.Status)),
-		fmt.Sprintf("doctor_follow_imports_source=%s", fallbackString(doctor.Follow.Source)),
-		fmt.Sprintf("doctor_follow_imports_input_count=%d", doctor.Follow.InputCount),
-		fmt.Sprintf("doctor_follow_imports_last_updated_at=%s", timePointerOrNone(doctor.Follow.LastUpdatedAt)),
-		fmt.Sprintf("doctor_follow_imports_continuous=%t", doctor.Follow.Continuous),
-		fmt.Sprintf("doctor_follow_imports_poll_interval_seconds=%d", doctor.Follow.PollIntervalSeconds),
-		fmt.Sprintf("doctor_follow_imports_snapshot_age_seconds=%d", doctor.Follow.SnapshotAgeSeconds),
-		fmt.Sprintf("doctor_follow_imports_health_stale=%t", doctor.Follow.HealthStale),
-		fmt.Sprintf("doctor_follow_imports_requested_watch_mode=%s", fallbackString(doctor.Follow.RequestedWatchMode)),
-		fmt.Sprintf("doctor_follow_imports_active_watch_mode=%s", fallbackString(doctor.Follow.ActiveWatchMode)),
-		fmt.Sprintf("doctor_follow_imports_watch_fallbacks=%d", doctor.Follow.WatchFallbacks),
-		fmt.Sprintf("doctor_follow_imports_watch_transitions=%d", doctor.Follow.WatchTransitions),
-		fmt.Sprintf("doctor_follow_imports_watch_poll_catchups=%d", doctor.Follow.WatchPollCatchups),
-		fmt.Sprintf("doctor_follow_imports_watch_poll_catchup_bytes=%d", doctor.Follow.WatchPollCatchupBytes),
-		fmt.Sprintf("doctor_follow_imports_warning_codes=%s", warningCodes(doctor.Follow.Warnings)),
-		fmt.Sprintf("stdio_mcp_smoke_test=%s", firstLine(smokeStdout)),
-		fmt.Sprintf("http_mcp_smoke_test=%s", firstLine(httpSmokeStdout)),
+		fmt.Sprintf("readiness check %s", statusLabel(report.Status)),
+		fmt.Sprintf("status=%s", report.Status),
+		fmt.Sprintf("summary=%s", fallbackString(report.Summary)),
+		fmt.Sprintf("doctor_status=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.Status) })),
+		fmt.Sprintf("doctor_mcp_transport=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.MCP.Transport) })),
+		fmt.Sprintf("doctor_mcp_tool_count=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.MCP.ToolCount })),
+		fmt.Sprintf("doctor_schema_ready=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Runtime.RequiredSchemaOK })),
+		fmt.Sprintf("doctor_fts_ready=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Runtime.FTSReady })),
+		fmt.Sprintf("doctor_migrations_pending=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Migrations.Pending })),
+		fmt.Sprintf("doctor_provenance_ready=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Audit.NoteProvenanceReady })),
+		fmt.Sprintf("doctor_exclusion_audit_ready=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Audit.ExclusionAuditReady })),
+		fmt.Sprintf("doctor_import_audit_ready=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Audit.ImportAuditReady })),
+		fmt.Sprintf("doctor_follow_imports_health_present=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Follow.HealthPresent })),
+		fmt.Sprintf("doctor_follow_imports_status=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.Follow.Status) })),
+		fmt.Sprintf("doctor_follow_imports_source=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.Follow.Source) })),
+		fmt.Sprintf("doctor_follow_imports_input_count=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Follow.InputCount })),
+		fmt.Sprintf("doctor_follow_imports_last_updated_at=%s", doctorFieldString(doctor, func(value doctorReport) string { return timePointerOrNone(value.Follow.LastUpdatedAt) })),
+		fmt.Sprintf("doctor_follow_imports_continuous=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Follow.Continuous })),
+		fmt.Sprintf("doctor_follow_imports_poll_interval_seconds=%d", doctorFieldInt64(doctor, func(value doctorReport) int64 { return value.Follow.PollIntervalSeconds })),
+		fmt.Sprintf("doctor_follow_imports_snapshot_age_seconds=%d", doctorFieldInt64(doctor, func(value doctorReport) int64 { return value.Follow.SnapshotAgeSeconds })),
+		fmt.Sprintf("doctor_follow_imports_health_stale=%t", doctorFieldBool(doctor, func(value doctorReport) bool { return value.Follow.HealthStale })),
+		fmt.Sprintf("doctor_follow_imports_requested_watch_mode=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.Follow.RequestedWatchMode) })),
+		fmt.Sprintf("doctor_follow_imports_active_watch_mode=%s", doctorFieldString(doctor, func(value doctorReport) string { return fallbackString(value.Follow.ActiveWatchMode) })),
+		fmt.Sprintf("doctor_follow_imports_watch_fallbacks=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Follow.WatchFallbacks })),
+		fmt.Sprintf("doctor_follow_imports_watch_transitions=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Follow.WatchTransitions })),
+		fmt.Sprintf("doctor_follow_imports_watch_poll_catchups=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Follow.WatchPollCatchups })),
+		fmt.Sprintf("doctor_follow_imports_watch_poll_catchup_bytes=%d", doctorFieldInt(doctor, func(value doctorReport) int { return value.Follow.WatchPollCatchupBytes })),
+		fmt.Sprintf("doctor_follow_imports_warning_codes=%s", doctorFieldString(doctor, func(value doctorReport) string { return warningCodes(value.Follow.Warnings) })),
+		fmt.Sprintf("%s_status=%s", readinessPhaseStdio, report.Stdio.Status),
+		fmt.Sprintf("%s_summary=%s", readinessPhaseStdio, fallbackString(report.Stdio.Summary)),
+		fmt.Sprintf("%s_status=%s", readinessPhaseHTTP, report.HTTP.Status),
+		fmt.Sprintf("%s_summary=%s", readinessPhaseHTTP, fallbackString(report.HTTP.Summary)),
+	}
+	for _, phase := range report.Phases {
+		lines = append(lines,
+			fmt.Sprintf("phase_%s_status=%s", phase.Name, phase.Status),
+			fmt.Sprintf("phase_%s_summary=%s", phase.Name, fallbackString(phase.Summary)),
+		)
 	}
 	for _, line := range lines {
 		if _, err := fmt.Fprintln(w, line); err != nil {
@@ -181,6 +361,13 @@ func writeReadinessSummary(w io.Writer, doctor doctorReport, smokeStdout, httpSm
 		}
 	}
 	return nil
+}
+
+func writeReadinessJSON(w io.Writer, report readinessReport) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(report)
 }
 
 func firstLine(value string) string {
@@ -224,6 +411,50 @@ func warningCodes(warnings []doctorWarning) string {
 		return stringNone
 	}
 	return strings.Join(codes, ",")
+}
+
+func summarizeCommandFailure(baseSummary, stdout, stderr string) string {
+	for _, candidate := range []string{firstLine(stderr), firstLine(stdout)} {
+		if candidate != stringNone {
+			return fmt.Sprintf("%s (%s)", baseSummary, candidate)
+		}
+	}
+	return baseSummary
+}
+
+func doctorFieldString(report *doctorReport, getter func(doctorReport) string) string {
+	if report == nil {
+		return stringNone
+	}
+	return fallbackString(getter(*report))
+}
+
+func doctorFieldInt(report *doctorReport, getter func(doctorReport) int) int {
+	if report == nil {
+		return 0
+	}
+	return getter(*report)
+}
+
+func doctorFieldInt64(report *doctorReport, getter func(doctorReport) int64) int64 {
+	if report == nil {
+		return 0
+	}
+	return getter(*report)
+}
+
+func doctorFieldBool(report *doctorReport, getter func(doctorReport) bool) bool {
+	if report == nil {
+		return false
+	}
+	return getter(*report)
+}
+
+func statusLabel(status string) string {
+	if status == readinessStatusOK {
+		return "passed"
+	}
+	return "failed"
 }
 
 func failf(format string, args ...any) {

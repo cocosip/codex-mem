@@ -358,7 +358,7 @@ func evaluateFollowImportsHealthStaleness(snapshot followImportsHealthSnapshot, 
 	return age, age > window
 }
 
-func followImportsHealthStaleWarnings(snapshot followImportsHealthSnapshot, age time.Duration, stale bool) []common.Warning {
+func followImportsHealthStaleWarnings(_ followImportsHealthSnapshot, age time.Duration, stale bool) []common.Warning {
 	if !stale {
 		return nil
 	}

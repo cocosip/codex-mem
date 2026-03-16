@@ -70,6 +70,12 @@ For a single combined local readiness check, run:
 go run ./scripts/readiness-check
 ```
 
+If your release automation prefers a single structured summary payload, run:
+
+```powershell
+go run ./scripts/readiness-check --json
+```
+
 Confirm:
 
 - `required_schema_ok=true`
@@ -80,7 +86,7 @@ Confirm:
 - `exclusion_audit_ready=true`
 - `mcp_tool_count=11`
 
-If your deployment uses `follow-imports`, also inspect the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check`. Those lines surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state.
+If your deployment uses `follow-imports`, also inspect either the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check` or the embedded `doctor.follow_imports` object from `go run ./scripts/readiness-check --json`. Those fields surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state. The readiness helper now also emits per-phase status for `doctor`, stdio smoke, and HTTP smoke, which is useful when a release gate fails and you need to see which stage stopped before exit.
 
 ### 2. Test Suite
 

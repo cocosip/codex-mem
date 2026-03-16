@@ -151,7 +151,7 @@ See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full
 - MCP transport/tool availability
 
 Use `codex-mem doctor --json` when the output needs to be consumed by scripts.
-The combined readiness gate under `scripts/readiness-check` is for CI and maintainers, not end users. It now echoes the last-known `follow-imports` doctor fields as informational runtime summary lines for automation, without turning stale or degraded follow health into a hard startup/readiness failure by itself.
+The combined readiness gate under `scripts/readiness-check` is for CI and maintainers, not end users. By default it echoes the last-known `follow-imports` doctor fields as informational runtime summary lines for automation, without turning stale or degraded follow health into a hard startup/readiness failure by itself. The helper now also reports explicit per-phase status lines for `doctor`, stdio smoke, and HTTP smoke so failures identify which phase stopped the check before the process exits non-zero. Use `go run ./scripts/readiness-check --json` when you want one structured readiness summary object instead of flat key/value text.
 
 For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/operator/troubleshooting.md).
 

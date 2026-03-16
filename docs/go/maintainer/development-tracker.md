@@ -409,6 +409,18 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether a later slice should add an explicit JSON summary mode for `scripts/readiness-check`, or whether the flat key/value output is enough for current automation consumers.
+### 2026-03-16 Session Update
+
+- Completed: Added an explicit `--json` mode to `scripts/readiness-check`. The helper still defaults to flat key/value text, but `--json` now emits one structured readiness summary that embeds the parsed `doctor --json` payload plus compact stdio/HTTP smoke-test results; script-level tests now cover flag parsing and JSON output; and maintainer/operator docs now describe when to use the text versus JSON forms.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next automation-facing slice should let `readiness-check` downgrade or annotate individual smoke-test phases instead of only succeeding when all phases pass.
+### 2026-03-16 Session Update
+
+- Completed: Added explicit per-phase results to `scripts/readiness-check` for `doctor`, stdio smoke, and HTTP smoke. The helper now collects phase status/summary metadata before exiting, so failed runs still emit a usable text or JSON summary naming the phase that stopped progress; success output now includes stable `phase_*` lines and JSON `phases` entries; and the maintainer/operator docs now describe the new phase annotations alongside the existing follow-health summary fields.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next automation-facing slice should add an option to continue running later readiness phases after an earlier failure, or whether fail-fast execution plus explicit phase reporting is enough.
 
 ## Recommended Next Step
 

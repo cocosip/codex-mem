@@ -44,6 +44,14 @@ const (
 	followImportsWatchModeNotify followImportsWatchMode = "notify"
 )
 
+const (
+	followImportsStatusIdle    = "idle"
+	followImportsStatusFailed  = "failed"
+	followImportsStatusPartial = "partial"
+	followImportsEventRecovery = "watch_recovery"
+	followImportsEventCatchup  = "watch_poll_catchup"
+)
+
 // FollowImportsInput configures one polling-based import-follow pass.
 type FollowImportsInput struct {
 	Source             imports.Source
@@ -597,7 +605,7 @@ func (a *App) FollowImportsOnce(ctx context.Context, input FollowImportsInput) (
 	}
 
 	report := followImportsReport{
-		Status:          "idle",
+		Status:          followImportsStatusIdle,
 		Source:          string(input.Source),
 		Input:           inputPath,
 		StateFile:       statePath,
@@ -926,7 +934,7 @@ func markFollowImportsRecovery(state *followImportsRuntimeState, reason string) 
 	}
 	state.PendingEvents = append(state.PendingEvents, followImportsEvent{
 		At:                 time.Now().UTC(),
-		Kind:               "watch_recovery",
+		Kind:               followImportsEventRecovery,
 		RequestedWatchMode: string(state.Requested),
 		PreviousWatchMode:  string(previous),
 		ActiveWatchMode:    string(state.Active),
@@ -943,7 +951,7 @@ func markFollowImportsPollCatchup(state *followImportsRuntimeState, consumedInpu
 	state.PollCatchupBytes += consumedBytes
 	state.PendingEvents = append(state.PendingEvents, followImportsEvent{
 		At:                 time.Now().UTC(),
-		Kind:               "watch_poll_catchup",
+		Kind:               followImportsEventCatchup,
 		RequestedWatchMode: string(state.Requested),
 		ActiveWatchMode:    string(state.Active),
 		Reason:             "notify_safety_poll_consumed_bytes",
@@ -1059,11 +1067,11 @@ func deriveFollowImportsBatchPath(base string, start int64, end int64) string {
 }
 
 func shouldWriteFollowImportsReport(report followImportsReport, once bool) bool {
-	return once || report.Status != "idle" || report.WatchEventCount > 0
+	return once || report.Status != followImportsStatusIdle || report.WatchEventCount > 0
 }
 
 func shouldWriteFollowImportsAggregateReport(report followImportsAggregateReport, once bool) bool {
-	return once || report.Status != "idle" || report.WatchEventCount > 0
+	return once || report.Status != followImportsStatusIdle || report.WatchEventCount > 0
 }
 
 func formatFollowImportsReport(report followImportsReport) string {
@@ -1283,7 +1291,7 @@ func summarizeFollowImportsConsumption(reports []followImportsReport) (int, int)
 
 func newFollowImportsAggregateReport(source imports.Source, reports []followImportsReport) followImportsAggregateReport {
 	aggregate := followImportsAggregateReport{
-		Status:     "idle",
+		Status:     followImportsStatusIdle,
 		Source:     string(source),
 		InputCount: len(reports),
 		Inputs:     append([]followImportsReport(nil), reports...),
@@ -1292,12 +1300,12 @@ func newFollowImportsAggregateReport(source imports.Source, reports []followImpo
 		aggregate.TotalConsumedBytes += report.ConsumedBytes
 		aggregate.TotalPendingBytes += report.PendingBytes
 		switch report.Status {
-		case "idle":
+		case followImportsStatusIdle:
 			aggregate.IdleInputs++
-		case "failed":
+		case followImportsStatusFailed:
 			aggregate.FailedInputs++
 			aggregate.ConsumedInputs++
-		case "partial":
+		case followImportsStatusPartial:
 			aggregate.PartialInputs++
 			aggregate.ConsumedInputs++
 		default:
@@ -1306,13 +1314,13 @@ func newFollowImportsAggregateReport(source imports.Source, reports []followImpo
 	}
 	switch {
 	case aggregate.InputCount == 0:
-		aggregate.Status = "idle"
+		aggregate.Status = followImportsStatusIdle
 	case aggregate.FailedInputs == aggregate.InputCount:
-		aggregate.Status = "failed"
+		aggregate.Status = followImportsStatusFailed
 	case aggregate.FailedInputs > 0 || aggregate.PartialInputs > 0:
-		aggregate.Status = "partial"
+		aggregate.Status = followImportsStatusPartial
 	case aggregate.ConsumedInputs == 0:
-		aggregate.Status = "idle"
+		aggregate.Status = followImportsStatusIdle
 	default:
 		aggregate.Status = "ok"
 	}

@@ -138,13 +138,19 @@ If you want one maintainer-oriented command that also validates `doctor --json`,
 go run ./scripts/readiness-check
 ```
 
+For a structured readiness summary object, run:
+
+```powershell
+go run ./scripts/readiness-check --json
+```
+
 That combined check now covers:
 
 1. `doctor --json`
 2. stdio MCP smoke test
 3. HTTP MCP smoke test
 
-The summary output from `scripts/readiness-check` also echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. Those fields are informational by default and do not make the readiness helper fail on their own.
+The default text summary from `scripts/readiness-check` echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. The helper also emits explicit `phase_*_status` and `phase_*_summary` lines for the `doctor`, stdio smoke, and HTTP smoke phases, so a failed run still tells automation which phase stopped progress before the command exits non-zero. `--json` returns one structured summary object that embeds the parsed doctor report, compact stdio/HTTP smoke-test summaries, and the same per-phase results. In both modes the follow-health fields are informational by default and do not make the readiness helper fail on their own.
 
 ## Manual Client Checklist
 

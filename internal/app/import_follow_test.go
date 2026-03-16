@@ -202,7 +202,7 @@ func TestFollowImportsRuntimeStateApply(t *testing.T) {
 	if got, want := report.RequestedWatchMode, "auto"; got != want {
 		t.Fatalf("requested watch mode mismatch: got %q want %q", got, want)
 	}
-	if got, want := report.ActiveWatchMode, "poll"; got != want {
+	if got, want := report.ActiveWatchMode, string(followImportsWatchModePoll); got != want {
 		t.Fatalf("active watch mode mismatch: got %q want %q", got, want)
 	}
 	if got, want := report.WatchFallbacks, 2; got != want {
@@ -367,7 +367,7 @@ func TestMarkFollowImportsRecoveryRecordsEvent(t *testing.T) {
 	if len(state.PendingEvents) != 1 {
 		t.Fatalf("expected one pending event, got %+v", state.PendingEvents)
 	}
-	if got, want := state.PendingEvents[0].Kind, "watch_recovery"; got != want {
+	if got, want := state.PendingEvents[0].Kind, followImportsEventRecovery; got != want {
 		t.Fatalf("watch event kind mismatch: got %q want %q", got, want)
 	}
 	if got, want := state.PendingEvents[0].Reason, "watcher_recovered"; got != want {
@@ -388,7 +388,7 @@ func TestMarkFollowImportsPollCatchupRecordsEvent(t *testing.T) {
 		t.Fatalf("expected one pending event, got %+v", state.PendingEvents)
 	}
 	event := state.PendingEvents[0]
-	if got, want := event.Kind, "watch_poll_catchup"; got != want {
+	if got, want := event.Kind, followImportsEventCatchup; got != want {
 		t.Fatalf("watch event kind mismatch: got %q want %q", got, want)
 	}
 	if got, want := event.ConsumedInputs, 2; got != want {
@@ -420,7 +420,7 @@ func TestEnterFollowImportsNotifyModeUsesRecoveryEventAfterFallback(t *testing.T
 	if len(state.PendingEvents) != 1 {
 		t.Fatalf("expected one pending event, got %+v", state.PendingEvents)
 	}
-	if got, want := state.PendingEvents[0].Kind, "watch_recovery"; got != want {
+	if got, want := state.PendingEvents[0].Kind, followImportsEventRecovery; got != want {
 		t.Fatalf("watch event kind mismatch: got %q want %q", got, want)
 	}
 }
@@ -597,7 +597,7 @@ func TestRunFollowImportsPollingRecoveryLoopRecoversWatcher(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(inputPath), 0o755)
 	}()
 
-	err := runFollowImportsPollingRecoveryLoop(ctx, []string{inputPath}, 20*time.Millisecond, func(trigger followImportsRunTrigger) error {
+	err := runFollowImportsPollingRecoveryLoop(ctx, []string{inputPath}, 20*time.Millisecond, func(_ followImportsRunTrigger) error {
 		runCount++
 		return nil
 	}, state)
@@ -613,7 +613,7 @@ func TestRunFollowImportsPollingRecoveryLoopRecoversWatcher(t *testing.T) {
 	if len(state.PendingEvents) == 0 {
 		t.Fatalf("expected recovery event, got none")
 	}
-	if got, want := state.PendingEvents[len(state.PendingEvents)-1].Kind, "watch_recovery"; got != want {
+	if got, want := state.PendingEvents[len(state.PendingEvents)-1].Kind, followImportsEventRecovery; got != want {
 		t.Fatalf("watch event kind mismatch: got %q want %q", got, want)
 	}
 }
