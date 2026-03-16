@@ -102,8 +102,8 @@ func assertDoctor(report doctorReport) {
 	if report.MCP.Transport != "stdio" {
 		failf("doctor mcp transport mismatch: got %q", report.MCP.Transport)
 	}
-	if report.MCP.ToolCount != 9 {
-		failf("doctor tool count mismatch: got %d want 9", report.MCP.ToolCount)
+	if report.MCP.ToolCount != 10 {
+		failf("doctor tool count mismatch: got %d want 10", report.MCP.ToolCount)
 	}
 	if !report.Runtime.ForeignKeys {
 		failf("doctor foreign_keys=false")

@@ -8,6 +8,7 @@ import (
 
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/scope"
 )
@@ -42,6 +43,22 @@ type fixedIDFactory struct {
 
 func (f fixedIDFactory) New(_ string) string {
 	return f.value
+}
+
+type importRepoStub struct {
+	duplicate *imports.Record
+	findErr   error
+}
+
+func (s *importRepoStub) FindDuplicate(_ imports.Record) (*imports.Record, error) {
+	if s.findErr != nil {
+		return nil, s.findErr
+	}
+	return s.duplicate, nil
+}
+
+func (s *importRepoStub) Create(_ imports.Record) error {
+	return nil
 }
 
 func TestHandleMemorySaveNotePromotesWarningsToEnvelope(t *testing.T) {
@@ -118,6 +135,47 @@ func TestHandleMemorySaveNoteMapsUncodedErrors(t *testing.T) {
 	}
 	if response.Data != nil {
 		t.Fatalf("expected no data on error, got %+v", response.Data)
+	}
+}
+
+func TestHandleMemorySaveImportPromotesWarningsToEnvelope(t *testing.T) {
+	now := time.Date(2026, 3, 16, 3, 0, 0, 0, time.UTC)
+	existing := &imports.Record{
+		ID:          "import_existing",
+		Scope:       scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:   "sess_1",
+		Source:      imports.SourceWatcherImport,
+		ExternalID:  "watcher:123",
+		PayloadHash: "hash-123",
+		ImportedAt:  now,
+	}
+	service := imports.NewService(&importRepoStub{duplicate: existing}, imports.Options{
+		Clock:     fixedClock{now: now.Add(time.Minute)},
+		IDFactory: fixedIDFactory{value: "import_new"},
+	})
+	handlers := &Handlers{importService: service}
+
+	response := handlers.HandleMemorySaveImport(context.Background(), imports.SaveInput{
+		Scope:      existing.Scope,
+		SessionID:  existing.SessionID,
+		Source:     existing.Source,
+		ExternalID: existing.ExternalID,
+	})
+
+	if !response.Ok {
+		t.Fatalf("expected ok response, got error %+v", response.Error)
+	}
+	if response.Data == nil {
+		t.Fatal("expected response data")
+	}
+	if !response.Data.Suppressed || !response.Data.Deduplicated {
+		t.Fatalf("expected suppressed+deduplicated import response, got %+v", response.Data)
+	}
+	if got, want := len(response.Warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+	if got, want := response.Warnings[0].Code, common.WarnImportSuppressed; got != want {
+		t.Fatalf("warning code mismatch: got %q want %q", got, want)
 	}
 }
 

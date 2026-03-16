@@ -8,6 +8,7 @@ import (
 
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/retrieval"
 	"codex-mem/internal/domain/scope"
@@ -96,6 +97,16 @@ type saveHandoffRequest struct {
 	RelatedNoteIDs []string     `json:"related_note_ids,omitempty"`
 	Status         string       `json:"status"`
 	PrivacyIntent  string       `json:"privacy_intent,omitempty"`
+}
+
+type saveImportRequest struct {
+	Scope           scopePayload `json:"scope"`
+	SessionID       string       `json:"session_id"`
+	Source          string       `json:"source"`
+	ExternalID      string       `json:"external_id,omitempty"`
+	PayloadHash     string       `json:"payload_hash,omitempty"`
+	DurableMemoryID string       `json:"durable_memory_id,omitempty"`
+	PrivacyIntent   string       `json:"privacy_intent,omitempty"`
 }
 
 type bootstrapRequest struct {
@@ -331,6 +342,39 @@ func buildTools(handlers *Handlers) []toolDefinition {
 			},
 		},
 		{
+			Name:        "memory_save_import",
+			Description: "Persist an import audit record for a secondary artifact.",
+			InputSchema: objectSchema(
+				map[string]any{
+					"scope":             scopeRefLikeSchema(),
+					"session_id":        stringSchema("Active session id."),
+					"source":            stringEnumSchema("Import provenance source.", "watcher_import", "relay_import"),
+					"external_id":       stringSchema("Stable external identifier for dedupe and audit."),
+					"payload_hash":      stringSchema("Payload hash used for dedupe when no stable external id exists."),
+					"durable_memory_id": stringSchema("Optional durable memory record linked to this import audit entry."),
+					"privacy_intent":    stringSchema("Explicit privacy handling intent."),
+				},
+				"scope",
+				"session_id",
+				"source",
+			),
+			call: func(ctx context.Context, raw json.RawMessage) (toolCallResult, error) {
+				var req saveImportRequest
+				if err := decodeArgs(raw, &req); err != nil {
+					return toolCallResult{}, err
+				}
+				return structuredToolResult(handlers.HandleMemorySaveImport(ctx, imports.SaveInput{
+					Scope:           req.Scope.ref(),
+					SessionID:       req.SessionID,
+					Source:          imports.Source(req.Source),
+					ExternalID:      req.ExternalID,
+					PayloadHash:     req.PayloadHash,
+					DurableMemoryID: req.DurableMemoryID,
+					PrivacyIntent:   req.PrivacyIntent,
+				}))
+			},
+		},
+		{
 			Name:        "memory_search",
 			Description: "Search durable memory within a scoped boundary.",
 			InputSchema: objectSchema(
@@ -481,6 +525,8 @@ func structuredToolResult(payload any) (toolCallResult, error) {
 	case Response[SaveNoteData]:
 		isError = !typed.Ok
 	case Response[SaveHandoffData]:
+		isError = !typed.Ok
+	case Response[SaveImportData]:
 		isError = !typed.Ok
 	case Response[BootstrapSessionData]:
 		isError = !typed.Ok

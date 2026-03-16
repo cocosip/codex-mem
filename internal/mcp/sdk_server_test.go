@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"codex-mem/internal/domain/agents"
+	"codex-mem/internal/domain/imports"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -14,6 +15,7 @@ func TestNewSDKServerListsToolsAndCallsTool(t *testing.T) {
 	root := t.TempDir()
 	server := NewSDKServer(&Handlers{
 		agentsService: agents.NewService(agents.Options{HomeDir: root}),
+		importService: imports.NewService(nilImportRepo{}, imports.Options{}),
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,7 +41,7 @@ func TestNewSDKServerListsToolsAndCallsTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if got, want := len(listResult.Tools), 9; got != want {
+	if got, want := len(listResult.Tools), 10; got != want {
 		t.Fatalf("tool count mismatch: got %d want %d", got, want)
 	}
 
@@ -72,6 +74,12 @@ func TestNewSDKServerListsToolsAndCallsTool(t *testing.T) {
 		t.Fatalf("expected one written file, got %+v", structured.Data)
 	}
 }
+
+type nilImportRepo struct{}
+
+func (nilImportRepo) FindDuplicate(imports.Record) (*imports.Record, error) { return nil, nil }
+
+func (nilImportRepo) Create(imports.Record) error { return nil }
 
 func closeSDKSession(t *testing.T, session *sdkmcp.ClientSession, cancel context.CancelFunc, serverErr <-chan error) {
 	t.Helper()

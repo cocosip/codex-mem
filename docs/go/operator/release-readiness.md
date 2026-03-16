@@ -78,7 +78,7 @@ Confirm:
 - `foreign_keys=true`
 - `note_provenance_ready=true`
 - `exclusion_audit_ready=true`
-- `mcp_tool_count=9`
+- `mcp_tool_count=10`
 
 ### 2. Test Suite
 

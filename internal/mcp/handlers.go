@@ -5,6 +5,7 @@ import (
 
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/retrieval"
 	"codex-mem/internal/domain/scope"
@@ -17,17 +18,19 @@ type Handlers struct {
 	sessionService   *session.Service
 	memoryService    *memory.Service
 	handoffService   *handoff.Service
+	importService    *imports.Service
 	retrievalService *retrieval.Service
 	agentsService    *agents.Service
 }
 
 // NewHandlers constructs the MCP handler facade for the supplied services.
-func NewHandlers(scopeService *scope.Service, sessionService *session.Service, memoryService *memory.Service, handoffService *handoff.Service, retrievalService *retrieval.Service, agentsService *agents.Service) *Handlers {
+func NewHandlers(scopeService *scope.Service, sessionService *session.Service, memoryService *memory.Service, handoffService *handoff.Service, importService *imports.Service, retrievalService *retrieval.Service, agentsService *agents.Service) *Handlers {
 	return &Handlers{
 		scopeService:     scopeService,
 		sessionService:   sessionService,
 		memoryService:    memoryService,
 		handoffService:   handoffService,
+		importService:    importService,
 		retrievalService: retrievalService,
 		agentsService:    agentsService,
 	}
@@ -51,6 +54,11 @@ func (h *Handlers) MemorySaveNote(ctx context.Context, input memory.SaveInput) (
 // MemorySaveHandoff persists a continuation handoff record.
 func (h *Handlers) MemorySaveHandoff(ctx context.Context, input handoff.SaveInput) (handoff.SaveOutput, error) {
 	return h.handoffService.SaveHandoff(ctx, input)
+}
+
+// MemorySaveImport persists an import audit record.
+func (h *Handlers) MemorySaveImport(ctx context.Context, input imports.SaveInput) (imports.SaveOutput, error) {
+	return h.importService.SaveImport(ctx, input)
 }
 
 // MemoryBootstrapSession starts a session and loads its bootstrap context.

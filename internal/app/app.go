@@ -92,7 +92,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		ImportService:    importService,
 		RetrievalService: retrievalService,
 		AgentsService:    agentsService,
-		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, retrievalService, agentsService),
+		Handlers:         mcp.NewHandlers(scopeService, sessionService, memoryService, handoffService, importService, retrievalService, agentsService),
 	}, nil
 }
 

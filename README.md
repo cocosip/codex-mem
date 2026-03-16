@@ -90,7 +90,7 @@ Before exposing the server to users, confirm:
    `required_schema_ok=true`
    `fts_ready=true`
    `migrations_pending=0`
-   `mcp_tool_count=9`
+   `mcp_tool_count=10`
 - Codex can register the server successfully
 - Codex can call at least one MCP tool successfully
 
@@ -103,6 +103,7 @@ The current MCP server exposes:
 - `memory_start_session`
 - `memory_save_note`
 - `memory_save_handoff`
+- `memory_save_import`
 - `memory_search`
 - `memory_get_recent`
 - `memory_get_note`
@@ -135,6 +136,7 @@ See [onboarding-flows.md](docs/spec/appendices/onboarding-flows.md) for the full
 - SQLite pragmas and schema readiness
 - migration availability and applied status
 - note and handoff audit counts
+- import audit counts and suppression readiness
 - note source-category coverage
 - exclusion audit coverage
 - MCP transport/tool availability

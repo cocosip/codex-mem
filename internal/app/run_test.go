@@ -64,7 +64,7 @@ func TestRunDoctorPrintsEffectiveConfigSummary(t *testing.T) {
 		"log_file=" + cfg.File.LogFilePath,
 		"log_stderr=true",
 		"mcp_transport=stdio",
-		"mcp_tool_count=9",
+		"mcp_tool_count=10",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
@@ -252,7 +252,7 @@ func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 	if report.Logging.LogStderr {
 		t.Fatal("expected log_stderr=false")
 	}
-	if report.MCP.Transport != "stdio" || report.MCP.ToolCount != 9 {
+	if report.MCP.Transport != "stdio" || report.MCP.ToolCount != 10 {
 		t.Fatalf("unexpected mcp diagnostics: %+v", report.MCP)
 	}
 }

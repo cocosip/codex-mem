@@ -71,7 +71,7 @@ Characteristics:
 `doctor` should still report:
 
 - `mcp_transport=stdio` in text mode
-- `mcp.tool_count=9` in JSON mode
+- `mcp.tool_count=10` in JSON mode
 
 ## Scope Of This Document
 
@@ -107,7 +107,7 @@ Expected output is shaped like:
 ```text
 mcp smoke test passed
 protocol_version=...
-tool_count=9
+tool_count=10
 tool_call=memory_install_agents
 written_file=...
 ```
@@ -127,7 +127,7 @@ http mcp smoke test passed
 endpoint=http://127.0.0.1:...
 session_id=...
 protocol_version=2025-06-18
-tool_count=9
+tool_count=10
 tool_call=memory_install_agents
 written_file=...
 ```

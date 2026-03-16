@@ -320,7 +320,7 @@ Recommended recovery:
 Use `doctor` to confirm the server-side registration is healthy:
 
 - `mcp_transport=stdio` in text mode
-- `mcp.tool_count=9` in JSON mode
+- `mcp.tool_count=10` in JSON mode
 
 If tool count is lower than expected, treat it as a server construction regression instead of a client problem.
 

@@ -52,7 +52,7 @@ func TestServeStdioSupportsInitializeListAndToolCall(t *testing.T) {
 	}
 	var listResult listToolsResult
 	mustDecodeValue(t, listResponse.Result, &listResult)
-	if got, want := len(listResult.Tools), 9; got != want {
+	if got, want := len(listResult.Tools), 10; got != want {
 		t.Fatalf("tool count mismatch: got %d want %d", got, want)
 	}
 

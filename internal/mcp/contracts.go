@@ -8,6 +8,7 @@ import (
 	"codex-mem/internal/domain/agents"
 	"codex-mem/internal/domain/common"
 	"codex-mem/internal/domain/handoff"
+	"codex-mem/internal/domain/imports"
 	"codex-mem/internal/domain/memory"
 	"codex-mem/internal/domain/retrieval"
 	"codex-mem/internal/domain/scope"
@@ -45,6 +46,14 @@ type SaveHandoffData struct {
 	Handoff              handoff.Handoff `json:"handoff"`
 	StoredAt             time.Time       `json:"stored_at"`
 	EligibleForBootstrap bool            `json:"eligible_for_bootstrap"`
+}
+
+// SaveImportData carries import-audit persistence results in MCP responses.
+type SaveImportData struct {
+	Import       imports.Record `json:"import"`
+	StoredAt     time.Time      `json:"stored_at"`
+	Suppressed   bool           `json:"suppressed"`
+	Deduplicated bool           `json:"deduplicated"`
 }
 
 // BootstrapSessionData carries bootstrap-session results in MCP responses.
@@ -142,6 +151,20 @@ func (h *Handlers) HandleMemorySaveHandoff(ctx context.Context, input handoff.Sa
 		Handoff:              output.Handoff,
 		StoredAt:             output.StoredAt,
 		EligibleForBootstrap: output.EligibleForBootstrap,
+	}, output.Warnings)
+}
+
+// HandleMemorySaveImport adapts import persistence into an MCP response envelope.
+func (h *Handlers) HandleMemorySaveImport(ctx context.Context, input imports.SaveInput) Response[SaveImportData] {
+	output, err := h.MemorySaveImport(ctx, input)
+	if err != nil {
+		return failure[SaveImportData](err, common.ErrWriteFailed, "save import failed")
+	}
+	return success(SaveImportData{
+		Import:       output.Record,
+		StoredAt:     output.StoredAt,
+		Suppressed:   output.Suppressed,
+		Deduplicated: output.Deduplicated,
 	}, output.Warnings)
 }
 

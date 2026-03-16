@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Maintain the completed v1 implementation, land the imports MVP plumbing slice, and keep `modelcontextprotocol/go-sdk` as the only MCP runtime.
+Current target: Maintain the completed v1 implementation, expose import auditing through an MCP tool, and keep `modelcontextprotocol/go-sdk` as the only MCP runtime.
 
 ## Phase Progress
 
@@ -138,12 +138,12 @@ Tasks:
 
 Current session focus:
 
-- Land the imports MVP plumbing slice without changing the existing nine-tool surface, then choose the next user-facing follow-up on top of it.
+- Expose the imports plumbing through MCP, intentionally expanding the tool surface, and decide the next materialization behavior after that.
 
 Immediate next tasks:
 
 1. Keep `go test ./...` plus the readiness/smoke checks in the normal regression path for code-bearing changes.
-2. Build imports MVP around durable import audit records, project-scoped dedupe, and privacy suppression.
+2. Keep the new import MCP workflow aligned with the underlying import audit schema and project-scoped dedupe rules.
 3. Expose import audit health through `doctor` so operators can inspect suppression/provenance readiness.
 4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
@@ -283,6 +283,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: choose the first caller for the import plumbing, such as an MCP-exposed import flow, a CLI command, or a watcher-side ingestion path that can create durable memory from imported artifacts.
+### 2026-03-16 Session Update
+
+- Completed: Exposed the import audit flow as a new MCP tool `memory_save_import` instead of a CLI-specific workflow. The tool uses the existing imports service/repository, carries project-scoped dedupe and privacy suppression forward into the MCP surface, and increases the advertised tool count to ten; smoke/readiness/app tests and docs were updated accordingly.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether imported artifacts should remain audit-only or whether a follow-up tool/workflow should materialize them into durable notes or handoffs.
 ## Recommended Next Step
 
 Recommended next implementation slice:
