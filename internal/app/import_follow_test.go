@@ -471,8 +471,8 @@ func TestListAuditFollowImportsExamples(t *testing.T) {
 	}
 	output := buffer.String()
 	for _, fragment := range []string{
-		"example=daily-audit-text path=testdata\\audit-follow-imports-daily-audit.txt format=text",
-		"example=filtered-audit-json path=testdata\\audit-follow-imports-filtered-audit.json format=json",
+		"example=daily-audit-text path=" + filepath.Join("testdata", "audit-follow-imports-daily-audit.txt") + " format=text",
+		"example=filtered-audit-json path=" + filepath.Join("testdata", "audit-follow-imports-filtered-audit.json") + " format=json",
 		"example_count=2",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -548,8 +548,8 @@ func TestListCleanupFollowImportsExamples(t *testing.T) {
 	}
 	output := buffer.String()
 	for _, fragment := range []string{
-		"example=daily-dry-run-text path=testdata\\cleanup-follow-imports-daily-dry-run.txt format=text",
-		"example=filtered-cleanup-json path=testdata\\cleanup-follow-imports-filtered-cleanup.json format=json",
+		"example=daily-dry-run-text path=" + filepath.Join("testdata", "cleanup-follow-imports-daily-dry-run.txt") + " format=text",
+		"example=filtered-cleanup-json path=" + filepath.Join("testdata", "cleanup-follow-imports-filtered-cleanup.json") + " format=json",
 		"example_count=2",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -1350,7 +1350,7 @@ func TestBuildFollowImportsInputsRejectsDuplicateInputs(t *testing.T) {
 	root := t.TempDir()
 	_, _, err := buildFollowImportsInputs(followImportsOptions{
 		Source:     followImportsWatcherSource,
-		InputPaths: []string{"events.jsonl", ".\\events.jsonl"},
+		InputPaths: []string{"events.jsonl", filepath.Join(".", "events.jsonl")},
 		CWD:        root,
 	})
 	if err == nil {

@@ -736,9 +736,9 @@ func TestListReadinessExamples(t *testing.T) {
 	}
 	output := buffer.String()
 	for _, fragment := range []string{
-		"example=ci-json path=testdata\\example-ci-success.json format=json",
-		"example=slow-ci-text path=testdata\\example-slow-ci-success.txt format=text",
-		"example=release-warning-failure-text path=testdata\\example-release-warning-failure.txt format=text",
+		"example=ci-json path=" + filepath.Join(readinessExampleDirName, "example-ci-success.json") + " format=json",
+		"example=slow-ci-text path=" + filepath.Join(readinessExampleDirName, "example-slow-ci-success.txt") + " format=text",
+		"example=release-warning-failure-text path=" + filepath.Join(readinessExampleDirName, "example-release-warning-failure.txt") + " format=text",
 		"example_count=3",
 	} {
 		if !strings.Contains(output, fragment) {

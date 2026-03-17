@@ -151,6 +151,13 @@ Immediate next tasks:
 
 ### 2026-03-17 Session Update
 
+- Completed: Fixed Linux CI drift in unit tests and pinned the workflow lint toolchain to the same `golangci-lint` version used locally. The follow-import and readiness example-list tests now build expected fixture paths with `filepath.Join(...)` instead of hard-coding Windows separators, the duplicate follow-input test now uses a platform-neutral relative path, and `.github/workflows/build-release.yml` now pins `golangci-lint` to `v2.10.1` with the same `./...` target as the local command.
+- In progress: none.
+- Blockers: none.
+- Next step: keep CI green by committing the current cross-platform test fixes plus the pinned lint version, then resume the next operator-facing slice.
+
+### 2026-03-17 Session Update
+
 - Completed: Deduplicated the shared cleanup/audit hygiene option layer in `internal/app/import_follow.go`. `cleanup-follow-imports` and `audit-follow-imports` now embed one common option struct for shared paths, filters, retention profiles, fail-if-matched, and age-gating; they reuse the same common flag parser, retention-profile application, and pattern/age/target-binding validation while keeping command-specific prune/check flags separate. App tests now also cover audit-side invalid pattern and retention-profile parsing so both command families stay aligned under one helper path.
 - In progress: none.
 - Blockers: none.
