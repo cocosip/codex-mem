@@ -252,6 +252,13 @@ Immediate next tasks:
 - Blockers: none.
 - Next step: decide whether the current cleanup example catalog can stay hard-coded in package code, or whether it should eventually move into a small manifest as the number of operator sample flows grows.
 
+### 2026-03-17 Session Update
+
+- Completed: Added `cleanup-follow-imports --fail-if-matched` as an automation-friendly hygiene gate. The cleanup report now surfaces whether the gate was enabled plus whether the selected target set matched any checkpoint, retry-artifact, or stale follow-health cleanup work, and the command now returns a non-zero error after writing the report when matches are found. App coverage verifies both the failing dry-run gate path and the clean no-match path.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether cleanup automation now has enough signaling, or whether follow/import operator workflows would benefit more from a dedicated scheduled-check/report command instead of adding more flags to cleanup itself.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:

@@ -1,5 +1,7 @@
 {
   "dry_run": false,
+  "fail_if_matched": false,
+  "match_found": true,
   "retention_profile": "reset",
   "include_patterns": [
     "*events-a*",

@@ -143,6 +143,7 @@ func TestParseCleanupFollowImportsOptions(t *testing.T) {
 		"--cwd", "D:/Code/go/codex-mem",
 		"--older-than", "2h",
 		"--dry-run",
+		"--fail-if-matched",
 		"--prune-state",
 		"--prune-failed-output",
 		"--prune-failed-manifest",
@@ -160,6 +161,9 @@ func TestParseCleanupFollowImportsOptions(t *testing.T) {
 	}
 	if !options.DryRun {
 		t.Fatal("expected dry-run option")
+	}
+	if !options.FailIfMatched {
+		t.Fatal("expected fail-if-matched option")
 	}
 	if got, want := options.OlderThan, 2*time.Hour; got != want {
 		t.Fatalf("older-than mismatch: got %s want %s", got, want)
@@ -561,6 +565,9 @@ func TestCleanupFollowImportsDryRunAndOlderThanFilter(t *testing.T) {
 
 	if !report.DryRun {
 		t.Fatal("expected dry-run report")
+	}
+	if !report.MatchFound {
+		t.Fatalf("expected dry-run match detection, got %+v", report)
 	}
 	if got, want := report.OlderThanSeconds, int64(3600); got != want {
 		t.Fatalf("older-than seconds mismatch: got %d want %d", got, want)

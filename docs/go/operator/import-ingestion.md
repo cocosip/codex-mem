@@ -104,6 +104,12 @@ Use a named retention preset instead of spelling out an age threshold:
 codex-mem.exe cleanup-follow-imports --failed-output .\failed-events.jsonl --prune-failed-output --retention-profile daily --dry-run
 ```
 
+Audit whether cleanup work is pending and fail the command if anything in the selected target set matches:
+
+```powershell
+codex-mem.exe cleanup-follow-imports --input .\events.jsonl --prune-state --dry-run --fail-if-matched
+```
+
 Useful flags:
 
 - `--source watcher_import|relay_import`
@@ -150,6 +156,8 @@ Useful flags:
   `cleanup-follow-imports` only. Optional. Limits checkpoint-sidecar and retry-artifact cleanup to files at least this old based on filesystem modification time. Use values such as `30m`, `1h`, or `24h`.
 - `--dry-run`
   `cleanup-follow-imports` only. Optional. Computes the same cleanup candidates and reports what would be removed, but leaves every file in place.
+- `--fail-if-matched`
+  `cleanup-follow-imports` only. Optional. Returns a non-zero exit after writing the report when the selected cleanup target set matched at least one checkpoint sidecar, retry artifact, or stale follow-health snapshot. This is especially useful with `--dry-run` for CI or scheduled hygiene audits.
 - `--include <glob>`
   `cleanup-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that act as a whitelist for checkpoint and retry-artifact candidate paths. Patterns are matched against both the absolute path and the basename.
 - `--exclude <glob>`
@@ -236,7 +244,7 @@ If `--failed-output` is set, the report also includes the resolved output path a
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
 Single-input `follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, transition count, cumulative poll-catchup count and bytes, any warning summaries, any structured watch events since the previous emitted report, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
 Multi-input `follow-imports` returns one aggregate report with command-level watch state, cumulative poll-catchup counters, warning summaries, per-process watch events, total consumed and pending bytes, and one nested per-input report for each followed file.
-`cleanup-follow-imports` reports whether the run was a dry-run, the named retention profile when one is active, the configured age gate in seconds, any include/exclude patterns in effect, how many checkpoint sidecars and derived retry artifacts matched cleanup versus were actually removed, which files were skipped because they were filtered out by pattern or were too new, which explicit state files were already missing, and whether it pruned or would prune the stale follow-health sidecar.
+`cleanup-follow-imports` reports whether the run was a dry-run, whether `--fail-if-matched` was active, whether the selected target set matched anything, the named retention profile when one is active, the configured age gate in seconds, any include/exclude patterns in effect, how many checkpoint sidecars and derived retry artifacts matched cleanup versus were actually removed, which files were skipped because they were filtered out by pattern or were too new, which explicit state files were already missing, and whether it pruned or would prune the stale follow-health sidecar.
 
 Checked-in sample outputs for common cleanup flows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
 
@@ -274,6 +282,7 @@ codex-mem.exe cleanup-follow-imports --refresh-examples=filtered-cleanup-json
 - If you want to clear only stale follow-health sidecars without touching fresh ones, run `codex-mem.exe doctor --prune-stale-follow-health`. The doctor report then tells you whether it actually removed a stale snapshot via `follow_imports_health_pruned` and `follow_imports_health_prune_reason`.
 - If you want one explicit operator cleanup pass for follow-imports state, use `codex-mem.exe cleanup-follow-imports`. It removes only the artifacts you target with prune flags; it does not infer or delete anything unless you ask for that specific cleanup class.
 - Add `--dry-run` first when you are not fully sure about the target set. The report shows the same matched file list and stale-health outcome it would use for a real cleanup pass, but without deleting anything.
+- Add `--fail-if-matched` when the command should act as a hygiene gate instead of only as an informational report. In dry-run mode this makes pending cleanup work visible to automation through both the report body and the process exit code.
 - Add `--older-than <duration>` when you want cleanup to ignore very recent checkpoint or retry files. This age gate applies to checkpoint sidecars plus range-suffixed retry artifacts, not to the stale-health decision, which still uses the existing follow-health staleness policy.
 - Add `--include` when the cleanup target should stay inside one file family, input label, or path prefix. This is especially useful for multi-input runs where you only want to clean artifacts related to one input at a time.
 - Add `--exclude` for the final guardrail when a broad include or input set still catches more than you want. Exclude patterns override includes, so they are the safer place to carve out known paths or suffixes.

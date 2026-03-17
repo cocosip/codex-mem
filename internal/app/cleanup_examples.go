@@ -27,6 +27,8 @@ func cleanupFollowImportsExampleFixtures() []cleanupFollowImportsExampleFixture 
 			JSON:         false,
 			Report: cleanupFollowImportsReport{
 				DryRun:           true,
+				FailIfMatched:    false,
+				MatchFound:       true,
 				RetentionProfile: cleanupFollowImportsRetentionProfileDaily,
 				OlderThanSeconds: 86400,
 				Status:           "ok",
@@ -74,6 +76,8 @@ func cleanupFollowImportsExampleFixtures() []cleanupFollowImportsExampleFixture 
 			JSON:         true,
 			Report: cleanupFollowImportsReport{
 				DryRun:           false,
+				FailIfMatched:    false,
+				MatchFound:       true,
 				RetentionProfile: cleanupFollowImportsRetentionProfileReset,
 				OlderThanSeconds: 0,
 				IncludePatterns:  []string{"*events-a*", "*.offset.json"},

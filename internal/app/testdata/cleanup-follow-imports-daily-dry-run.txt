@@ -1,6 +1,8 @@
 cleanup follow-imports ok
 status=ok
 dry_run=true
+fail_if_matched=false
+match_found=true
 retention_profile=daily
 older_than_seconds=86400
 include_patterns=0

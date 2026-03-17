@@ -870,6 +870,84 @@ func TestRunCleanupFollowImportsReportsRetentionProfile(t *testing.T) {
 	}
 }
 
+func TestRunCleanupFollowImportsFailIfMatchedReturnsErrorAfterWritingReport(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll state dir: %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile state file: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputPath,
+		"--prune-state",
+		"--dry-run",
+		"--fail-if-matched",
+	}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected fail-if-matched error")
+	}
+	if !strings.Contains(err.Error(), "found matching artifacts") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"dry_run=true",
+		"fail_if_matched=true",
+		"match_found=true",
+		"state_files_matched=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup fail-if-matched output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsFailIfMatchedPassesWhenNothingMatches(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputPath,
+		"--prune-state",
+		"--dry-run",
+		"--fail-if-matched",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports --fail-if-matched without matches: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"fail_if_matched=true",
+		"match_found=false",
+		"state_files_missing=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup no-match output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
 func TestRunCleanupFollowImportsListsExamples(t *testing.T) {
 	var stdout bytes.Buffer
 	if err := Run(context.Background(), config.Config{}, []string{"cleanup-follow-imports", "--list-examples"}, strings.NewReader(""), &stdout); err != nil {
