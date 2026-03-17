@@ -615,3 +615,341 @@ func TestParseDoctorOptionsEnablesPruneStaleFollowHealth(t *testing.T) {
 		t.Fatal("expected prune-stale-follow-health option to be enabled")
 	}
 }
+
+func TestRunCleanupFollowImportsPrunesArtifactsAndStaleHealth(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputPath,
+		"--prune-state",
+		"--failed-output", failedOutputBase,
+		"--prune-failed-output",
+		"--failed-manifest", failedManifestBase,
+		"--prune-failed-manifest",
+		"--prune-stale-follow-health",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"cleanup follow-imports ok",
+		"state_files_removed=1",
+		"failed_output_removed=1",
+		"failed_manifest_removed=1",
+		"follow_health_pruned=true",
+		"follow_health_prune_reason=stale",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	for _, removed := range []string{statePath, failedOutput, failedManifest, followImportsHealthPath(cfg.Meta.LogDir)} {
+		if _, err := os.Stat(removed); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed, stat err=%v", removed, err)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsDryRunReportsAgeFilteredPreview(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	now := time.Now().UTC()
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	oldFailedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	newFailedOutput := filepath.Join(root, "failed", "failed.43-84.jsonl")
+	oldFailedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	newFailedManifest := filepath.Join(root, "failed", "failed.43-84.json")
+	for _, path := range []string{inputPath, statePath, oldFailedOutput, newFailedOutput, oldFailedManifest, newFailedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+	oldTime := now.Add(-2 * time.Hour)
+	newTime := now.Add(-20 * time.Minute)
+	for _, path := range []string{statePath, oldFailedOutput, oldFailedManifest} {
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes old %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{newFailedOutput, newFailedManifest} {
+		if err := os.Chtimes(path, newTime, newTime); err != nil {
+			t.Fatalf("Chtimes new %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           now.Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputPath,
+		"--prune-state",
+		"--failed-output", failedOutputBase,
+		"--prune-failed-output",
+		"--failed-manifest", failedManifestBase,
+		"--prune-failed-manifest",
+		"--prune-stale-follow-health",
+		"--older-than", "1h",
+		"--dry-run",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports dry-run: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"dry_run=true",
+		"older_than_seconds=3600",
+		"state_files_matched=1",
+		"state_files_removed=0",
+		"failed_output_matched=1",
+		"failed_output_skipped_by_age=1",
+		"failed_manifest_matched=1",
+		"failed_manifest_skipped_by_age=1",
+		"follow_health_would_prune=true",
+		"follow_health_pruned=false",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup dry-run output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsReportsPatternFilters(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputA := filepath.Join(root, "events-a.jsonl")
+	inputB := filepath.Join(root, "events-b.jsonl")
+	stateA := inputA + ".offset.json"
+	stateB := inputB + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutputA := filepath.Join(root, "failed", "failed.events-a.0-42.jsonl")
+	failedOutputB := filepath.Join(root, "failed", "failed.events-b.43-84.jsonl")
+	failedManifestA := filepath.Join(root, "failed", "failed.events-a.0-42.json")
+	failedManifestB := filepath.Join(root, "failed", "failed.events-b.43-84.json")
+	for _, path := range []string{inputA, inputB, stateA, stateB, failedOutputA, failedOutputB, failedManifestA, failedManifestB} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputA,
+		"--input", inputB,
+		"--prune-state",
+		"--failed-output", failedOutputBase,
+		"--prune-failed-output",
+		"--failed-manifest", failedManifestBase,
+		"--prune-failed-manifest",
+		"--include", "*events-a*",
+		"--exclude", "*.43-84.*",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports with patterns: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"include_patterns=1",
+		"exclude_patterns=1",
+		"include_pattern_1=*events-a*",
+		"exclude_pattern_1=*.43-84.*",
+		"state_files_skipped_by_pattern=1",
+		"failed_output_skipped_by_pattern=1",
+		"failed_manifest_skipped_by_pattern=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup pattern output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsReportsRetentionProfile(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	if err := os.MkdirAll(filepath.Dir(failedOutput), 0o755); err != nil {
+		t.Fatalf("MkdirAll failed output dir: %v", err)
+	}
+	if err := os.WriteFile(failedOutput, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed output: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--failed-output", failedOutputBase,
+		"--prune-failed-output",
+		"--retention-profile", "daily",
+		"--dry-run",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports with retention profile: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"retention_profile=daily",
+		"older_than_seconds=86400",
+		"dry_run=true",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup retention-profile output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsListsExamples(t *testing.T) {
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), config.Config{}, []string{"cleanup-follow-imports", "--list-examples"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports --list-examples: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"example=daily-dry-run-text",
+		"example=filtered-cleanup-json",
+		"example_count=2",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("list output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsRefreshesSelectedExamples(t *testing.T) {
+	root := t.TempDir()
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), config.Config{}, []string{
+		"cleanup-follow-imports",
+		"--cwd", root,
+		"--refresh-examples=filtered-cleanup-json",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports --refresh-examples: %v", err)
+	}
+
+	refreshedPath := filepath.Join(root, "internal", "app", "testdata", "cleanup-follow-imports-filtered-cleanup.json")
+	output := stdout.String()
+	for _, fragment := range []string{
+		"refreshed_example=" + refreshedPath,
+		"refreshed_examples=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("refresh output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	selected, err := selectCleanupFollowImportsExampleFixtures([]string{"filtered-cleanup-json"})
+	if err != nil {
+		t.Fatalf("selectCleanupFollowImportsExampleFixtures: %v", err)
+	}
+	body, err := renderCleanupFollowImportsExample(selected[0].Report, selected[0].JSON)
+	if err != nil {
+		t.Fatalf("renderCleanupFollowImportsExample: %v", err)
+	}
+	written, err := os.ReadFile(refreshedPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", refreshedPath, err)
+	}
+	if !bytes.Equal(written, body) {
+		t.Fatalf("refreshed fixture mismatch\n--- got ---\n%s\n--- want ---\n%s", string(written), string(body))
+	}
+}
+
+func TestCleanupFollowImportsExampleOutputsStayInSync(t *testing.T) {
+	for _, fixture := range cleanupFollowImportsExampleFixtures() {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			assertCleanupFollowImportsExampleOutput(t, filepath.Join("testdata", fixture.RelativePath), fixture.JSON, fixture.Report)
+		})
+	}
+}
+
+func assertCleanupFollowImportsExampleOutput(t *testing.T, path string, jsonOutput bool, report cleanupFollowImportsReport) {
+	t.Helper()
+
+	body, err := renderCleanupFollowImportsExample(report, jsonOutput)
+	if err != nil {
+		t.Fatalf("render cleanup-follow-imports example: %v", err)
+	}
+
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	if !bytes.Equal(body, expected) {
+		t.Fatalf("cleanup example mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", path, string(body), string(expected))
+	}
+}

@@ -6,11 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +37,28 @@ type followImportsOptions struct {
 	Once               bool
 	PollInterval       time.Duration
 	WatchMode          followImportsWatchMode
+}
+
+type cleanupFollowImportsOptions struct {
+	InputPaths             []string
+	StatePaths             []string
+	FailedOutputPath       string
+	FailedManifestPath     string
+	RefreshExampleNames    []string
+	IncludePatterns        []string
+	ExcludePatterns        []string
+	RetentionProfile       string
+	CWD                    string
+	JSON                   bool
+	DryRun                 bool
+	ListExamples           bool
+	RefreshExamples        bool
+	OlderThan              time.Duration
+	olderThanExplicit      bool
+	PruneState             bool
+	PruneFailedOutput      bool
+	PruneFailedManifest    bool
+	PruneStaleFollowHealth bool
 }
 
 type followImportsWatchMode string
@@ -180,6 +205,53 @@ type followImportsRuntimeState struct {
 	PendingEvents      []followImportsEvent
 }
 
+type cleanupFollowImportsReport struct {
+	DryRun           bool                                 `json:"dry_run"`
+	RetentionProfile string                               `json:"retention_profile,omitempty"`
+	OlderThanSeconds int64                                `json:"older_than_seconds,omitempty"`
+	IncludePatterns  []string                             `json:"include_patterns,omitempty"`
+	ExcludePatterns  []string                             `json:"exclude_patterns,omitempty"`
+	Status           string                               `json:"status"`
+	StateFiles       cleanupFollowImportsPathSummary      `json:"state_files"`
+	FailedOutputs    cleanupFollowImportsPatternSummary   `json:"failed_outputs"`
+	FailedManifests  cleanupFollowImportsPatternSummary   `json:"failed_manifests"`
+	FollowHealth     cleanupFollowImportsFollowHealthView `json:"follow_health"`
+}
+
+type cleanupFollowImportsPathSummary struct {
+	Requested             int      `json:"requested"`
+	Matched               int      `json:"matched"`
+	Removed               int      `json:"removed"`
+	Missing               int      `json:"missing"`
+	SkippedByAge          int      `json:"skipped_by_age,omitempty"`
+	SkippedByPattern      int      `json:"skipped_by_pattern,omitempty"`
+	MatchedPaths          []string `json:"matched_paths,omitempty"`
+	RemovedPaths          []string `json:"removed_paths,omitempty"`
+	MissingPaths          []string `json:"missing_paths,omitempty"`
+	SkippedByPatternPaths []string `json:"skipped_by_pattern_paths,omitempty"`
+	SkippedByAgePaths     []string `json:"skipped_by_age_paths,omitempty"`
+}
+
+type cleanupFollowImportsPatternSummary struct {
+	Bases                 int      `json:"bases"`
+	Matched               int      `json:"matched"`
+	Removed               int      `json:"removed"`
+	SkippedByAge          int      `json:"skipped_by_age,omitempty"`
+	SkippedByPattern      int      `json:"skipped_by_pattern,omitempty"`
+	BasePaths             []string `json:"base_paths,omitempty"`
+	MatchedPaths          []string `json:"matched_paths,omitempty"`
+	RemovedPaths          []string `json:"removed_paths,omitempty"`
+	SkippedByPatternPaths []string `json:"skipped_by_pattern_paths,omitempty"`
+	SkippedByAgePaths     []string `json:"skipped_by_age_paths,omitempty"`
+}
+
+type cleanupFollowImportsFollowHealthView struct {
+	File        string `json:"file"`
+	WouldPrune  bool   `json:"would_prune"`
+	Pruned      bool   `json:"pruned"`
+	PruneReason string `json:"prune_reason,omitempty"`
+}
+
 type followImportsRunTrigger string
 
 const (
@@ -190,6 +262,12 @@ const (
 
 const followImportsCheckpointWindow = 256
 const followImportsPollCatchupWarningThreshold = 3
+
+const (
+	cleanupFollowImportsRetentionProfileStale = "stale"
+	cleanupFollowImportsRetentionProfileDaily = "daily"
+	cleanupFollowImportsRetentionProfileReset = "reset"
+)
 
 func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, args []string) error {
 	options, err := parseFollowImportsOptions(args)
@@ -260,6 +338,40 @@ func runFollowImports(ctx context.Context, cfg config.Config, stdout io.Writer, 
 	}
 
 	return runFollowImportsNotifyLoop(ctx, watchPaths, options.WatchMode, options.PollInterval, runOnce, &runtimeState)
+}
+
+func runCleanupFollowImports(cfg config.Config, stdout io.Writer, args []string) error {
+	options, err := parseCleanupFollowImportsOptions(args)
+	if err != nil {
+		return err
+	}
+	if options.ListExamples {
+		return listCleanupFollowImportsExamples(stdout)
+	}
+	if options.RefreshExamples {
+		baseDir, err := cleanupFollowImportsExampleBaseDir(options.CWD)
+		if err != nil {
+			return err
+		}
+		return refreshCleanupFollowImportsExamples(baseDir, options.RefreshExampleNames, stdout)
+	}
+
+	report, err := cleanupFollowImports(cfg, options)
+	if err != nil {
+		return err
+	}
+
+	if options.JSON {
+		body, err := marshalIndented(report)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(stdout, body)
+		return err
+	}
+
+	_, err = io.WriteString(stdout, formatCleanupFollowImportsReport(report))
+	return err
 }
 
 func runFollowImportsPollingLoop(ctx context.Context, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error) error {
@@ -534,6 +646,123 @@ func parseFollowImportsOptions(args []string) (followImportsOptions, error) {
 	return options, nil
 }
 
+func parseCleanupFollowImportsOptions(args []string) (cleanupFollowImportsOptions, error) {
+	var options cleanupFollowImportsOptions
+
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
+		case "":
+			continue
+		case "--input":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.InputPaths = append(options.InputPaths, value)
+			i = next
+		case "--state-file":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.StatePaths = append(options.StatePaths, value)
+			i = next
+		case "--failed-output":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.FailedOutputPath = value
+			i = next
+		case "--failed-manifest":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.FailedManifestPath = value
+			i = next
+		case "--list-examples":
+			options.ListExamples = true
+		case "--refresh-examples":
+			options.RefreshExamples = true
+		case "--include":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.IncludePatterns = append(options.IncludePatterns, parseCleanupFollowImportsPatterns(value)...)
+			i = next
+		case "--exclude":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.ExcludePatterns = append(options.ExcludePatterns, parseCleanupFollowImportsPatterns(value)...)
+			i = next
+		case "--retention-profile":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			profile, err := normalizeCleanupFollowImportsRetentionProfile(value)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.RetentionProfile = profile
+			i = next
+		case "--cwd":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			options.CWD = value
+			i = next
+		case "--older-than":
+			value, next, err := optionValue(args, i)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, err
+			}
+			duration, err := time.ParseDuration(value)
+			if err != nil {
+				return cleanupFollowImportsOptions{}, fmt.Errorf("invalid cleanup-follow-imports older-than duration %q", value)
+			}
+			options.OlderThan = duration
+			options.olderThanExplicit = true
+			i = next
+		case "--json":
+			options.JSON = true
+		case "--dry-run":
+			options.DryRun = true
+		case "--prune-state":
+			options.PruneState = true
+		case "--prune-failed-output":
+			options.PruneFailedOutput = true
+		case "--prune-failed-manifest":
+			options.PruneFailedManifest = true
+		case "--prune-stale-follow-health":
+			options.PruneStaleFollowHealth = true
+		default:
+			if strings.HasPrefix(arg, "--refresh-examples=") {
+				values, err := parseCleanupFollowImportsExampleNames(strings.TrimSpace(strings.TrimPrefix(arg, "--refresh-examples=")))
+				if err != nil {
+					return cleanupFollowImportsOptions{}, err
+				}
+				options.RefreshExamples = true
+				options.RefreshExampleNames = append(options.RefreshExampleNames, values...)
+				continue
+			}
+			return cleanupFollowImportsOptions{}, fmt.Errorf("unknown cleanup-follow-imports flag %q", arg)
+		}
+	}
+
+	options = applyCleanupFollowImportsRetentionProfile(options)
+	if err := validateCleanupFollowImportsOptions(options); err != nil {
+		return cleanupFollowImportsOptions{}, err
+	}
+	return options, nil
+}
+
 func validateFollowImportsOptions(options followImportsOptions) error {
 	if err := options.Source.Validate(); err != nil {
 		if strings.TrimSpace(string(options.Source)) == "" {
@@ -554,6 +783,150 @@ func validateFollowImportsOptions(options followImportsOptions) error {
 	case followImportsWatchModeAuto, followImportsWatchModePoll, followImportsWatchModeNotify:
 	default:
 		return fmt.Errorf("invalid follow-imports watch mode %q", options.WatchMode)
+	}
+	return nil
+}
+
+func validateCleanupFollowImportsOptions(options cleanupFollowImportsOptions) error {
+	if options.RefreshExamples {
+		if options.ListExamples {
+			return errors.New(`"--list-examples" cannot be combined with "--refresh-examples"`)
+		}
+		if options.JSON ||
+			options.DryRun ||
+			len(options.InputPaths) > 0 ||
+			len(options.StatePaths) > 0 ||
+			strings.TrimSpace(options.FailedOutputPath) != "" ||
+			strings.TrimSpace(options.FailedManifestPath) != "" ||
+			len(options.IncludePatterns) > 0 ||
+			len(options.ExcludePatterns) > 0 ||
+			options.RetentionProfile != "" ||
+			options.olderThanExplicit ||
+			options.OlderThan != 0 ||
+			options.PruneState ||
+			options.PruneFailedOutput ||
+			options.PruneFailedManifest ||
+			options.PruneStaleFollowHealth {
+			return errors.New(`"--refresh-examples" cannot be combined with other cleanup-follow-imports flags`)
+		}
+		if len(options.RefreshExampleNames) > 0 {
+			if _, err := selectCleanupFollowImportsExampleFixtures(options.RefreshExampleNames); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if options.ListExamples {
+		if options.JSON ||
+			options.DryRun ||
+			len(options.InputPaths) > 0 ||
+			len(options.StatePaths) > 0 ||
+			strings.TrimSpace(options.FailedOutputPath) != "" ||
+			strings.TrimSpace(options.FailedManifestPath) != "" ||
+			len(options.IncludePatterns) > 0 ||
+			len(options.ExcludePatterns) > 0 ||
+			options.RetentionProfile != "" ||
+			options.olderThanExplicit ||
+			options.OlderThan != 0 ||
+			options.PruneState ||
+			options.PruneFailedOutput ||
+			options.PruneFailedManifest ||
+			options.PruneStaleFollowHealth ||
+			len(options.RefreshExampleNames) > 0 {
+			return errors.New(`"--list-examples" cannot be combined with other cleanup-follow-imports flags`)
+		}
+		return nil
+	}
+	if !options.PruneState && !options.PruneFailedOutput && !options.PruneFailedManifest && !options.PruneStaleFollowHealth {
+		return fmt.Errorf("cleanup-follow-imports requires at least one prune target")
+	}
+	if len(options.StatePaths) > 0 && !options.PruneState {
+		return fmt.Errorf("cleanup-follow-imports --state-file requires --prune-state")
+	}
+	if options.FailedOutputPath != "" && !options.PruneFailedOutput {
+		return fmt.Errorf("cleanup-follow-imports --failed-output requires --prune-failed-output")
+	}
+	if options.FailedManifestPath != "" && !options.PruneFailedManifest {
+		return fmt.Errorf("cleanup-follow-imports --failed-manifest requires --prune-failed-manifest")
+	}
+	if options.PruneState && len(options.StatePaths) == 0 && len(options.InputPaths) == 0 {
+		return fmt.Errorf("cleanup-follow-imports --prune-state requires --input or --state-file")
+	}
+	if len(options.StatePaths) > 0 && len(options.InputPaths) > 0 && len(options.StatePaths) != len(options.InputPaths) {
+		return fmt.Errorf("cleanup-follow-imports state-file count (%d) must match input count (%d)", len(options.StatePaths), len(options.InputPaths))
+	}
+	if options.PruneFailedOutput && strings.TrimSpace(options.FailedOutputPath) == "" {
+		return fmt.Errorf("cleanup-follow-imports --prune-failed-output requires --failed-output")
+	}
+	if options.PruneFailedManifest && strings.TrimSpace(options.FailedManifestPath) == "" {
+		return fmt.Errorf("cleanup-follow-imports --prune-failed-manifest requires --failed-manifest")
+	}
+	if options.OlderThan < 0 {
+		return fmt.Errorf("cleanup-follow-imports --older-than must be greater than or equal to zero")
+	}
+	if err := validateCleanupFollowImportsPatterns(options.IncludePatterns, "--include"); err != nil {
+		return err
+	}
+	if err := validateCleanupFollowImportsPatterns(options.ExcludePatterns, "--exclude"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
+	profile := strings.ToLower(strings.TrimSpace(raw))
+	switch profile {
+	case cleanupFollowImportsRetentionProfileStale, cleanupFollowImportsRetentionProfileDaily, cleanupFollowImportsRetentionProfileReset:
+		return profile, nil
+	case "":
+		return "", fmt.Errorf(`invalid value for "--retention-profile": empty`)
+	default:
+		return "", fmt.Errorf(`invalid value for "--retention-profile": %q`, raw)
+	}
+}
+
+func applyCleanupFollowImportsRetentionProfile(options cleanupFollowImportsOptions) cleanupFollowImportsOptions {
+	switch options.RetentionProfile {
+	case "":
+		return options
+	case cleanupFollowImportsRetentionProfileStale:
+		if !options.olderThanExplicit {
+			options.OlderThan = time.Hour
+		}
+		return options
+	case cleanupFollowImportsRetentionProfileDaily:
+		if !options.olderThanExplicit {
+			options.OlderThan = 24 * time.Hour
+		}
+		return options
+	case cleanupFollowImportsRetentionProfileReset:
+		if !options.olderThanExplicit {
+			options.OlderThan = 0
+		}
+		return options
+	default:
+		return options
+	}
+}
+
+func parseCleanupFollowImportsPatterns(value string) []string {
+	parts := strings.Split(value, ",")
+	patterns := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		patterns = append(patterns, part)
+	}
+	return patterns
+}
+
+func validateCleanupFollowImportsPatterns(patterns []string, flag string) error {
+	for _, pattern := range patterns {
+		if _, err := pathpkg.Match(pattern, ""); err != nil {
+			return fmt.Errorf("invalid cleanup-follow-imports %s pattern %q", flag, pattern)
+		}
 	}
 	return nil
 }
@@ -1263,6 +1636,499 @@ func buildFollowImportsInputs(options followImportsOptions) ([]FollowImportsInpu
 		watchPaths = append(watchPaths, inputPath)
 	}
 	return inputs, watchPaths, nil
+}
+
+func cleanupFollowImports(cfg config.Config, options cleanupFollowImportsOptions) (cleanupFollowImportsReport, error) {
+	return cleanupFollowImportsAt(cfg, options, time.Now().UTC())
+}
+
+func cleanupFollowImportsAt(cfg config.Config, options cleanupFollowImportsOptions, now time.Time) (cleanupFollowImportsReport, error) {
+	targets, err := buildCleanupFollowImportsTargets(options)
+	if err != nil {
+		return cleanupFollowImportsReport{}, err
+	}
+
+	report := cleanupFollowImportsReport{
+		DryRun:           options.DryRun,
+		RetentionProfile: options.RetentionProfile,
+		OlderThanSeconds: int64(options.OlderThan / time.Second),
+		IncludePatterns:  append([]string(nil), options.IncludePatterns...),
+		ExcludePatterns:  append([]string(nil), options.ExcludePatterns...),
+		Status:           "ok",
+		FollowHealth: cleanupFollowImportsFollowHealthView{
+			File: followImportsHealthPath(cfg.Meta.LogDir),
+		},
+	}
+
+	if options.PruneState {
+		report.StateFiles, err = pruneCleanupFollowImportsPaths(targets.statePaths, options, now)
+		if err != nil {
+			return cleanupFollowImportsReport{}, err
+		}
+	}
+	if options.PruneFailedOutput {
+		report.FailedOutputs, err = pruneCleanupFollowImportsPatternTargets(targets.failedOutputBases, options, now)
+		if err != nil {
+			return cleanupFollowImportsReport{}, err
+		}
+	}
+	if options.PruneFailedManifest {
+		report.FailedManifests, err = pruneCleanupFollowImportsPatternTargets(targets.failedManifestBases, options, now)
+		if err != nil {
+			return cleanupFollowImportsReport{}, err
+		}
+	}
+	if options.PruneStaleFollowHealth {
+		report.FollowHealth.WouldPrune, report.FollowHealth.Pruned, report.FollowHealth.PruneReason, err = cleanupFollowImportsHealthSnapshot(cfg.Meta.LogDir, options.DryRun, now)
+		if err != nil {
+			return cleanupFollowImportsReport{}, err
+		}
+	}
+
+	return report, nil
+}
+
+type cleanupFollowImportsTargets struct {
+	statePaths          []string
+	failedOutputBases   []string
+	failedManifestBases []string
+}
+
+func buildCleanupFollowImportsTargets(options cleanupFollowImportsOptions) (cleanupFollowImportsTargets, error) {
+	cwd, err := resolveIngestImportsCWD(options.CWD)
+	if err != nil {
+		return cleanupFollowImportsTargets{}, err
+	}
+
+	inputs, err := resolveCleanupFollowImportsInputs(options.InputPaths, cwd)
+	if err != nil {
+		return cleanupFollowImportsTargets{}, err
+	}
+
+	var targets cleanupFollowImportsTargets
+	if options.PruneState {
+		if len(options.StatePaths) > 0 {
+			targets.statePaths, err = resolveCleanupFollowImportsPaths(options.StatePaths, cwd)
+			if err != nil {
+				return cleanupFollowImportsTargets{}, err
+			}
+		} else {
+			for _, inputPath := range inputs {
+				statePath, err := resolveFollowImportsStatePath(inputPath, "", cwd)
+				if err != nil {
+					return cleanupFollowImportsTargets{}, err
+				}
+				targets.statePaths = append(targets.statePaths, statePath)
+			}
+		}
+		targets.statePaths = dedupeCleanupFollowImportsPaths(targets.statePaths)
+	}
+	if options.PruneFailedOutput {
+		targets.failedOutputBases, err = resolveCleanupFollowImportsArtifactBases(options.FailedOutputPath, inputs, cwd)
+		if err != nil {
+			return cleanupFollowImportsTargets{}, err
+		}
+	}
+	if options.PruneFailedManifest {
+		targets.failedManifestBases, err = resolveCleanupFollowImportsArtifactBases(options.FailedManifestPath, inputs, cwd)
+		if err != nil {
+			return cleanupFollowImportsTargets{}, err
+		}
+	}
+	return targets, nil
+}
+
+func resolveCleanupFollowImportsInputs(inputPaths []string, cwd string) ([]string, error) {
+	resolved, err := resolveCleanupFollowImportsPaths(inputPaths, cwd)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(resolved))
+	for _, inputPath := range resolved {
+		key := followImportsPathKey(inputPath)
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("cleanup-follow-imports input %q is duplicated", inputPath)
+		}
+		seen[key] = struct{}{}
+	}
+	return resolved, nil
+}
+
+func resolveCleanupFollowImportsPaths(paths []string, cwd string) ([]string, error) {
+	resolved := make([]string, 0, len(paths))
+	for _, path := range paths {
+		resolvedPath, err := resolveIngestImportsPath(path, cwd)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(resolvedPath) == "" {
+			continue
+		}
+		resolved = append(resolved, resolvedPath)
+	}
+	return resolved, nil
+}
+
+func resolveCleanupFollowImportsArtifactBases(base string, inputs []string, cwd string) ([]string, error) {
+	resolvedBase, err := resolveIngestImportsPath(base, cwd)
+	if err != nil {
+		return nil, err
+	}
+	if len(inputs) == 0 {
+		return []string{resolvedBase}, nil
+	}
+	bases := make([]string, 0, len(inputs))
+	for _, inputPath := range inputs {
+		bases = append(bases, deriveFollowImportsInputBasePath(resolvedBase, inputPath, len(inputs)))
+	}
+	return dedupeCleanupFollowImportsPaths(bases), nil
+}
+
+func dedupeCleanupFollowImportsPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(paths))
+	deduped := make([]string, 0, len(paths))
+	for _, path := range paths {
+		key := followImportsPathKey(path)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, path)
+	}
+	sort.Strings(deduped)
+	return deduped
+}
+
+func pruneCleanupFollowImportsPaths(paths []string, options cleanupFollowImportsOptions, now time.Time) (cleanupFollowImportsPathSummary, error) {
+	summary := cleanupFollowImportsPathSummary{
+		Requested: len(paths),
+	}
+	for _, path := range paths {
+		matched, removed, missing, skippedByPattern, skippedByAge, err := maybeRemoveCleanupFollowImportsPath(path, options, now)
+		if err != nil {
+			return cleanupFollowImportsPathSummary{}, err
+		}
+		switch {
+		case skippedByPattern:
+			summary.SkippedByPatternPaths = append(summary.SkippedByPatternPaths, path)
+		case missing:
+			summary.MissingPaths = append(summary.MissingPaths, path)
+		case skippedByAge:
+			summary.SkippedByAgePaths = append(summary.SkippedByAgePaths, path)
+		case matched:
+			summary.MatchedPaths = append(summary.MatchedPaths, path)
+		}
+		if removed {
+			summary.RemovedPaths = append(summary.RemovedPaths, path)
+		}
+	}
+	sort.Strings(summary.MatchedPaths)
+	sort.Strings(summary.RemovedPaths)
+	sort.Strings(summary.MissingPaths)
+	sort.Strings(summary.SkippedByPatternPaths)
+	sort.Strings(summary.SkippedByAgePaths)
+	summary.Matched = len(summary.MatchedPaths)
+	summary.Removed = len(summary.RemovedPaths)
+	summary.Missing = len(summary.MissingPaths)
+	summary.SkippedByPattern = len(summary.SkippedByPatternPaths)
+	summary.SkippedByAge = len(summary.SkippedByAgePaths)
+	return summary, nil
+}
+
+func maybeRemoveCleanupFollowImportsPath(path string, options cleanupFollowImportsOptions, now time.Time) (matched bool, removed bool, missing bool, skippedByPattern bool, skippedByAge bool, err error) {
+	included, err := cleanupFollowImportsPathIncluded(path, options.IncludePatterns, options.ExcludePatterns)
+	if err != nil {
+		return false, false, false, false, false, err
+	}
+	if !included {
+		return false, false, false, true, false, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, false, true, false, false, nil
+		}
+		return false, false, false, false, false, fmt.Errorf("stat cleanup-follow-imports path %q: %w", path, err)
+	}
+	if cleanupFollowImportsTooNew(info.ModTime(), options.OlderThan, now) {
+		return false, false, false, false, true, nil
+	}
+	if options.DryRun {
+		return true, false, false, false, false, nil
+	}
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, false, true, false, false, nil
+		}
+		return false, false, false, false, false, fmt.Errorf("remove cleanup-follow-imports path %q: %w", path, err)
+	}
+	return true, true, false, false, false, nil
+}
+
+func pruneCleanupFollowImportsPatternTargets(bases []string, options cleanupFollowImportsOptions, now time.Time) (cleanupFollowImportsPatternSummary, error) {
+	summary := cleanupFollowImportsPatternSummary{
+		Bases:     len(bases),
+		BasePaths: append([]string(nil), bases...),
+	}
+	sort.Strings(summary.BasePaths)
+	for _, base := range bases {
+		matches, err := listCleanupFollowImportsBatchArtifacts(base)
+		if err != nil {
+			return cleanupFollowImportsPatternSummary{}, err
+		}
+		for _, match := range matches {
+			matched, removed, _, skippedByPattern, skippedByAge, err := maybeRemoveCleanupFollowImportsPath(match, options, now)
+			if err != nil {
+				return cleanupFollowImportsPatternSummary{}, err
+			}
+			if matched {
+				summary.MatchedPaths = append(summary.MatchedPaths, match)
+			}
+			if removed {
+				summary.RemovedPaths = append(summary.RemovedPaths, match)
+			}
+			if skippedByPattern {
+				summary.SkippedByPatternPaths = append(summary.SkippedByPatternPaths, match)
+			}
+			if skippedByAge {
+				summary.SkippedByAgePaths = append(summary.SkippedByAgePaths, match)
+			}
+		}
+	}
+	sort.Strings(summary.MatchedPaths)
+	sort.Strings(summary.RemovedPaths)
+	sort.Strings(summary.SkippedByPatternPaths)
+	sort.Strings(summary.SkippedByAgePaths)
+	summary.Matched = len(summary.MatchedPaths)
+	summary.Removed = len(summary.RemovedPaths)
+	summary.SkippedByPattern = len(summary.SkippedByPatternPaths)
+	summary.SkippedByAge = len(summary.SkippedByAgePaths)
+	return summary, nil
+}
+
+func listCleanupFollowImportsBatchArtifacts(base string) ([]string, error) {
+	dir := filepath.Dir(base)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list cleanup-follow-imports artifacts for %q: %w", base, err)
+	}
+
+	baseName := filepath.Base(base)
+	ext := filepath.Ext(baseName)
+	stem := strings.TrimSuffix(baseName, ext)
+	var matches []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !cleanupFollowImportsBatchArtifactMatches(entry.Name(), stem, ext) {
+			continue
+		}
+		matches = append(matches, filepath.Join(dir, entry.Name()))
+	}
+	sort.Strings(matches)
+	return matches, nil
+}
+
+func cleanupFollowImportsTooNew(modTime time.Time, olderThan time.Duration, now time.Time) bool {
+	if olderThan <= 0 {
+		return false
+	}
+	age := now.Sub(modTime)
+	if age < 0 {
+		age = 0
+	}
+	return age < olderThan
+}
+
+func cleanupFollowImportsPathIncluded(candidate string, includePatterns []string, excludePatterns []string) (bool, error) {
+	matchesInclude, err := cleanupFollowImportsMatchAnyPattern(candidate, includePatterns)
+	if err != nil {
+		return false, err
+	}
+	if len(includePatterns) > 0 && !matchesInclude {
+		return false, nil
+	}
+	matchesExclude, err := cleanupFollowImportsMatchAnyPattern(candidate, excludePatterns)
+	if err != nil {
+		return false, err
+	}
+	return !matchesExclude, nil
+}
+
+func cleanupFollowImportsMatchAnyPattern(candidate string, patterns []string) (bool, error) {
+	if len(patterns) == 0 {
+		return false, nil
+	}
+	slashCandidate := filepath.ToSlash(filepath.Clean(strings.TrimSpace(candidate)))
+	baseCandidate := filepath.Base(slashCandidate)
+	for _, pattern := range patterns {
+		matched, err := pathpkg.Match(pattern, slashCandidate)
+		if err != nil {
+			return false, fmt.Errorf("match cleanup-follow-imports pattern %q against %q: %w", pattern, candidate, err)
+		}
+		if matched {
+			return true, nil
+		}
+		matched, err = pathpkg.Match(pattern, baseCandidate)
+		if err != nil {
+			return false, fmt.Errorf("match cleanup-follow-imports pattern %q against %q: %w", pattern, candidate, err)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func cleanupFollowImportsHealthSnapshot(logDir string, dryRun bool, now time.Time) (bool, bool, string, error) {
+	followHealth, err := loadFollowImportsHealthSnapshot(logDir)
+	if err != nil {
+		return false, false, "", err
+	}
+	if followHealth == nil {
+		return false, false, "", nil
+	}
+	_, stale := evaluateFollowImportsHealthStaleness(*followHealth, now)
+	if !stale {
+		return false, false, "", nil
+	}
+	if dryRun {
+		return true, false, "stale", nil
+	}
+	if err := pruneFollowImportsHealthSnapshot(logDir); err != nil {
+		return false, false, "", err
+	}
+	return false, true, "stale", nil
+}
+
+func cleanupFollowImportsBatchArtifactMatches(name string, stem string, ext string) bool {
+	if !strings.HasPrefix(name, stem+".") {
+		return false
+	}
+	if ext != "" {
+		if !strings.HasSuffix(name, ext) {
+			return false
+		}
+		name = strings.TrimSuffix(name, ext)
+	}
+	name = strings.TrimPrefix(name, stem+".")
+	if name == "" {
+		return false
+	}
+	parts := strings.Split(name, ".")
+	return cleanupFollowImportsIsRangeToken(parts[len(parts)-1])
+}
+
+func cleanupFollowImportsIsRangeToken(value string) bool {
+	value = strings.TrimSpace(value)
+	dash := strings.IndexByte(value, '-')
+	if dash <= 0 || dash == len(value)-1 {
+		return false
+	}
+	return cleanupFollowImportsDigitsOnly(value[:dash]) && cleanupFollowImportsDigitsOnly(value[dash+1:])
+}
+
+func cleanupFollowImportsDigitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func formatCleanupFollowImportsReport(report cleanupFollowImportsReport) string {
+	lines := []string{
+		"cleanup follow-imports ok",
+		fmt.Sprintf("status=%s", report.Status),
+		fmt.Sprintf("dry_run=%t", report.DryRun),
+		fmt.Sprintf("retention_profile=%s", fallbackString(report.RetentionProfile)),
+		fmt.Sprintf("older_than_seconds=%d", report.OlderThanSeconds),
+		fmt.Sprintf("include_patterns=%d", len(report.IncludePatterns)),
+		fmt.Sprintf("exclude_patterns=%d", len(report.ExcludePatterns)),
+		fmt.Sprintf("state_files_requested=%d", report.StateFiles.Requested),
+		fmt.Sprintf("state_files_matched=%d", report.StateFiles.Matched),
+		fmt.Sprintf("state_files_removed=%d", report.StateFiles.Removed),
+		fmt.Sprintf("state_files_missing=%d", report.StateFiles.Missing),
+		fmt.Sprintf("state_files_skipped_by_pattern=%d", report.StateFiles.SkippedByPattern),
+		fmt.Sprintf("state_files_skipped_by_age=%d", report.StateFiles.SkippedByAge),
+		fmt.Sprintf("failed_output_bases=%d", report.FailedOutputs.Bases),
+		fmt.Sprintf("failed_output_matched=%d", report.FailedOutputs.Matched),
+		fmt.Sprintf("failed_output_removed=%d", report.FailedOutputs.Removed),
+		fmt.Sprintf("failed_output_skipped_by_pattern=%d", report.FailedOutputs.SkippedByPattern),
+		fmt.Sprintf("failed_output_skipped_by_age=%d", report.FailedOutputs.SkippedByAge),
+		fmt.Sprintf("failed_manifest_bases=%d", report.FailedManifests.Bases),
+		fmt.Sprintf("failed_manifest_matched=%d", report.FailedManifests.Matched),
+		fmt.Sprintf("failed_manifest_removed=%d", report.FailedManifests.Removed),
+		fmt.Sprintf("failed_manifest_skipped_by_pattern=%d", report.FailedManifests.SkippedByPattern),
+		fmt.Sprintf("failed_manifest_skipped_by_age=%d", report.FailedManifests.SkippedByAge),
+		fmt.Sprintf("follow_health_file=%s", report.FollowHealth.File),
+		fmt.Sprintf("follow_health_would_prune=%t", report.FollowHealth.WouldPrune),
+		fmt.Sprintf("follow_health_pruned=%t", report.FollowHealth.Pruned),
+		fmt.Sprintf("follow_health_prune_reason=%s", fallbackString(report.FollowHealth.PruneReason)),
+	}
+	for i, pattern := range report.IncludePatterns {
+		lines = append(lines, fmt.Sprintf("include_pattern_%d=%s", i+1, pattern))
+	}
+	for i, pattern := range report.ExcludePatterns {
+		lines = append(lines, fmt.Sprintf("exclude_pattern_%d=%s", i+1, pattern))
+	}
+	for i, path := range report.StateFiles.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("state_file_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.RemovedPaths {
+		lines = append(lines, fmt.Sprintf("state_file_removed_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.MissingPaths {
+		lines = append(lines, fmt.Sprintf("state_file_missing_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("state_file_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("state_file_skipped_by_age_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.BasePaths {
+		lines = append(lines, fmt.Sprintf("failed_output_base_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("failed_output_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.RemovedPaths {
+		lines = append(lines, fmt.Sprintf("failed_output_removed_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("failed_output_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("failed_output_skipped_by_age_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.BasePaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_base_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.RemovedPaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_removed_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_skipped_by_age_%d=%s", i+1, path))
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func runFollowImportsInputsOnce(ctx context.Context, instance *App, inputs []FollowImportsInput) ([]followImportsReport, error) {

@@ -1,14 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"codex-mem/internal/config"
 	"codex-mem/internal/db"
 	"codex-mem/internal/domain/common"
 	"github.com/fsnotify/fsnotify"
@@ -125,6 +128,551 @@ func TestParseFollowImportsOptionsRejectsMismatchedStateFileCount(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "follow-imports state-file count (1) must match input count (2)") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptions(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{
+		"--input", "events.jsonl",
+		"--state-file", "events.offset.json",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+		"--include", "*.offset.json,*.0-42.*",
+		"--exclude", "*.43-84.*",
+		"--retention-profile", "daily",
+		"--cwd", "D:/Code/go/codex-mem",
+		"--older-than", "2h",
+		"--dry-run",
+		"--prune-state",
+		"--prune-failed-output",
+		"--prune-failed-manifest",
+		"--prune-stale-follow-health",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if !options.PruneState || !options.PruneFailedOutput || !options.PruneFailedManifest || !options.PruneStaleFollowHealth {
+		t.Fatalf("expected all prune targets to be enabled, got %+v", options)
+	}
+	if !options.JSON {
+		t.Fatal("expected JSON output")
+	}
+	if !options.DryRun {
+		t.Fatal("expected dry-run option")
+	}
+	if got, want := options.OlderThan, 2*time.Hour; got != want {
+		t.Fatalf("older-than mismatch: got %s want %s", got, want)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileDaily; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := len(options.IncludePatterns), 2; got != want {
+		t.Fatalf("include pattern count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(options.ExcludePatterns), 1; got != want {
+		t.Fatalf("exclude pattern count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(options.InputPaths), 1; got != want {
+		t.Fatalf("input count mismatch: got %d want %d", got, want)
+	}
+	if got, want := options.StatePaths[0], "events.offset.json"; got != want {
+		t.Fatalf("state path mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsMissingTargets(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions(nil)
+	if err == nil {
+		t.Fatal("expected missing target error")
+	}
+	if !strings.Contains(err.Error(), "cleanup-follow-imports requires at least one prune target") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsStateFileCountMismatch(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{
+		"--input", "events-a.jsonl",
+		"--input", "events-b.jsonl",
+		"--state-file", "events.offset.json",
+		"--prune-state",
+	})
+	if err == nil {
+		t.Fatal("expected mismatched state-file error")
+	}
+	if !strings.Contains(err.Error(), "cleanup-follow-imports state-file count (1) must match input count (2)") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsInvalidPattern(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--prune-failed-output",
+		"--include", "[",
+	})
+	if err == nil {
+		t.Fatal("expected invalid include pattern error")
+	}
+	if !strings.Contains(err.Error(), `invalid cleanup-follow-imports --include pattern "["`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsAppliesRetentionProfileDefaults(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--prune-failed-output",
+		"--retention-profile", "stale",
+	})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileStale; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.OlderThan, time.Hour; got != want {
+		t.Fatalf("older-than mismatch: got %s want %s", got, want)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsAllowsOlderThanOverrideOnRetentionProfile(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--prune-failed-output",
+		"--retention-profile", "daily",
+		"--older-than", "2h",
+	})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileDaily; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.OlderThan, 2*time.Hour; got != want {
+		t.Fatalf("older-than override mismatch: got %s want %s", got, want)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsUnknownRetentionProfile(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--prune-failed-output",
+		"--retention-profile", "hourly",
+	})
+	if err == nil {
+		t.Fatal("expected invalid retention profile error")
+	}
+	if !strings.Contains(err.Error(), `"--retention-profile"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsEnablesRefreshExamples(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples"})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if !options.RefreshExamples {
+		t.Fatal("expected refresh-examples option to be enabled")
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsSelectsNamedRefreshExamples(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples=filtered-cleanup-json,daily-dry-run-text,filtered-cleanup-json"})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if !options.RefreshExamples {
+		t.Fatal("expected refresh-examples option to be enabled")
+	}
+	if !slices.Equal(options.RefreshExampleNames, []string{"filtered-cleanup-json", "daily-dry-run-text"}) {
+		t.Fatalf("unexpected refresh example names: %+v", options.RefreshExampleNames)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsUnknownRefreshExampleName(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples=missing-example"})
+	if err == nil {
+		t.Fatal("expected unknown refresh example error")
+	}
+	if !strings.Contains(err.Error(), `unknown cleanup-follow-imports example "missing-example"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsRefreshExamplesWithOtherFlags(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples", "--json"})
+	if err == nil {
+		t.Fatal("expected refresh-examples incompatibility error")
+	}
+	if !strings.Contains(err.Error(), `"--refresh-examples"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsEnablesListExamples(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{"--list-examples"})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if !options.ListExamples {
+		t.Fatal("expected list-examples option to be enabled")
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsListExamplesWithRefreshExamples(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{"--list-examples", "--refresh-examples"})
+	if err == nil {
+		t.Fatal("expected list-examples incompatibility error")
+	}
+	if !strings.Contains(err.Error(), `"--list-examples"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteCleanupFollowImportsExampleFixtures(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPaths, err := writeCleanupFollowImportsExampleFixtures(tempDir, nil)
+	if err != nil {
+		t.Fatalf("writeCleanupFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) != len(cleanupFollowImportsExampleFixtures()) {
+		t.Fatalf("unexpected written path count: got %d want %d", len(writtenPaths), len(cleanupFollowImportsExampleFixtures()))
+	}
+
+	for _, fixture := range cleanupFollowImportsExampleFixtures() {
+		body, err := renderCleanupFollowImportsExample(fixture.Report, fixture.JSON)
+		if err != nil {
+			t.Fatalf("renderCleanupFollowImportsExample(%s): %v", fixture.Name, err)
+		}
+		path := filepath.Join(tempDir, fixture.RelativePath)
+		written, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(%s): %v", path, err)
+		}
+		if !bytes.Equal(written, body) {
+			t.Fatalf("fixture mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", fixture.Name, string(written), string(body))
+		}
+	}
+}
+
+func TestWriteCleanupFollowImportsExampleFixturesSelectsNamedSubset(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPaths, err := writeCleanupFollowImportsExampleFixtures(tempDir, []string{"filtered-cleanup-json"})
+	if err != nil {
+		t.Fatalf("writeCleanupFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) != 1 {
+		t.Fatalf("unexpected written path count: got %d want 1", len(writtenPaths))
+	}
+
+	selected, err := selectCleanupFollowImportsExampleFixtures([]string{"filtered-cleanup-json"})
+	if err != nil {
+		t.Fatalf("selectCleanupFollowImportsExampleFixtures: %v", err)
+	}
+	fixture := selected[0]
+	body, err := renderCleanupFollowImportsExample(fixture.Report, fixture.JSON)
+	if err != nil {
+		t.Fatalf("renderCleanupFollowImportsExample(%s): %v", fixture.Name, err)
+	}
+	path := filepath.Join(tempDir, fixture.RelativePath)
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if !bytes.Equal(written, body) {
+		t.Fatalf("fixture mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", fixture.Name, string(written), string(body))
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "cleanup-follow-imports-daily-dry-run.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected no daily-dry-run fixture, got err=%v", err)
+	}
+}
+
+func TestListCleanupFollowImportsExamples(t *testing.T) {
+	var buffer bytes.Buffer
+	if err := listCleanupFollowImportsExamples(&buffer); err != nil {
+		t.Fatalf("listCleanupFollowImportsExamples: %v", err)
+	}
+	output := buffer.String()
+	for _, fragment := range []string{
+		"example=daily-dry-run-text path=testdata\\cleanup-follow-imports-daily-dry-run.txt format=text",
+		"example=filtered-cleanup-json path=testdata\\cleanup-follow-imports-filtered-cleanup.json format=json",
+		"example_count=2",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("list output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestCleanupFollowImportsPrunesDerivedArtifacts(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+	inputA := filepath.Join(root, "events-a.jsonl")
+	inputB := filepath.Join(root, "events-b.jsonl")
+	stateA := inputA + ".offset.json"
+	stateB := inputB + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutputA := filepath.Join(root, "failed", "failed.events-a.0-42.jsonl")
+	failedOutputB := filepath.Join(root, "failed", "failed.events-b.43-84.jsonl")
+	failedManifestA := filepath.Join(root, "failed", "failed.events-a.0-42.json")
+	failedManifestB := filepath.Join(root, "failed", "failed.events-b.43-84.json")
+	preservedOutputBase := failedOutputBase
+	preservedManifestBase := failedManifestBase
+
+	for _, path := range []string{
+		inputA,
+		inputB,
+		stateA,
+		stateB,
+		failedOutputA,
+		failedOutputB,
+		failedManifestA,
+		failedManifestB,
+		preservedOutputBase,
+		preservedManifestBase,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	report, err := cleanupFollowImports(cfg, cleanupFollowImportsOptions{
+		InputPaths:          []string{inputA, inputB},
+		FailedOutputPath:    failedOutputBase,
+		FailedManifestPath:  failedManifestBase,
+		CWD:                 root,
+		PruneState:          true,
+		PruneFailedOutput:   true,
+		PruneFailedManifest: true,
+	})
+	if err != nil {
+		t.Fatalf("cleanupFollowImports: %v", err)
+	}
+
+	if got, want := report.StateFiles.Removed, 2; got != want {
+		t.Fatalf("state removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.StateFiles.Matched, 2; got != want {
+		t.Fatalf("state matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.Removed, 2; got != want {
+		t.Fatalf("failed output removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.Matched, 2; got != want {
+		t.Fatalf("failed output matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.Removed, 2; got != want {
+		t.Fatalf("failed manifest removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.Matched, 2; got != want {
+		t.Fatalf("failed manifest matched mismatch: got %d want %d", got, want)
+	}
+
+	for _, removed := range []string{stateA, stateB, failedOutputA, failedOutputB, failedManifestA, failedManifestB} {
+		if _, err := os.Stat(removed); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed, stat err=%v", removed, err)
+		}
+	}
+	for _, preserved := range []string{preservedOutputBase, preservedManifestBase} {
+		if _, err := os.Stat(preserved); err != nil {
+			t.Fatalf("expected %s to remain, stat err=%v", preserved, err)
+		}
+	}
+}
+
+func TestCleanupFollowImportsDryRunAndOlderThanFilter(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 3, 17, 4, 0, 0, 0, time.UTC)
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	oldFailedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	newFailedOutput := filepath.Join(root, "failed", "failed.43-84.jsonl")
+	oldFailedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	newFailedManifest := filepath.Join(root, "failed", "failed.43-84.json")
+
+	for _, path := range []string{inputPath, statePath, oldFailedOutput, newFailedOutput, oldFailedManifest, newFailedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{statePath, oldFailedOutput, oldFailedManifest} {
+		oldTime := now.Add(-2 * time.Hour)
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes old %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{newFailedOutput, newFailedManifest} {
+		newTime := now.Add(-30 * time.Minute)
+		if err := os.Chtimes(path, newTime, newTime); err != nil {
+			t.Fatalf("Chtimes new %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           now.Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	report, err := cleanupFollowImportsAt(cfg, cleanupFollowImportsOptions{
+		InputPaths:             []string{inputPath},
+		FailedOutputPath:       failedOutputBase,
+		FailedManifestPath:     failedManifestBase,
+		CWD:                    root,
+		DryRun:                 true,
+		OlderThan:              time.Hour,
+		PruneState:             true,
+		PruneFailedOutput:      true,
+		PruneFailedManifest:    true,
+		PruneStaleFollowHealth: true,
+	}, now)
+	if err != nil {
+		t.Fatalf("cleanupFollowImportsAt: %v", err)
+	}
+
+	if !report.DryRun {
+		t.Fatal("expected dry-run report")
+	}
+	if got, want := report.OlderThanSeconds, int64(3600); got != want {
+		t.Fatalf("older-than seconds mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.StateFiles.Matched, 1; got != want {
+		t.Fatalf("state matched mismatch: got %d want %d", got, want)
+	}
+	if got := report.StateFiles.Removed; got != 0 {
+		t.Fatalf("expected no state removals during dry-run, got %d", got)
+	}
+	if got, want := report.FailedOutputs.Matched, 1; got != want {
+		t.Fatalf("failed output matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.SkippedByAge, 1; got != want {
+		t.Fatalf("failed output skipped mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.Matched, 1; got != want {
+		t.Fatalf("failed manifest matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.SkippedByAge, 1; got != want {
+		t.Fatalf("failed manifest skipped mismatch: got %d want %d", got, want)
+	}
+	if !report.FollowHealth.WouldPrune || report.FollowHealth.Pruned {
+		t.Fatalf("unexpected follow health dry-run state: %+v", report.FollowHealth)
+	}
+
+	for _, preserved := range []string{statePath, oldFailedOutput, newFailedOutput, oldFailedManifest, newFailedManifest, followImportsHealthPath(cfg.Meta.LogDir)} {
+		if _, err := os.Stat(preserved); err != nil {
+			t.Fatalf("expected %s to remain after dry-run, stat err=%v", preserved, err)
+		}
+	}
+}
+
+func TestCleanupFollowImportsIncludeExcludePatterns(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+	inputA := filepath.Join(root, "events-a.jsonl")
+	inputB := filepath.Join(root, "events-b.jsonl")
+	stateA := inputA + ".offset.json"
+	stateB := inputB + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutputA := filepath.Join(root, "failed", "failed.events-a.0-42.jsonl")
+	failedOutputB := filepath.Join(root, "failed", "failed.events-b.43-84.jsonl")
+	failedManifestA := filepath.Join(root, "failed", "failed.events-a.0-42.json")
+	failedManifestB := filepath.Join(root, "failed", "failed.events-b.43-84.json")
+
+	for _, path := range []string{
+		inputA,
+		inputB,
+		stateA,
+		stateB,
+		failedOutputA,
+		failedOutputB,
+		failedManifestA,
+		failedManifestB,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	report, err := cleanupFollowImports(cfg, cleanupFollowImportsOptions{
+		InputPaths:          []string{inputA, inputB},
+		FailedOutputPath:    failedOutputBase,
+		FailedManifestPath:  failedManifestBase,
+		IncludePatterns:     []string{"*events-a*", "*.offset.json"},
+		ExcludePatterns:     []string{"*events-b*"},
+		CWD:                 root,
+		PruneState:          true,
+		PruneFailedOutput:   true,
+		PruneFailedManifest: true,
+	})
+	if err != nil {
+		t.Fatalf("cleanupFollowImports: %v", err)
+	}
+
+	if got, want := report.StateFiles.Removed, 1; got != want {
+		t.Fatalf("state removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.StateFiles.SkippedByPattern, 1; got != want {
+		t.Fatalf("state skipped-by-pattern mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.Removed, 1; got != want {
+		t.Fatalf("failed output removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.SkippedByPattern, 1; got != want {
+		t.Fatalf("failed output skipped-by-pattern mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.Removed, 1; got != want {
+		t.Fatalf("failed manifest removed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.SkippedByPattern, 1; got != want {
+		t.Fatalf("failed manifest skipped-by-pattern mismatch: got %d want %d", got, want)
+	}
+
+	for _, removed := range []string{stateA, failedOutputA, failedManifestA} {
+		if _, err := os.Stat(removed); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed, stat err=%v", removed, err)
+		}
+	}
+	for _, preserved := range []string{stateB, failedOutputB, failedManifestB} {
+		if _, err := os.Stat(preserved); err != nil {
+			t.Fatalf("expected %s to remain, stat err=%v", preserved, err)
+		}
 	}
 }
 

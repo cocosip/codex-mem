@@ -119,6 +119,14 @@ type ingestFailureManifest struct {
 	Failures            []ingestFailureDetail `json:"failures"`
 }
 
+const (
+	ingestImportsInputFlag           = "--input"
+	ingestImportsFailedOutputFlag    = "--failed-output"
+	ingestImportsFailedManifestFlag  = "--failed-manifest"
+	ingestImportsCWDFlag             = "--cwd"
+	ingestImportsContinueOnErrorFlag = "--continue-on-error"
+)
+
 func runIngestImports(ctx context.Context, cfg config.Config, stdin io.Reader, stdout io.Writer, args []string) error {
 	options, err := parseIngestImportsOptions(args)
 	if err != nil {
@@ -179,28 +187,28 @@ func parseIngestImportsOptions(args []string) (ingestImportsOptions, error) {
 			}
 			options.Source = imports.Source(value)
 			i = next
-		case "--input":
+		case ingestImportsInputFlag:
 			value, next, err := optionValue(args, i)
 			if err != nil {
 				return ingestImportsOptions{}, err
 			}
 			options.InputPath = value
 			i = next
-		case "--failed-output":
+		case ingestImportsFailedOutputFlag:
 			value, next, err := optionValue(args, i)
 			if err != nil {
 				return ingestImportsOptions{}, err
 			}
 			options.FailedOutputPath = value
 			i = next
-		case "--failed-manifest":
+		case ingestImportsFailedManifestFlag:
 			value, next, err := optionValue(args, i)
 			if err != nil {
 				return ingestImportsOptions{}, err
 			}
 			options.FailedManifestPath = value
 			i = next
-		case "--cwd":
+		case ingestImportsCWDFlag:
 			value, next, err := optionValue(args, i)
 			if err != nil {
 				return ingestImportsOptions{}, err
@@ -228,9 +236,9 @@ func parseIngestImportsOptions(args []string) (ingestImportsOptions, error) {
 			}
 			options.Task = value
 			i = next
-		case "--json":
+		case doctorJSONFlag:
 			options.JSON = true
-		case "--continue-on-error":
+		case ingestImportsContinueOnErrorFlag:
 			options.ContinueOnError = true
 		default:
 			return ingestImportsOptions{}, fmt.Errorf("unknown ingest-imports flag %q", arg)
@@ -321,10 +329,10 @@ func validateIngestImportsOptions(source imports.Source, continueOnError bool, f
 		return err
 	}
 	if strings.TrimSpace(failedOutputPath) != "" && !continueOnError {
-		return fmt.Errorf("ingest-imports --failed-output requires --continue-on-error")
+		return fmt.Errorf("ingest-imports %s requires %s", ingestImportsFailedOutputFlag, ingestImportsContinueOnErrorFlag)
 	}
 	if strings.TrimSpace(failedManifestPath) != "" && !continueOnError {
-		return fmt.Errorf("ingest-imports --failed-manifest requires --continue-on-error")
+		return fmt.Errorf("ingest-imports %s requires %s", ingestImportsFailedManifestFlag, ingestImportsContinueOnErrorFlag)
 	}
 	return nil
 }

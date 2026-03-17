@@ -93,6 +93,8 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		return runIngestImports(ctx, cfg, stdin, stdout, commandArgs)
 	case "follow-imports":
 		return runFollowImports(ctx, cfg, stdout, commandArgs)
+	case "cleanup-follow-imports":
+		return runCleanupFollowImports(cfg, stdout, commandArgs)
 	case "serve":
 		instance, err := New(ctx, cfg)
 		if err != nil {

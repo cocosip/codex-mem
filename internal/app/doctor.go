@@ -119,11 +119,12 @@ type doctorMCPReport struct {
 }
 
 const (
-	doctorJSONFlag                    = "--json"
-	doctorPruneStaleFollowHealthFlag  = "--prune-stale-follow-health"
-	stringNone                        = "none"
-	doctorFollowHealthStaleMultiplier = 3
-	doctorFollowHealthMinimumWindow   = 30 * time.Second
+	doctorJSONFlag                     = "--json"
+	doctorPruneStaleFollowHealthFlag   = "--prune-stale-follow-health"
+	doctorFollowHealthPruneReasonStale = "stale"
+	stringNone                         = "none"
+	doctorFollowHealthStaleMultiplier  = 3
+	doctorFollowHealthMinimumWindow    = 30 * time.Second
 )
 
 func parseDoctorOptions(args []string) (doctorOptions, error) {
@@ -393,5 +394,5 @@ func loadDoctorFollowImportsHealth(logDir string, pruneStale bool, now time.Time
 	if err := pruneFollowImportsHealthSnapshot(logDir); err != nil {
 		return nil, false, "", err
 	}
-	return nil, true, "stale", nil
+	return nil, true, doctorFollowHealthPruneReasonStale, nil
 }

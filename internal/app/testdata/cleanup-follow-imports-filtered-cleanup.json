@@ -1,0 +1,69 @@
+{
+  "dry_run": false,
+  "retention_profile": "reset",
+  "include_patterns": [
+    "*events-a*",
+    "*.offset.json"
+  ],
+  "exclude_patterns": [
+    "*.43-84.*"
+  ],
+  "status": "ok",
+  "state_files": {
+    "requested": 2,
+    "matched": 1,
+    "removed": 1,
+    "missing": 0,
+    "skipped_by_pattern": 1,
+    "matched_paths": [
+      "D:\\Ops\\follow\\events-a.offset.json"
+    ],
+    "removed_paths": [
+      "D:\\Ops\\follow\\events-a.offset.json"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\events-b.offset.json"
+    ]
+  },
+  "failed_outputs": {
+    "bases": 1,
+    "matched": 1,
+    "removed": 1,
+    "skipped_by_pattern": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.jsonl"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.jsonl"
+    ],
+    "removed_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.jsonl"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-b.43-84.jsonl"
+    ]
+  },
+  "failed_manifests": {
+    "bases": 1,
+    "matched": 1,
+    "removed": 1,
+    "skipped_by_pattern": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.json"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.json"
+    ],
+    "removed_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.json"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-b.43-84.json"
+    ]
+  },
+  "follow_health": {
+    "file": "D:\\Ops\\follow\\logs\\follow-imports.health.json",
+    "would_prune": false,
+    "pruned": false
+  }
+}
