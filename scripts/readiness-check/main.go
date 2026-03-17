@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ const stringNone = "none"
 type readinessOptions struct {
 	JSON                 bool
 	KeepGoing            bool
+	RefreshExamples      bool
 	PolicyProfile        string
 	SlowRunThresholdMS   int64
 	SlowPhaseThresholdMS int64
@@ -122,6 +124,9 @@ const (
 	readinessStatusFailed = "failed"
 	readinessStatusNotRun = "not_run"
 
+	readinessMCPTransportStdio     = "stdio"
+	readinessWarnFollowHealthStale = "WARN_FOLLOW_IMPORTS_HEALTH_STALE"
+
 	readinessPhaseDoctor = "doctor"
 	readinessPhaseStdio  = "stdio_mcp_smoke_test"
 	readinessPhaseHTTP   = "http_mcp_smoke_test"
@@ -144,6 +149,12 @@ func main() {
 	if err != nil {
 		failf("resolve working directory: %v", err)
 	}
+	if options.RefreshExamples {
+		if err := refreshReadinessExamples(repoRoot, os.Stdout); err != nil {
+			failf("refresh readiness examples: %v", err)
+		}
+		return
+	}
 
 	report, runErr := runReadinessCheck(ctx, repoRoot, options)
 	if err := writeReadinessOutput(os.Stdout, report, options); err != nil {
@@ -165,6 +176,8 @@ func parseOptions(args []string) (readinessOptions, error) {
 			options.JSON = true
 		case "--keep-going":
 			options.KeepGoing = true
+		case "--refresh-examples":
+			options.RefreshExamples = true
 		default:
 			var err error
 			options, i, err = parseExtendedOption(args, i, options)
@@ -177,7 +190,25 @@ func parseOptions(args []string) (readinessOptions, error) {
 	if err != nil {
 		return readinessOptions{}, err
 	}
+	if err := validateOptions(options); err != nil {
+		return readinessOptions{}, err
+	}
 	return options, nil
+}
+
+func validateOptions(options readinessOptions) error {
+	if !options.RefreshExamples {
+		return nil
+	}
+	if options.JSON ||
+		options.KeepGoing ||
+		options.PolicyProfile != "" ||
+		options.SlowRunThresholdMS != 0 ||
+		options.SlowPhaseThresholdMS != 0 ||
+		len(options.FailOnWarningCodes) > 0 {
+		return errors.New(`"--refresh-examples" cannot be combined with other readiness-check flags`)
+	}
+	return nil
 }
 
 func parseExtendedOption(args []string, index int, options readinessOptions) (readinessOptions, int, error) {
@@ -380,6 +411,21 @@ func runGo(ctx context.Context, dir string, args ...string) (string, string, err
 
 func runReadinessCheck(ctx context.Context, repoRoot string, options readinessOptions) (readinessReport, error) {
 	return runReadinessCheckWithRunner(ctx, repoRoot, options, runGo)
+}
+
+func refreshReadinessExamples(repoRoot string, w io.Writer) error {
+	baseDir := filepath.Join(repoRoot, "scripts", "readiness-check", readinessExampleDirName)
+	writtenPaths, err := writeReadinessExampleFixtures(baseDir)
+	if err != nil {
+		return err
+	}
+	for _, path := range writtenPaths {
+		if _, err := fmt.Fprintf(w, "refreshed_example=%s\n", path); err != nil {
+			return err
+		}
+	}
+	_, err = fmt.Fprintf(w, "refreshed_examples=%d\n", len(writtenPaths))
+	return err
 }
 
 func runReadinessCheckWithRunner(ctx context.Context, repoRoot string, options readinessOptions, runner goRunner) (readinessReport, error) {

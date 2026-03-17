@@ -214,6 +214,14 @@ Checked-in example outputs for those readiness flows live under [../../../script
 - [example-slow-ci-success.txt](../../../scripts/readiness-check/testdata/example-slow-ci-success.txt)
 - [example-release-warning-failure.txt](../../../scripts/readiness-check/testdata/example-release-warning-failure.txt)
 
+If a deliberate readiness-output change makes those fixtures drift, refresh them with:
+
+```powershell
+go run ./scripts/readiness-check --refresh-examples
+```
+
+Then rerun `go test ./scripts/readiness-check -run TestReadinessExampleOutputsStayInSync` plus the normal repo checks so the updated fixtures are verified in read-only mode again.
+
 That combined check now covers:
 
 1. `doctor --json`

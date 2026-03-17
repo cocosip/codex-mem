@@ -1,6 +1,6 @@
 ﻿# codex-mem Go Development Tracker
 
-Last updated: 2026-03-16
+Last updated: 2026-03-17
 Status: active
 
 ## Purpose
@@ -490,6 +490,13 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether to stop here with fixed sample outputs, or extend the readiness helper with a dedicated example-generation/update workflow if fixture churn becomes noticeable.
+
+### 2026-03-17 Session Update
+
+- Completed: Added an explicit `go run ./scripts/readiness-check --refresh-examples` helper for checked-in readiness sample outputs. The fixed example-report builders now live in shared package code instead of only in tests, `TestReadinessExampleOutputsStayInSync` stays read-only, and the maintainer MCP integration guide now documents the helper command.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the refresh helper should remain a mode on `readiness-check`, or move to a separate maintainer script if the checked-in example catalog grows further.
 
 ## Recommended Next Step
 
