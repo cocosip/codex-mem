@@ -1,0 +1,67 @@
+{
+  "fail_if_matched": true,
+  "match_found": true,
+  "retention_profile": "reset",
+  "include_patterns": [
+    "*events-a*",
+    "*.offset.json"
+  ],
+  "exclude_patterns": [
+    "*.43-84.*"
+  ],
+  "status": "ok",
+  "state_files": {
+    "requested": 2,
+    "matched": 1,
+    "missing": 0,
+    "skipped_by_pattern": 1,
+    "matched_paths": [
+      "D:\\Ops\\follow\\events-a.offset.json"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\events-b.offset.json"
+    ]
+  },
+  "failed_outputs": {
+    "bases": 1,
+    "matched": 1,
+    "skipped_by_pattern": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.jsonl"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.jsonl"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-b.43-84.jsonl"
+    ]
+  },
+  "failed_manifests": {
+    "bases": 1,
+    "matched": 1,
+    "skipped_by_pattern": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.json"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.json"
+    ],
+    "skipped_by_pattern_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-b.43-84.json"
+    ]
+  },
+  "follow_health": {
+    "file": "D:\\Ops\\follow\\logs\\follow-imports.health.json",
+    "present": true,
+    "last_updated_at": "2026-03-16T08:17:30Z",
+    "status": "ok",
+    "source": "watcher_import",
+    "input_count": 1,
+    "continuous": true,
+    "poll_interval_seconds": 5,
+    "snapshot_age_seconds": 30,
+    "stale": false,
+    "requested_watch_mode": "auto",
+    "active_watch_mode": "notify"
+  }
+}

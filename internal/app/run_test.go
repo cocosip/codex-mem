@@ -1071,61 +1071,12 @@ func TestRunAuditFollowImportsFailIfMatchedReturnsErrorAfterWritingReport(t *tes
 	}
 }
 
-func TestRunCleanupFollowImportsListsExamples(t *testing.T) {
-	var stdout bytes.Buffer
-	if err := Run(context.Background(), config.Config{}, []string{"cleanup-follow-imports", "--list-examples"}, strings.NewReader(""), &stdout); err != nil {
-		t.Fatalf("Run cleanup-follow-imports --list-examples: %v", err)
-	}
-
-	output := stdout.String()
-	for _, fragment := range []string{
-		"example=daily-dry-run-text",
-		"example=filtered-cleanup-json",
-		"example_count=2",
-	} {
-		if !strings.Contains(output, fragment) {
-			t.Fatalf("list output missing %q:\n%s", fragment, output)
-		}
-	}
-}
-
-func TestRunCleanupFollowImportsRefreshesSelectedExamples(t *testing.T) {
-	root := t.TempDir()
-
-	var stdout bytes.Buffer
-	if err := Run(context.Background(), config.Config{}, []string{
-		"cleanup-follow-imports",
-		"--cwd", root,
-		"--refresh-examples=filtered-cleanup-json",
-	}, strings.NewReader(""), &stdout); err != nil {
-		t.Fatalf("Run cleanup-follow-imports --refresh-examples: %v", err)
-	}
-
-	refreshedPath := filepath.Join(root, "internal", "app", "testdata", "cleanup-follow-imports-filtered-cleanup.json")
-	output := stdout.String()
-	for _, fragment := range []string{
-		"refreshed_example=" + refreshedPath,
-		"refreshed_examples=1",
-	} {
-		if !strings.Contains(output, fragment) {
-			t.Fatalf("refresh output missing %q:\n%s", fragment, output)
-		}
-	}
-
-	selected, err := selectCleanupFollowImportsExampleFixtures([]string{"filtered-cleanup-json"})
-	if err != nil {
-		t.Fatalf("selectCleanupFollowImportsExampleFixtures: %v", err)
-	}
-	body, err := renderCleanupFollowImportsExample(selected[0].Report, selected[0].JSON)
-	if err != nil {
-		t.Fatalf("renderCleanupFollowImportsExample: %v", err)
-	}
-	written, err := os.ReadFile(refreshedPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", refreshedPath, err)
-	}
-	if !bytes.Equal(written, body) {
-		t.Fatalf("refreshed fixture mismatch\n--- got ---\n%s\n--- want ---\n%s", string(written), string(body))
+func TestAuditFollowImportsExampleOutputsStayInSync(t *testing.T) {
+	for _, fixture := range auditFollowImportsExampleFixtures() {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			assertAuditFollowImportsExampleOutput(t, filepath.Join("testdata", fixture.RelativePath), fixture.JSON, fixture.Report)
+		})
 	}
 }
 
@@ -1136,6 +1087,53 @@ func TestCleanupFollowImportsExampleOutputsStayInSync(t *testing.T) {
 			assertCleanupFollowImportsExampleOutput(t, filepath.Join("testdata", fixture.RelativePath), fixture.JSON, fixture.Report)
 		})
 	}
+}
+
+func TestRefreshCleanupFollowImportsExampleFixtures(t *testing.T) {
+	names, ok := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_CLEANUP_EXAMPLES")
+	if !ok {
+		return
+	}
+	writtenPaths, err := writeCleanupFollowImportsExampleFixtures("testdata", names)
+	if err != nil {
+		t.Fatalf("writeCleanupFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) == 0 {
+		t.Fatal("expected at least one cleanup fixture to be written")
+	}
+}
+
+func TestRefreshAuditFollowImportsExampleFixtures(t *testing.T) {
+	names, ok := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_AUDIT_EXAMPLES")
+	if !ok {
+		return
+	}
+	writtenPaths, err := writeAuditFollowImportsExampleFixtures("testdata", names)
+	if err != nil {
+		t.Fatalf("writeAuditFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) == 0 {
+		t.Fatal("expected at least one audit fixture to be written")
+	}
+}
+
+func followImportsExampleRefreshSelection(t *testing.T, envKey string) ([]string, bool) {
+	t.Helper()
+
+	raw := strings.TrimSpace(os.Getenv(envKey))
+	if raw == "" {
+		t.Skipf("%s is not set", envKey)
+		return nil, false
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "all":
+		return nil, true
+	}
+	names, err := parseFollowImportsExampleNames(raw)
+	if err != nil {
+		t.Fatalf("parse example selection from %s: %v", envKey, err)
+	}
+	return names, true
 }
 
 func assertCleanupFollowImportsExampleOutput(t *testing.T, path string, jsonOutput bool, report cleanupFollowImportsReport) {
@@ -1152,5 +1150,22 @@ func assertCleanupFollowImportsExampleOutput(t *testing.T, path string, jsonOutp
 	}
 	if !bytes.Equal(body, expected) {
 		t.Fatalf("cleanup example mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", path, string(body), string(expected))
+	}
+}
+
+func assertAuditFollowImportsExampleOutput(t *testing.T, path string, jsonOutput bool, report auditFollowImportsReport) {
+	t.Helper()
+
+	body, err := renderAuditFollowImportsExample(report, jsonOutput)
+	if err != nil {
+		t.Fatalf("render audit-follow-imports example: %v", err)
+	}
+
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	if !bytes.Equal(body, expected) {
+		t.Fatalf("audit example mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", path, string(body), string(expected))
 	}
 }

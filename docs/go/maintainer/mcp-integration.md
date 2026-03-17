@@ -235,20 +235,35 @@ That combined check now covers:
 2. stdio MCP smoke test
 3. HTTP MCP smoke test
 
-The checked-in `cleanup-follow-imports` example outputs under [../../../internal/app/testdata](../../../internal/app/testdata/) now support the same maintainer loop. When the cleanup text or JSON renderer changes on purpose, refresh every cleanup fixture from the repository root with:
+The checked-in `cleanup-follow-imports` and `audit-follow-imports` example outputs under [../../../internal/app/testdata](../../../internal/app/testdata/) still support a maintainer refresh loop, but that loop now lives only in test code so the packaged commands stay production-focused. When a hygiene-report renderer changes on purpose, refresh every cleanup fixture from the repository root with:
 
 ```powershell
-go run ./cmd/codex-mem cleanup-follow-imports --refresh-examples
+$env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
 ```
 
-If you only need a subset while iterating, list the current names first and then refresh the exact fixtures you touched:
+Refresh every audit fixture the same way:
 
 ```powershell
-go run ./cmd/codex-mem cleanup-follow-imports --list-examples
-go run ./cmd/codex-mem cleanup-follow-imports --refresh-examples=filtered-cleanup-json
+$env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
 ```
 
-Then rerun `go test ./internal/app -run TestCleanupFollowImportsExampleOutputsStayInSync` plus the normal repo checks so the updated cleanup fixtures are verified in read-only mode again.
+If you only need a subset while iterating, pass the exact fixture names through the matching environment variable. The canonical names live in [../../../internal/app/follow_examples_test.go](../../../internal/app/follow_examples_test.go):
+
+```powershell
+$env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "filtered-cleanup-json"
+go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
+
+$env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES = "filtered-audit-json"
+go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
+```
+
+Then rerun `go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayInSync"` plus the normal repo checks so the updated hygiene fixtures are verified in read-only mode again.
 
 The default text summary from `scripts/readiness-check` echoes the `doctor.follow_imports` fields as flat `doctor_follow_imports_*` lines so CI or local automation can inspect last-known runtime watch health from the existing sidecar without having to parse the full doctor JSON again. The helper also emits explicit overall `started_at`, `completed_at`, and `duration_ms` fields plus per-phase `phase_*_status`, `phase_*_summary`, and timing lines for the `doctor`, stdio smoke, and HTTP smoke phases, so a failed run still tells automation which phase stopped progress and how long both the whole run and each attempted phase took before the command exits non-zero. `--json` returns one structured summary object that embeds the parsed doctor report, compact stdio/HTTP smoke-test summaries, and the same overall plus per-phase timing results. `--keep-going` keeps attempting later phases after an earlier failure, which is useful when you want one failing run to still capture as much phase state as possible. `--slow-run-ms` and `--slow-phase-ms` add explicit readiness warnings to both text and JSON output when thresholds are exceeded, `--fail-on-warning-code` lets automation promote selected warning codes, including nested doctor follow-health warning codes, into a failed readiness result, and `--policy-profile` expands a small set of documented presets into those same underlying options while still exposing the final thresholds and warning-policy state in the output. In all modes the follow-health fields are informational by default unless your own automation explicitly chooses to gate on them.
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -273,69 +272,6 @@ func TestParseCleanupFollowImportsOptionsRejectsUnknownRetentionProfile(t *testi
 	}
 }
 
-func TestParseCleanupFollowImportsOptionsEnablesRefreshExamples(t *testing.T) {
-	options, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples"})
-	if err != nil {
-		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
-	}
-	if !options.RefreshExamples {
-		t.Fatal("expected refresh-examples option to be enabled")
-	}
-}
-
-func TestParseCleanupFollowImportsOptionsSelectsNamedRefreshExamples(t *testing.T) {
-	options, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples=filtered-cleanup-json,daily-dry-run-text,filtered-cleanup-json"})
-	if err != nil {
-		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
-	}
-	if !options.RefreshExamples {
-		t.Fatal("expected refresh-examples option to be enabled")
-	}
-	if !slices.Equal(options.RefreshExampleNames, []string{"filtered-cleanup-json", "daily-dry-run-text"}) {
-		t.Fatalf("unexpected refresh example names: %+v", options.RefreshExampleNames)
-	}
-}
-
-func TestParseCleanupFollowImportsOptionsRejectsUnknownRefreshExampleName(t *testing.T) {
-	_, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples=missing-example"})
-	if err == nil {
-		t.Fatal("expected unknown refresh example error")
-	}
-	if !strings.Contains(err.Error(), `unknown cleanup-follow-imports example "missing-example"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestParseCleanupFollowImportsOptionsRejectsRefreshExamplesWithOtherFlags(t *testing.T) {
-	_, err := parseCleanupFollowImportsOptions([]string{"--refresh-examples", "--json"})
-	if err == nil {
-		t.Fatal("expected refresh-examples incompatibility error")
-	}
-	if !strings.Contains(err.Error(), `"--refresh-examples"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestParseCleanupFollowImportsOptionsEnablesListExamples(t *testing.T) {
-	options, err := parseCleanupFollowImportsOptions([]string{"--list-examples"})
-	if err != nil {
-		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
-	}
-	if !options.ListExamples {
-		t.Fatal("expected list-examples option to be enabled")
-	}
-}
-
-func TestParseCleanupFollowImportsOptionsRejectsListExamplesWithRefreshExamples(t *testing.T) {
-	_, err := parseCleanupFollowImportsOptions([]string{"--list-examples", "--refresh-examples"})
-	if err == nil {
-		t.Fatal("expected list-examples incompatibility error")
-	}
-	if !strings.Contains(err.Error(), `"--list-examples"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestParseAuditFollowImportsOptions(t *testing.T) {
 	options, err := parseAuditFollowImportsOptions([]string{
 		"--input", "events.jsonl",
@@ -402,6 +338,83 @@ func TestParseAuditFollowImportsOptionsRejectsStateFileCountMismatch(t *testing.
 	}
 	if !strings.Contains(err.Error(), "audit-follow-imports state-file count (1) must match input count (2)") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteAuditFollowImportsExampleFixtures(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPaths, err := writeAuditFollowImportsExampleFixtures(tempDir, nil)
+	if err != nil {
+		t.Fatalf("writeAuditFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) != len(auditFollowImportsExampleFixtures()) {
+		t.Fatalf("unexpected written path count: got %d want %d", len(writtenPaths), len(auditFollowImportsExampleFixtures()))
+	}
+
+	for _, fixture := range auditFollowImportsExampleFixtures() {
+		body, err := renderAuditFollowImportsExample(fixture.Report, fixture.JSON)
+		if err != nil {
+			t.Fatalf("renderAuditFollowImportsExample(%s): %v", fixture.Name, err)
+		}
+		path := filepath.Join(tempDir, fixture.RelativePath)
+		written, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(%s): %v", path, err)
+		}
+		if !bytes.Equal(written, body) {
+			t.Fatalf("fixture mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", fixture.Name, string(written), string(body))
+		}
+	}
+}
+
+func TestWriteAuditFollowImportsExampleFixturesSelectsNamedSubset(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPaths, err := writeAuditFollowImportsExampleFixtures(tempDir, []string{"filtered-audit-json"})
+	if err != nil {
+		t.Fatalf("writeAuditFollowImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) != 1 {
+		t.Fatalf("unexpected written path count: got %d want 1", len(writtenPaths))
+	}
+
+	selected, err := selectAuditFollowImportsExampleFixtures([]string{"filtered-audit-json"})
+	if err != nil {
+		t.Fatalf("selectAuditFollowImportsExampleFixtures: %v", err)
+	}
+	fixture := selected[0]
+	body, err := renderAuditFollowImportsExample(fixture.Report, fixture.JSON)
+	if err != nil {
+		t.Fatalf("renderAuditFollowImportsExample(%s): %v", fixture.Name, err)
+	}
+	path := filepath.Join(tempDir, fixture.RelativePath)
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if !bytes.Equal(written, body) {
+		t.Fatalf("fixture mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", fixture.Name, string(written), string(body))
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "audit-follow-imports-daily-audit.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected no daily-audit fixture, got err=%v", err)
+	}
+}
+
+func TestListAuditFollowImportsExamples(t *testing.T) {
+	var buffer bytes.Buffer
+	if err := listAuditFollowImportsExamples(&buffer); err != nil {
+		t.Fatalf("listAuditFollowImportsExamples: %v", err)
+	}
+	output := buffer.String()
+	for _, fragment := range []string{
+		"example=daily-audit-text path=testdata\\audit-follow-imports-daily-audit.txt format=text",
+		"example=filtered-audit-json path=testdata\\audit-follow-imports-filtered-audit.json format=json",
+		"example_count=2",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("list output missing %q:\n%s", fragment, output)
+		}
 	}
 }
 

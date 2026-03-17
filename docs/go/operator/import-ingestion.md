@@ -183,10 +183,6 @@ Useful flags:
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that remove checkpoint and retry-artifact candidates from the matched set after includes are considered. Excludes win over includes.
 - `--retention-profile stale|daily|reset`
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Expands to a documented default age threshold instead of making you spell out `--older-than` every time. `stale` means `1h`, `daily` means `24h`, and `reset` means `0s`. An explicit `--older-than` still overrides the profile.
-- `--list-examples`
-  `cleanup-follow-imports` only. Maintainer-oriented. Lists the checked-in cleanup sample fixture names and relative paths.
-- `--refresh-examples[=<name[,name...]>]`
-  `cleanup-follow-imports` only. Maintainer-oriented. Rewrites the checked-in cleanup sample outputs under `internal/app/testdata`. Run it from the repository root, or pass `--cwd <repo-root>` first; omit the value to refresh every fixture or pass one or more names to refresh only a subset.
 
 ## Event Schema
 
@@ -270,18 +266,41 @@ Checked-in sample outputs for common cleanup flows live under [../../../internal
 
 - [cleanup-follow-imports-daily-dry-run.txt](../../../internal/app/testdata/cleanup-follow-imports-daily-dry-run.txt)
 - [cleanup-follow-imports-filtered-cleanup.json](../../../internal/app/testdata/cleanup-follow-imports-filtered-cleanup.json)
+- [audit-follow-imports-daily-audit.txt](../../../internal/app/testdata/audit-follow-imports-daily-audit.txt)
+- [audit-follow-imports-filtered-audit.json](../../../internal/app/testdata/audit-follow-imports-filtered-audit.json)
 
-If a deliberate cleanup-output change makes those fixtures drift, refresh them from the repository root with:
+If a deliberate output change makes those fixtures drift, refresh the cleanup fixtures from the repository root through the test-only maintainer helper:
 
 ```powershell
-codex-mem.exe cleanup-follow-imports --refresh-examples
+$env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
 ```
 
-If you only need one fixture while iterating on a specific report shape, first list the available names and then refresh just that subset:
+Refresh the audit fixtures the same way:
 
 ```powershell
-codex-mem.exe cleanup-follow-imports --list-examples
-codex-mem.exe cleanup-follow-imports --refresh-examples=filtered-cleanup-json
+$env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
+```
+
+If you only need one fixture while iterating on a specific report shape, pass a comma-separated fixture-name subset instead of `all`:
+
+```powershell
+$env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "filtered-cleanup-json"
+go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
+
+$env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES = "filtered-audit-json"
+go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
+```
+
+The fixture names live in [follow_examples_test.go](../../../internal/app/follow_examples_test.go), and the ordinary read-only guard remains:
+
+```powershell
+go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayInSync"
 ```
 
 ## Operational Notes

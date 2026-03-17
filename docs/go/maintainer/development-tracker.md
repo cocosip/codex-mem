@@ -151,6 +151,34 @@ Immediate next tasks:
 
 ### 2026-03-17 Session Update
 
+- Completed: Removed the maintainer-only `--list-examples` / `--refresh-examples` execution path from the production `cleanup-follow-imports` and `audit-follow-imports` commands. Hygiene example catalogs now live only in `internal/app/follow_examples_test.go`, checked-in fixture rewrites happen through env-gated test helpers, and the operator/maintainer docs now describe that test-driven maintenance flow instead of advertising unsupported runtime flags.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the remaining cleanup/audit flag parsing should also move behind a smaller shared helper, or whether the next slice should return to a new operator-facing capability.
+
+### 2026-03-17 Session Update
+
+- Completed: Extended the shared follow/import example helper to cover example-mode flag parsing and validation as well as fixture IO. `cleanup-follow-imports` and `audit-follow-imports` now reuse the same `--list-examples` / `--refresh-examples[=<name[,name...]>]` parsing, duplicate-name normalization, incompatibility checks, and named-fixture validation, leaving only command-specific operational-target validation in `internal/app/import_follow.go`.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the remaining cleanup/audit option-parsing duplication is worth another shared helper, or whether follow/import work should pivot back to new operator-facing functionality.
+
+### 2026-03-17 Session Update
+
+- Completed: Refactored the follow/import example-fixture workflow behind a shared helper in `internal/app/follow_examples.go`. `cleanup-follow-imports` and `audit-follow-imports` now reuse the same base-dir resolution, example-name parsing, named fixture selection, list output, and refresh-writing logic instead of carrying two near-identical helper stacks, while keeping their command-specific example catalogs and renderers unchanged.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current shared helper plus hard-coded example catalogs is the right steady state, or whether a later slice should move those example catalogs into a small manifest once the operator sample set grows further.
+
+### 2026-03-17 Session Update
+
+- Completed: Added checked-in `audit-follow-imports` sample outputs under `internal/app/testdata` together with `--list-examples` and `--refresh-examples[=<name[,name...]>]` maintenance helpers. The audit command now matches the cleanup command's fixture workflow, app and parser coverage verify example-mode parsing plus refresh/list wiring, and `TestAuditFollowImportsExampleOutputsStayInSync` fails if future audit renderer changes are not reflected in the checked-in fixtures and docs.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the audit example catalog is complete enough now, or whether future follow/import operator samples should move into a small manifest once the hard-coded fixture set grows further.
+
+### 2026-03-17 Session Update
+
 - Completed: Added `--policy-profile` presets to `scripts/readiness-check` with initial `ci` and `release` profiles. Profiles expand to the existing threshold and warning-policy flags instead of introducing a second policy engine: `ci` sets the current slow-run thresholds, while `release` adds the stale follow-health failure policy on top. Explicit flags still override profile thresholds and append extra warning codes, and the final text/JSON outputs now expose `policy_profile` alongside the already-expanded thresholds and warning-policy fields. Tests now cover profile parsing, override behavior, lint is clean again, and `go test ./...` remains green.
 - In progress: none.
 - Blockers: none.
