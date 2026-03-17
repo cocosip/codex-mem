@@ -297,7 +297,7 @@ go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
 Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
 ```
 
-The fixture names live in [follow_examples_test.go](../../../internal/app/follow_examples_test.go), and the ordinary read-only guard remains:
+The fixture names live in [follow_import_example_fixtures_test.go](../../../internal/app/follow_import_example_fixtures_test.go), and the ordinary read-only guard remains:
 
 ```powershell
 go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayInSync"

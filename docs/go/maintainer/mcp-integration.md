@@ -251,7 +251,7 @@ go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
 Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
 ```
 
-If you only need a subset while iterating, pass the exact fixture names through the matching environment variable. The canonical names live in [../../../internal/app/follow_examples_test.go](../../../internal/app/follow_examples_test.go):
+If you only need a subset while iterating, pass the exact fixture names through the matching environment variable. The canonical names live in [../../../internal/app/follow_import_example_fixtures_test.go](../../../internal/app/follow_import_example_fixtures_test.go):
 
 ```powershell
 $env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "filtered-cleanup-json"

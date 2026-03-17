@@ -341,6 +341,69 @@ func TestParseAuditFollowImportsOptionsRejectsStateFileCountMismatch(t *testing.
 	}
 }
 
+func TestParseAuditFollowImportsOptionsRejectsInvalidPattern(t *testing.T) {
+	_, err := parseAuditFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--check-failed-output",
+		"--include", "[",
+	})
+	if err == nil {
+		t.Fatal("expected invalid include pattern error")
+	}
+	if !strings.Contains(err.Error(), `invalid cleanup-follow-imports --include pattern "["`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsAppliesRetentionProfileDefaults(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--check-failed-output",
+		"--retention-profile", "stale",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileStale; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.OlderThan, time.Hour; got != want {
+		t.Fatalf("older-than mismatch: got %s want %s", got, want)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsAllowsOlderThanOverrideOnRetentionProfile(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--check-failed-output",
+		"--retention-profile", "daily",
+		"--older-than", "2h",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileDaily; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := options.OlderThan, 2*time.Hour; got != want {
+		t.Fatalf("older-than override mismatch: got %s want %s", got, want)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsRejectsUnknownRetentionProfile(t *testing.T) {
+	_, err := parseAuditFollowImportsOptions([]string{
+		"--failed-output", "failed.jsonl",
+		"--check-failed-output",
+		"--retention-profile", "hourly",
+	})
+	if err == nil {
+		t.Fatal("expected invalid retention profile error")
+	}
+	if !strings.Contains(err.Error(), `"--retention-profile"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWriteAuditFollowImportsExampleFixtures(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -536,10 +599,12 @@ func TestCleanupFollowImportsPrunesDerivedArtifacts(t *testing.T) {
 	}
 
 	report, err := cleanupFollowImports(cfg, cleanupFollowImportsOptions{
-		InputPaths:          []string{inputA, inputB},
-		FailedOutputPath:    failedOutputBase,
-		FailedManifestPath:  failedManifestBase,
-		CWD:                 root,
+		followImportsHygieneOptions: followImportsHygieneOptions{
+			InputPaths:         []string{inputA, inputB},
+			FailedOutputPath:   failedOutputBase,
+			FailedManifestPath: failedManifestBase,
+			CWD:                root,
+		},
 		PruneState:          true,
 		PruneFailedOutput:   true,
 		PruneFailedManifest: true,
@@ -630,12 +695,14 @@ func TestCleanupFollowImportsDryRunAndOlderThanFilter(t *testing.T) {
 	}
 
 	report, err := cleanupFollowImportsAt(cfg, cleanupFollowImportsOptions{
-		InputPaths:             []string{inputPath},
-		FailedOutputPath:       failedOutputBase,
-		FailedManifestPath:     failedManifestBase,
-		CWD:                    root,
+		followImportsHygieneOptions: followImportsHygieneOptions{
+			InputPaths:         []string{inputPath},
+			FailedOutputPath:   failedOutputBase,
+			FailedManifestPath: failedManifestBase,
+			CWD:                root,
+			OlderThan:          time.Hour,
+		},
 		DryRun:                 true,
-		OlderThan:              time.Hour,
 		PruneState:             true,
 		PruneFailedOutput:      true,
 		PruneFailedManifest:    true,
@@ -720,12 +787,14 @@ func TestCleanupFollowImportsIncludeExcludePatterns(t *testing.T) {
 	}
 
 	report, err := cleanupFollowImports(cfg, cleanupFollowImportsOptions{
-		InputPaths:          []string{inputA, inputB},
-		FailedOutputPath:    failedOutputBase,
-		FailedManifestPath:  failedManifestBase,
-		IncludePatterns:     []string{"*events-a*", "*.offset.json"},
-		ExcludePatterns:     []string{"*events-b*"},
-		CWD:                 root,
+		followImportsHygieneOptions: followImportsHygieneOptions{
+			InputPaths:         []string{inputA, inputB},
+			FailedOutputPath:   failedOutputBase,
+			FailedManifestPath: failedManifestBase,
+			IncludePatterns:    []string{"*events-a*", "*.offset.json"},
+			ExcludePatterns:    []string{"*events-b*"},
+			CWD:                root,
+		},
 		PruneState:          true,
 		PruneFailedOutput:   true,
 		PruneFailedManifest: true,
@@ -809,12 +878,14 @@ func TestAuditFollowImportsReportsPendingArtifactsWithoutDeleting(t *testing.T) 
 	}
 
 	report, err := auditFollowImportsAt(cfg, auditFollowImportsOptions{
-		InputPaths:          []string{inputPath},
-		FailedOutputPath:    failedOutputBase,
-		FailedManifestPath:  failedManifestBase,
-		CWD:                 root,
-		OlderThan:           time.Hour,
-		FailIfMatched:       true,
+		followImportsHygieneOptions: followImportsHygieneOptions{
+			InputPaths:         []string{inputPath},
+			FailedOutputPath:   failedOutputBase,
+			FailedManifestPath: failedManifestBase,
+			CWD:                root,
+			FailIfMatched:      true,
+			OlderThan:          time.Hour,
+		},
 		CheckState:          true,
 		CheckFailedOutput:   true,
 		CheckFailedManifest: true,

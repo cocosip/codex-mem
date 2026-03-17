@@ -1090,10 +1090,7 @@ func TestCleanupFollowImportsExampleOutputsStayInSync(t *testing.T) {
 }
 
 func TestRefreshCleanupFollowImportsExampleFixtures(t *testing.T) {
-	names, ok := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_CLEANUP_EXAMPLES")
-	if !ok {
-		return
-	}
+	names := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_CLEANUP_EXAMPLES")
 	writtenPaths, err := writeCleanupFollowImportsExampleFixtures("testdata", names)
 	if err != nil {
 		t.Fatalf("writeCleanupFollowImportsExampleFixtures: %v", err)
@@ -1104,10 +1101,7 @@ func TestRefreshCleanupFollowImportsExampleFixtures(t *testing.T) {
 }
 
 func TestRefreshAuditFollowImportsExampleFixtures(t *testing.T) {
-	names, ok := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_AUDIT_EXAMPLES")
-	if !ok {
-		return
-	}
+	names := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_AUDIT_EXAMPLES")
 	writtenPaths, err := writeAuditFollowImportsExampleFixtures("testdata", names)
 	if err != nil {
 		t.Fatalf("writeAuditFollowImportsExampleFixtures: %v", err)
@@ -1117,23 +1111,23 @@ func TestRefreshAuditFollowImportsExampleFixtures(t *testing.T) {
 	}
 }
 
-func followImportsExampleRefreshSelection(t *testing.T, envKey string) ([]string, bool) {
+func followImportsExampleRefreshSelection(t *testing.T, envKey string) []string {
 	t.Helper()
 
 	raw := strings.TrimSpace(os.Getenv(envKey))
 	if raw == "" {
 		t.Skipf("%s is not set", envKey)
-		return nil, false
+		return nil
 	}
 	switch strings.ToLower(raw) {
 	case "1", "true", "all":
-		return nil, true
+		return nil
 	}
 	names, err := parseFollowImportsExampleNames(raw)
 	if err != nil {
 		t.Fatalf("parse example selection from %s: %v", envKey, err)
 	}
-	return names, true
+	return names
 }
 
 func assertCleanupFollowImportsExampleOutput(t *testing.T, path string, jsonOutput bool, report cleanupFollowImportsReport) {

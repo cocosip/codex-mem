@@ -151,7 +151,14 @@ Immediate next tasks:
 
 ### 2026-03-17 Session Update
 
-- Completed: Removed the maintainer-only `--list-examples` / `--refresh-examples` execution path from the production `cleanup-follow-imports` and `audit-follow-imports` commands. Hygiene example catalogs now live only in `internal/app/follow_examples_test.go`, checked-in fixture rewrites happen through env-gated test helpers, and the operator/maintainer docs now describe that test-driven maintenance flow instead of advertising unsupported runtime flags.
+- Completed: Deduplicated the shared cleanup/audit hygiene option layer in `internal/app/import_follow.go`. `cleanup-follow-imports` and `audit-follow-imports` now embed one common option struct for shared paths, filters, retention profiles, fail-if-matched, and age-gating; they reuse the same common flag parser, retention-profile application, and pattern/age/target-binding validation while keeping command-specific prune/check flags separate. App tests now also cover audit-side invalid pattern and retention-profile parsing so both command families stay aligned under one helper path.
+- In progress: none.
+- Blockers: none.
+- Next step: pivot from this follow/import parser cleanup back to a new operator-facing capability, unless another small cleanup slice around report/renderer sharing is clearly higher value.
+
+### 2026-03-17 Session Update
+
+- Completed: Removed the maintainer-only `--list-examples` / `--refresh-examples` execution path from the production `cleanup-follow-imports` and `audit-follow-imports` commands. Hygiene example catalogs now live only in `internal/app/follow_import_example_fixtures_test.go`, checked-in fixture rewrites happen through env-gated test helpers, and the operator/maintainer docs now describe that test-driven maintenance flow instead of advertising unsupported runtime flags.
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the remaining cleanup/audit flag parsing should also move behind a smaller shared helper, or whether the next slice should return to a new operator-facing capability.

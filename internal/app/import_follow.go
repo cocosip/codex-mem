@@ -39,19 +39,8 @@ type followImportsOptions struct {
 }
 
 type cleanupFollowImportsOptions struct {
-	InputPaths             []string
-	StatePaths             []string
-	FailedOutputPath       string
-	FailedManifestPath     string
-	IncludePatterns        []string
-	ExcludePatterns        []string
-	RetentionProfile       string
-	CWD                    string
-	JSON                   bool
+	followImportsHygieneOptions
 	DryRun                 bool
-	FailIfMatched          bool
-	OlderThan              time.Duration
-	olderThanExplicit      bool
 	PruneState             bool
 	PruneFailedOutput      bool
 	PruneFailedManifest    bool
@@ -59,22 +48,26 @@ type cleanupFollowImportsOptions struct {
 }
 
 type auditFollowImportsOptions struct {
-	InputPaths          []string
-	StatePaths          []string
-	FailedOutputPath    string
-	FailedManifestPath  string
-	IncludePatterns     []string
-	ExcludePatterns     []string
-	RetentionProfile    string
-	CWD                 string
-	JSON                bool
-	FailIfMatched       bool
-	OlderThan           time.Duration
-	olderThanExplicit   bool
+	followImportsHygieneOptions
 	CheckState          bool
 	CheckFailedOutput   bool
 	CheckFailedManifest bool
 	CheckFollowHealth   bool
+}
+
+type followImportsHygieneOptions struct {
+	InputPaths         []string
+	StatePaths         []string
+	FailedOutputPath   string
+	FailedManifestPath string
+	IncludePatterns    []string
+	ExcludePatterns    []string
+	RetentionProfile   string
+	CWD                string
+	JSON               bool
+	FailIfMatched      bool
+	OlderThan          time.Duration
+	olderThanExplicit  bool
 }
 
 type followImportsWatchMode string
@@ -758,7 +751,7 @@ func parseCleanupFollowImportsOptions(args []string) (cleanupFollowImportsOption
 		i = next
 	}
 
-	options = applyCleanupFollowImportsRetentionProfile(options)
+	applyFollowImportsHygieneRetentionProfile(&options.followImportsHygieneOptions)
 	if err := validateCleanupFollowImportsOptions(options); err != nil {
 		return cleanupFollowImportsOptions{}, err
 	}
@@ -772,14 +765,8 @@ func parseCleanupFollowImportsOption(args []string, index int, arg string, optio
 	switch arg {
 	case "":
 		return index, nil
-	case "--json":
-		options.JSON = true
-		return index, nil
 	case "--dry-run":
 		options.DryRun = true
-		return index, nil
-	case "--fail-if-matched":
-		options.FailIfMatched = true
 		return index, nil
 	case "--prune-state":
 		options.PruneState = true
@@ -794,13 +781,35 @@ func parseCleanupFollowImportsOption(args []string, index int, arg string, optio
 		options.PruneStaleFollowHealth = true
 		return index, nil
 	}
-	return parseCleanupFollowImportsOptionValue(args, index, arg, options)
+	if parseFollowImportsHygieneBooleanFlag(arg, &options.followImportsHygieneOptions) {
+		return index, nil
+	}
+	return parseFollowImportsHygieneOptionValue(args, index, arg, "cleanup-follow-imports", &options.followImportsHygieneOptions)
 }
 
-func parseCleanupFollowImportsOptionValue(args []string, index int, arg string, options *cleanupFollowImportsOptions) (int, error) {
+func parseFollowImportsHygieneBooleanFlag(arg string, options *followImportsHygieneOptions) bool {
+	if options == nil {
+		return false
+	}
+	switch arg {
+	case "--json":
+		options.JSON = true
+		return true
+	case "--fail-if-matched":
+		options.FailIfMatched = true
+		return true
+	default:
+		return false
+	}
+}
+
+func parseFollowImportsHygieneOptionValue(args []string, index int, arg string, command string, options *followImportsHygieneOptions) (int, error) {
 	value, next, err := optionValue(args, index)
 	if err != nil {
 		return index, err
+	}
+	if options == nil {
+		return index, fmt.Errorf("%s options are required", command)
 	}
 	switch arg {
 	case ingestImportsInputFlag:
@@ -826,12 +835,12 @@ func parseCleanupFollowImportsOptionValue(args []string, index int, arg string, 
 	case "--older-than":
 		duration, err := time.ParseDuration(value)
 		if err != nil {
-			return index, fmt.Errorf("invalid cleanup-follow-imports older-than duration %q", value)
+			return index, fmt.Errorf("invalid %s older-than duration %q", command, value)
 		}
 		options.OlderThan = duration
 		options.olderThanExplicit = true
 	default:
-		return index, fmt.Errorf("unknown cleanup-follow-imports flag %q", arg)
+		return index, fmt.Errorf("unknown %s flag %q", command, arg)
 	}
 	return next, nil
 }
@@ -848,7 +857,7 @@ func parseAuditFollowImportsOptions(args []string) (auditFollowImportsOptions, e
 		i = next
 	}
 
-	options = applyAuditFollowImportsRetentionProfile(options)
+	applyFollowImportsHygieneRetentionProfile(&options.followImportsHygieneOptions)
 	if err := validateAuditFollowImportsOptions(options); err != nil {
 		return auditFollowImportsOptions{}, err
 	}
@@ -861,12 +870,6 @@ func parseAuditFollowImportsOption(args []string, index int, arg string, options
 	}
 	switch arg {
 	case "":
-		return index, nil
-	case "--json":
-		options.JSON = true
-		return index, nil
-	case "--fail-if-matched":
-		options.FailIfMatched = true
 		return index, nil
 	case "--check-state":
 		options.CheckState = true
@@ -881,46 +884,10 @@ func parseAuditFollowImportsOption(args []string, index int, arg string, options
 		options.CheckFollowHealth = true
 		return index, nil
 	}
-	return parseAuditFollowImportsOptionValue(args, index, arg, options)
-}
-
-func parseAuditFollowImportsOptionValue(args []string, index int, arg string, options *auditFollowImportsOptions) (int, error) {
-	value, next, err := optionValue(args, index)
-	if err != nil {
-		return index, err
+	if parseFollowImportsHygieneBooleanFlag(arg, &options.followImportsHygieneOptions) {
+		return index, nil
 	}
-	switch arg {
-	case ingestImportsInputFlag:
-		options.InputPaths = append(options.InputPaths, value)
-	case followImportsStateFileFlag:
-		options.StatePaths = append(options.StatePaths, value)
-	case ingestImportsFailedOutputFlag:
-		options.FailedOutputPath = value
-	case ingestImportsFailedManifestFlag:
-		options.FailedManifestPath = value
-	case "--include":
-		options.IncludePatterns = append(options.IncludePatterns, parseCleanupFollowImportsPatterns(value)...)
-	case "--exclude":
-		options.ExcludePatterns = append(options.ExcludePatterns, parseCleanupFollowImportsPatterns(value)...)
-	case "--retention-profile":
-		profile, err := normalizeCleanupFollowImportsRetentionProfile(value)
-		if err != nil {
-			return index, err
-		}
-		options.RetentionProfile = profile
-	case ingestImportsCWDFlag:
-		options.CWD = value
-	case "--older-than":
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			return index, fmt.Errorf("invalid audit-follow-imports older-than duration %q", value)
-		}
-		options.OlderThan = duration
-		options.olderThanExplicit = true
-	default:
-		return index, fmt.Errorf("unknown audit-follow-imports flag %q", arg)
-	}
-	return next, nil
+	return parseFollowImportsHygieneOptionValue(args, index, arg, "audit-follow-imports", &options.followImportsHygieneOptions)
 }
 
 func validateFollowImportsOptions(options followImportsOptions) error {
@@ -951,72 +918,59 @@ func validateCleanupFollowImportsOptions(options cleanupFollowImportsOptions) er
 	if err := validateCleanupFollowImportsTargets(options); err != nil {
 		return err
 	}
-	if err := validateCleanupFollowImportsPatternFlags(options); err != nil {
-		return err
-	}
-	return validateCleanupFollowImportsAge(options)
-}
-
-func cleanupFollowImportsHasOperationalFlags(options cleanupFollowImportsOptions) bool {
-	return options.JSON ||
-		options.DryRun ||
-		options.FailIfMatched ||
-		len(options.InputPaths) > 0 ||
-		len(options.StatePaths) > 0 ||
-		strings.TrimSpace(options.FailedOutputPath) != "" ||
-		strings.TrimSpace(options.FailedManifestPath) != "" ||
-		len(options.IncludePatterns) > 0 ||
-		len(options.ExcludePatterns) > 0 ||
-		options.RetentionProfile != "" ||
-		options.olderThanExplicit ||
-		options.OlderThan != 0 ||
-		options.PruneState ||
-		options.PruneFailedOutput ||
-		options.PruneFailedManifest ||
-		options.PruneStaleFollowHealth
+	return validateFollowImportsHygieneCommonOptions("cleanup-follow-imports", options.followImportsHygieneOptions)
 }
 
 func validateCleanupFollowImportsTargets(options cleanupFollowImportsOptions) error {
 	if !options.PruneState && !options.PruneFailedOutput && !options.PruneFailedManifest && !options.PruneStaleFollowHealth {
 		return fmt.Errorf("cleanup-follow-imports requires at least one prune target")
 	}
-	if len(options.StatePaths) > 0 && !options.PruneState {
-		return fmt.Errorf("cleanup-follow-imports --state-file requires --prune-state")
-	}
-	if options.FailedOutputPath != "" && !options.PruneFailedOutput {
-		return fmt.Errorf("cleanup-follow-imports --failed-output requires --prune-failed-output")
-	}
-	if options.FailedManifestPath != "" && !options.PruneFailedManifest {
-		return fmt.Errorf("cleanup-follow-imports --failed-manifest requires --prune-failed-manifest")
-	}
-	if options.PruneState && len(options.StatePaths) == 0 && len(options.InputPaths) == 0 {
-		return fmt.Errorf("cleanup-follow-imports --prune-state requires --input or --state-file")
-	}
-	if len(options.StatePaths) > 0 && len(options.InputPaths) > 0 && len(options.StatePaths) != len(options.InputPaths) {
-		return fmt.Errorf("cleanup-follow-imports state-file count (%d) must match input count (%d)", len(options.StatePaths), len(options.InputPaths))
-	}
-	if options.PruneFailedOutput && strings.TrimSpace(options.FailedOutputPath) == "" {
-		return fmt.Errorf("cleanup-follow-imports --prune-failed-output requires --failed-output")
-	}
-	if options.PruneFailedManifest && strings.TrimSpace(options.FailedManifestPath) == "" {
-		return fmt.Errorf("cleanup-follow-imports --prune-failed-manifest requires --failed-manifest")
-	}
-	return nil
+	return validateFollowImportsHygieneTargets(
+		"cleanup-follow-imports",
+		options.followImportsHygieneOptions,
+		options.PruneState,
+		"--prune-state",
+		options.PruneFailedOutput,
+		"--prune-failed-output",
+		options.PruneFailedManifest,
+		"--prune-failed-manifest",
+	)
 }
 
-func validateCleanupFollowImportsPatternFlags(options cleanupFollowImportsOptions) error {
+func validateFollowImportsHygieneCommonOptions(command string, options followImportsHygieneOptions) error {
 	if err := validateCleanupFollowImportsPatterns(options.IncludePatterns, "--include"); err != nil {
 		return err
 	}
 	if err := validateCleanupFollowImportsPatterns(options.ExcludePatterns, "--exclude"); err != nil {
 		return err
 	}
+	if options.OlderThan < 0 {
+		return fmt.Errorf("%s --older-than must be greater than or equal to zero", command)
+	}
 	return nil
 }
 
-func validateCleanupFollowImportsAge(options cleanupFollowImportsOptions) error {
-	if options.OlderThan < 0 {
-		return fmt.Errorf("cleanup-follow-imports --older-than must be greater than or equal to zero")
+func validateFollowImportsHygieneTargets(command string, options followImportsHygieneOptions, stateEnabled bool, stateActionFlag string, failedOutputEnabled bool, failedOutputActionFlag string, failedManifestEnabled bool, failedManifestActionFlag string) error {
+	if len(options.StatePaths) > 0 && !stateEnabled {
+		return fmt.Errorf("%s --state-file requires %s", command, stateActionFlag)
+	}
+	if options.FailedOutputPath != "" && !failedOutputEnabled {
+		return fmt.Errorf("%s --failed-output requires %s", command, failedOutputActionFlag)
+	}
+	if options.FailedManifestPath != "" && !failedManifestEnabled {
+		return fmt.Errorf("%s --failed-manifest requires %s", command, failedManifestActionFlag)
+	}
+	if stateEnabled && len(options.StatePaths) == 0 && len(options.InputPaths) == 0 {
+		return fmt.Errorf("%s %s requires --input or --state-file", command, stateActionFlag)
+	}
+	if len(options.StatePaths) > 0 && len(options.InputPaths) > 0 && len(options.StatePaths) != len(options.InputPaths) {
+		return fmt.Errorf("%s state-file count (%d) must match input count (%d)", command, len(options.StatePaths), len(options.InputPaths))
+	}
+	if failedOutputEnabled && strings.TrimSpace(options.FailedOutputPath) == "" {
+		return fmt.Errorf("%s %s requires --failed-output", command, failedOutputActionFlag)
+	}
+	if failedManifestEnabled && strings.TrimSpace(options.FailedManifestPath) == "" {
+		return fmt.Errorf("%s %s requires --failed-manifest", command, failedManifestActionFlag)
 	}
 	return nil
 }
@@ -1025,62 +979,23 @@ func validateAuditFollowImportsOptions(options auditFollowImportsOptions) error 
 	if err := validateAuditFollowImportsTargets(options); err != nil {
 		return err
 	}
-	if err := validateCleanupFollowImportsPatterns(options.IncludePatterns, "--include"); err != nil {
-		return err
-	}
-	if err := validateCleanupFollowImportsPatterns(options.ExcludePatterns, "--exclude"); err != nil {
-		return err
-	}
-	if options.OlderThan < 0 {
-		return fmt.Errorf("audit-follow-imports --older-than must be greater than or equal to zero")
-	}
-	return nil
-}
-
-func auditFollowImportsHasOperationalFlags(options auditFollowImportsOptions) bool {
-	return options.JSON ||
-		options.FailIfMatched ||
-		len(options.InputPaths) > 0 ||
-		len(options.StatePaths) > 0 ||
-		strings.TrimSpace(options.FailedOutputPath) != "" ||
-		strings.TrimSpace(options.FailedManifestPath) != "" ||
-		len(options.IncludePatterns) > 0 ||
-		len(options.ExcludePatterns) > 0 ||
-		options.RetentionProfile != "" ||
-		options.olderThanExplicit ||
-		options.OlderThan != 0 ||
-		options.CheckState ||
-		options.CheckFailedOutput ||
-		options.CheckFailedManifest ||
-		options.CheckFollowHealth
+	return validateFollowImportsHygieneCommonOptions("audit-follow-imports", options.followImportsHygieneOptions)
 }
 
 func validateAuditFollowImportsTargets(options auditFollowImportsOptions) error {
 	if !options.CheckState && !options.CheckFailedOutput && !options.CheckFailedManifest && !options.CheckFollowHealth {
 		return fmt.Errorf("audit-follow-imports requires at least one check target")
 	}
-	if len(options.StatePaths) > 0 && !options.CheckState {
-		return fmt.Errorf("audit-follow-imports --state-file requires --check-state")
-	}
-	if options.FailedOutputPath != "" && !options.CheckFailedOutput {
-		return fmt.Errorf("audit-follow-imports --failed-output requires --check-failed-output")
-	}
-	if options.FailedManifestPath != "" && !options.CheckFailedManifest {
-		return fmt.Errorf("audit-follow-imports --failed-manifest requires --check-failed-manifest")
-	}
-	if options.CheckState && len(options.StatePaths) == 0 && len(options.InputPaths) == 0 {
-		return fmt.Errorf("audit-follow-imports --check-state requires --input or --state-file")
-	}
-	if len(options.StatePaths) > 0 && len(options.InputPaths) > 0 && len(options.StatePaths) != len(options.InputPaths) {
-		return fmt.Errorf("audit-follow-imports state-file count (%d) must match input count (%d)", len(options.StatePaths), len(options.InputPaths))
-	}
-	if options.CheckFailedOutput && strings.TrimSpace(options.FailedOutputPath) == "" {
-		return fmt.Errorf("audit-follow-imports --check-failed-output requires --failed-output")
-	}
-	if options.CheckFailedManifest && strings.TrimSpace(options.FailedManifestPath) == "" {
-		return fmt.Errorf("audit-follow-imports --check-failed-manifest requires --failed-manifest")
-	}
-	return nil
+	return validateFollowImportsHygieneTargets(
+		"audit-follow-imports",
+		options.followImportsHygieneOptions,
+		options.CheckState,
+		"--check-state",
+		options.CheckFailedOutput,
+		"--check-failed-output",
+		options.CheckFailedManifest,
+		"--check-failed-manifest",
+	)
 }
 
 func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
@@ -1095,18 +1010,13 @@ func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
 	}
 }
 
-func applyCleanupFollowImportsRetentionProfile(options cleanupFollowImportsOptions) cleanupFollowImportsOptions {
+func applyFollowImportsHygieneRetentionProfile(options *followImportsHygieneOptions) {
+	if options == nil {
+		return
+	}
 	if !options.olderThanExplicit {
 		options.OlderThan = cleanupFollowImportsRetentionProfileOlderThan(options.RetentionProfile)
 	}
-	return options
-}
-
-func applyAuditFollowImportsRetentionProfile(options auditFollowImportsOptions) auditFollowImportsOptions {
-	if !options.olderThanExplicit {
-		options.OlderThan = cleanupFollowImportsRetentionProfileOlderThan(options.RetentionProfile)
-	}
-	return options
 }
 
 func cleanupFollowImportsRetentionProfileOlderThan(profile string) time.Duration {
@@ -2053,17 +1963,19 @@ func auditFollowImportsMatchError(options auditFollowImportsOptions, report audi
 
 func (options auditFollowImportsOptions) cleanupDryRunOptions() cleanupFollowImportsOptions {
 	return cleanupFollowImportsOptions{
-		InputPaths:             append([]string(nil), options.InputPaths...),
-		StatePaths:             append([]string(nil), options.StatePaths...),
-		FailedOutputPath:       options.FailedOutputPath,
-		FailedManifestPath:     options.FailedManifestPath,
-		IncludePatterns:        append([]string(nil), options.IncludePatterns...),
-		ExcludePatterns:        append([]string(nil), options.ExcludePatterns...),
-		RetentionProfile:       options.RetentionProfile,
-		CWD:                    options.CWD,
+		followImportsHygieneOptions: followImportsHygieneOptions{
+			InputPaths:         append([]string(nil), options.InputPaths...),
+			StatePaths:         append([]string(nil), options.StatePaths...),
+			FailedOutputPath:   options.FailedOutputPath,
+			FailedManifestPath: options.FailedManifestPath,
+			IncludePatterns:    append([]string(nil), options.IncludePatterns...),
+			ExcludePatterns:    append([]string(nil), options.ExcludePatterns...),
+			RetentionProfile:   options.RetentionProfile,
+			CWD:                options.CWD,
+			OlderThan:          options.OlderThan,
+			olderThanExplicit:  options.olderThanExplicit,
+		},
 		DryRun:                 true,
-		OlderThan:              options.OlderThan,
-		olderThanExplicit:      options.olderThanExplicit,
 		PruneState:             options.CheckState,
 		PruneFailedOutput:      options.CheckFailedOutput,
 		PruneFailedManifest:    options.CheckFailedManifest,
