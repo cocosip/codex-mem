@@ -457,6 +457,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the current preset names and values are enough for automation consumers, or whether release/CI docs should publish concrete recommended invocation examples for different operator goals.
+### 2026-03-17 Session Update
+
+- Completed: Published concrete `readiness-check` invocation examples for the current `ci` and `release` policy profiles in the root README plus maintainer/operator docs. The docs now distinguish between quick local checks, CI JSON capture, release gating, and failure-investigation runs that combine `--keep-going` with the release profile.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current `ci` and `release` preset values should stay fixed, or whether operators need a third preset or different threshold defaults for slower environments.
 
 ## Recommended Next Step
 

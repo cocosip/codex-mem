@@ -100,6 +100,26 @@ If you want a maintained preset instead of repeating the same release policy fla
 go run ./scripts/readiness-check --policy-profile release
 ```
 
+Recommended release-gate invocations:
+
+1. Human-readable release gate:
+
+```powershell
+go run ./scripts/readiness-check --policy-profile release
+```
+
+2. JSON payload for automation or artifact capture:
+
+```powershell
+go run ./scripts/readiness-check --json --policy-profile release
+```
+
+3. Investigation run when you want one failing invocation to still collect later phases:
+
+```powershell
+go run ./scripts/readiness-check --json --keep-going --policy-profile release
+```
+
 Confirm:
 
 - `required_schema_ok=true`
