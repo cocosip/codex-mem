@@ -153,6 +153,23 @@ func TestConformanceC03ProjectFallbackRecovery(t *testing.T) {
 	}
 }
 
+func TestConformanceC04NoSearchHits(t *testing.T) {
+	currentRef := scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"}
+	service := NewService(&fakeScopeResolver{}, &fakeSessionStarter{}, &fakeMemoryReader{}, &fakeHandoffReader{})
+
+	result, err := service.Search(context.Background(), SearchInput{
+		Query: "missing continuity clue",
+		Scope: currentRef,
+		Limit: 5,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(result.Results) != 0 {
+		t.Fatalf("expected zero search results, got %d", len(result.Results))
+	}
+}
+
 func TestConformanceC06RelatedProjectExpansionAndProvenance(t *testing.T) {
 	currentRef := scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"}
 	now := time.Now().UTC()

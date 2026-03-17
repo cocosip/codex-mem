@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -586,6 +588,136 @@ func TestApplySlowWarningsSkipsNotRunPhases(t *testing.T) {
 	if len(report.Phases[1].WarningCodes) != 0 || len(report.Phases[2].WarningCodes) != 0 {
 		t.Fatalf("expected not-run phases to stay warning-free: %+v", report.Phases)
 	}
+}
+
+func TestReadinessExampleOutputsStayInSync(t *testing.T) {
+	t.Run("slow-ci-text", func(t *testing.T) {
+		report := exampleSlowCISuccessReport()
+		assertReadinessExampleOutput(t, "testdata/example-slow-ci-success.txt", false, report)
+	})
+
+	t.Run("ci-json", func(t *testing.T) {
+		report := exampleCISuccessReport()
+		assertReadinessExampleOutput(t, "testdata/example-ci-success.json", true, report)
+	})
+
+	t.Run("release-warning-failure-text", func(t *testing.T) {
+		report := exampleReleaseWarningFailureReport()
+		assertReadinessExampleOutput(t, "testdata/example-release-warning-failure.txt", false, report)
+	})
+}
+
+func assertReadinessExampleOutput(t *testing.T, relativePath string, jsonOutput bool, report readinessReport) {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	var err error
+	if jsonOutput {
+		err = writeReadinessJSON(&buffer, report)
+	} else {
+		err = writeReadinessSummary(&buffer, report)
+	}
+	if err != nil {
+		t.Fatalf("write example output: %v", err)
+	}
+
+	path := filepath.Join(relativePath)
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", relativePath, err)
+	}
+	if got, want := buffer.String(), string(expected); got != want {
+		t.Fatalf("example output drifted for %s\n--- got ---\n%s\n--- want ---\n%s", relativePath, got, want)
+	}
+}
+
+func exampleCISuccessReport() readinessReport {
+	startedAt := time.Date(2026, time.March, 17, 9, 0, 0, 0, time.UTC)
+	completedAt := startedAt.Add(3 * time.Second)
+	doctorStartedAt := startedAt
+	doctorCompletedAt := doctorStartedAt.Add(400 * time.Millisecond)
+	stdioCompletedAt := doctorCompletedAt.Add(600 * time.Millisecond)
+	httpCompletedAt := stdioCompletedAt.Add(800 * time.Millisecond)
+
+	report := readinessReport{
+		Status:               readinessStatusOK,
+		Summary:              readinessSummaryAllPhasesPassed,
+		KeepGoing:            false,
+		PolicyProfile:        readinessPolicyProfileCI,
+		SlowRunThresholdMS:   8000,
+		SlowPhaseThresholdMS: 1000,
+		FailOnWarningCodes:   nil,
+		StartedAt:            &startedAt,
+		CompletedAt:          &completedAt,
+		DurationMS:           3000,
+		Doctor:               exampleHealthyDoctorReport(),
+		Stdio: readinessSmokeTest{
+			Status:  readinessStatusOK,
+			Summary: "mcp smoke test passed",
+		},
+		HTTP: readinessSmokeTest{
+			Status:  readinessStatusOK,
+			Summary: "http mcp smoke test passed",
+		},
+		Phases: []readinessPhaseResult{
+			{Name: readinessPhaseDoctor, Status: readinessStatusOK, Summary: "doctor --json passed", StartedAt: &doctorStartedAt, CompletedAt: &doctorCompletedAt, DurationMS: 400},
+			{Name: readinessPhaseStdio, Status: readinessStatusOK, Summary: "mcp smoke test passed", StartedAt: &doctorCompletedAt, CompletedAt: &stdioCompletedAt, DurationMS: 600},
+			{Name: readinessPhaseHTTP, Status: readinessStatusOK, Summary: "http mcp smoke test passed", StartedAt: &stdioCompletedAt, CompletedAt: &httpCompletedAt, DurationMS: 800},
+		},
+	}
+	refreshWarningState(&report)
+	return report
+}
+
+func exampleSlowCISuccessReport() readinessReport {
+	report := exampleCISuccessReport()
+	report.PolicyProfile = readinessPolicyProfileSlowCI
+	report.SlowRunThresholdMS = 20000
+	report.SlowPhaseThresholdMS = 4000
+	refreshWarningState(&report)
+	return report
+}
+
+func exampleReleaseWarningFailureReport() readinessReport {
+	report := exampleCISuccessReport()
+	report.Status = readinessStatusFailed
+	report.PolicyProfile = readinessPolicyProfileRelease
+	report.FailOnWarningCodes = []string{readinessWarnFollowHealthStale}
+	report.Doctor = exampleHealthyDoctorReport()
+	report.Doctor.Follow.HealthStale = true
+	report.Doctor.Follow.Warnings = []doctorWarning{{Code: readinessWarnFollowHealthStale}}
+	refreshWarningState(&report)
+	report.WarningPolicyFailed = true
+	report.Summary = readinessSummaryWarningPolicyFailed
+	return report
+}
+
+func exampleHealthyDoctorReport() *doctorReport {
+	updatedAt := time.Date(2026, time.March, 17, 8, 59, 55, 0, time.UTC)
+	doctor := &doctorReport{
+		Status: "ok",
+	}
+	doctor.Runtime.ForeignKeys = true
+	doctor.Runtime.RequiredSchemaOK = true
+	doctor.Runtime.FTSReady = true
+	doctor.Migrations.Pending = 0
+	doctor.Audit.NoteProvenanceReady = true
+	doctor.Audit.ExclusionAuditReady = true
+	doctor.Audit.ImportAuditReady = true
+	doctor.Follow.HealthPresent = true
+	doctor.Follow.LastUpdatedAt = &updatedAt
+	doctor.Follow.Status = "ok"
+	doctor.Follow.Source = "watcher_import"
+	doctor.Follow.InputCount = 1
+	doctor.Follow.Continuous = true
+	doctor.Follow.PollIntervalSeconds = 5
+	doctor.Follow.SnapshotAgeSeconds = 5
+	doctor.Follow.HealthStale = false
+	doctor.Follow.RequestedWatchMode = "auto"
+	doctor.Follow.ActiveWatchMode = "notify"
+	doctor.MCP.Transport = readinessMCPTransportStdio
+	doctor.MCP.ToolCount = 11
+	return doctor
 }
 
 func assertSuccessfulReadinessJSONReport(t *testing.T, decoded readinessReport) {

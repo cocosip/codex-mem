@@ -10,7 +10,10 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
-const suppressionReasonPrivacyIntent = "privacy_intent"
+const (
+	suppressionReasonPrivacyIntent  = "privacy_intent"
+	suppressionReasonExplicitMemory = "explicit_memory_exists"
+)
 
 type fakeRepository struct {
 	duplicate *Record
@@ -284,7 +287,7 @@ func TestSaveImportedNoteSuppressesWhenExplicitMemoryExists(t *testing.T) {
 	if noteSaver.calls != 0 {
 		t.Fatalf("expected note saver to be skipped, got %d calls", noteSaver.calls)
 	}
-	if got, want := repo.created.SuppressionReason, "explicit_memory_exists"; got != want {
+	if got, want := repo.created.SuppressionReason, suppressionReasonExplicitMemory; got != want {
 		t.Fatalf("suppression reason mismatch: got %q want %q", got, want)
 	}
 	if got, want := result.Warnings[0].Code, common.WarnImportSuppressed; got != want {

@@ -30,7 +30,7 @@ Normative references:
 
 ## Current Target
 
-Current target: Maintain the completed v1 implementation, keep `modelcontextprotocol/go-sdk` as the only MCP runtime, and evolve import auditing into a durable imported-note workflow with explicit-memory precedence.
+Current target: Maintain the completed v1 implementation and named v1 conformance coverage, keep `modelcontextprotocol/go-sdk` as the only MCP runtime, and choose small post-v1 feature or operator-facing follow-up slices without reopening baseline transport or continuity work.
 
 ## Phase Progress
 
@@ -470,19 +470,34 @@ Current blockers:
 - Blockers: none.
 - Next step: decide whether the preset catalog is complete enough now, or whether operators would benefit more from real-world sample output snippets than from additional preset names.
 
+### 2026-03-17 Session Update
+
+- Completed: Added explicit conformance coverage for `C10 Import suppression` under `internal/domain/imports/conformance_test.go`. The new coverage exercises both privacy-blocked imported artifacts and imported duplicates that are suppressed because stronger explicit memory already exists, and it verifies warning visibility plus import-audit suppression metadata instead of relying only on lower-level service tests.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to continue promoting the remaining conformance-matrix scenarios into explicitly named `TestConformance...` cases where coverage still mostly lives in service-level tests.
+
+### 2026-03-17 Session Update
+
+- Completed: Promoted more v1 matrix scenarios into explicit conformance tests. `internal/domain/retrieval/conformance_test.go` now includes `C04 No search hits`, `internal/db/conformance_test.go` now includes `C07 Save note scope validation`, and `internal/domain/handoff/conformance_test.go` now includes `C08 Save handoff validity`. This makes zero-hit search, session/scope mismatch rejection, and mandatory actionable handoff next steps part of the named conformance layer instead of only ordinary unit/service coverage.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to keep promoting remaining service-level coverage into explicit conformance names, or stop once the current v1 matrix entries all have direct named tests in either domain or DB layers.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:
 
-1. Return to feature or product follow-up work outside the completed MCP transport migration.
-2. Keep the stdio and HTTP smoke tests in the normal regression path.
-3. Only revisit transport internals if a real client compatibility issue appears.
-4. Prefer small, documented follow-ups instead of re-introducing parallel transport implementations.
+1. Treat the v1 baseline plus conformance matrix as complete and move to post-v1 feature or operator follow-up work.
+2. Keep the stdio and HTTP smoke tests plus the named conformance cases in the normal regression path.
+3. Only revisit transport internals or baseline continuity semantics if a real compatibility or conformance regression appears.
+4. Prefer small, documented follow-ups such as readiness/operator example output, import-operator ergonomics, or another clearly bounded product-facing enhancement.
 
 Why this is the best next step now:
 
 - the repository already has both stdio and HTTP MCP entrypoints on the SDK-backed path, so transport replacement is no longer the highest-value area
 - the hand-written MCP runtime has been removed, which reduces maintenance cost and ambiguity about which path is authoritative
+- the v1 conformance matrix now has direct named test coverage across retrieval, DB, handoff, imports, and agents layers, so baseline verification is no longer the main missing investment
 - the existing handler/domain boundary remains stable, so new work can focus on user-visible behavior instead of transport churn
 - the readiness check plus stdio/HTTP smoke tests already provide a practical regression harness for future follow-up changes
 

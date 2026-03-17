@@ -34,6 +34,7 @@ The repository already has:
 
 - the v1 scope, session, note, handoff, retrieval, privacy, and AGENTS tool surface implemented
 - SQLite storage, embedded migrations, and FTS-backed retrieval working
+- direct named conformance coverage for the current v1 matrix scenarios (`C01` through `C12`)
 - conformance and hardening coverage for the shipped v1 behavior
 - `serve` and `serve-http` both wired through `modelcontextprotocol/go-sdk`
 - `doctor --json`, stdio smoke test, HTTP smoke test, and readiness check in place
@@ -60,14 +61,14 @@ Current standing decisions worth preserving:
 
 ## Recommended Next Coding Slice
 
-Start from a new feature or operator-facing follow-up slice, not from the original Phase 1 foundation plan.
+Start from a new post-v1 feature or operator-facing follow-up slice, not from the original Phase 1 foundation plan.
 
 Good default shape:
 
 1. read the current tracker to confirm the active target and any open handoff notes
-2. choose one small user-visible or operator-visible improvement
+2. choose one small user-visible or operator-visible improvement now that the baseline and conformance matrix are already in place
 3. implement it without changing the existing eleven-tool surface unless that change is intentional
-4. keep `go test ./...` and the readiness/smoke checks green
+4. keep `go test ./...`, the readiness/smoke checks, and the named conformance cases green
 5. update the tracker and this kickoff doc if the restart guidance changes again
 
 ## MCP Constraint For Future Work

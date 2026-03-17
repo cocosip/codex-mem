@@ -75,6 +75,47 @@ func TestConformanceC05CrossProjectIsolation(t *testing.T) {
 	}
 }
 
+func TestConformanceC07SaveNoteScopeValidation(t *testing.T) {
+	ctx := context.Background()
+	handle, err := Open(ctx, Options{
+		Path:        filepath.Join(t.TempDir(), "codex-mem.db"),
+		DriverName:  "sqlite",
+		BusyTimeout: 2 * time.Second,
+		JournalMode: "WAL",
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() {
+		_ = handle.Close()
+	}()
+
+	_, sessionID := seedScopeAndSession(t, handle)
+	otherRef := seedAlternateScope(t, handle)
+	memoryRepo := NewMemoryRepository(handle)
+	now := time.Date(2026, 3, 13, 18, 5, 0, 0, time.UTC)
+
+	err = memoryRepo.Create(memory.Note{
+		ID:         "note_scope_conflict",
+		Scope:      otherRef,
+		SessionID:  sessionID,
+		Type:       memory.NoteTypeDecision,
+		Title:      "Mismatched scope note",
+		Content:    "This note should be rejected.",
+		Importance: 3,
+		Status:     memory.StatusActive,
+		Source:     memory.SourceCodexExplicit,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	})
+	if err == nil {
+		t.Fatal("expected note create to fail for session scope mismatch")
+	}
+	if got, want := common.ErrorCode(err), common.ErrInvalidScope; got != want {
+		t.Fatalf("error code mismatch: got %q want %q", got, want)
+	}
+}
+
 func TestConformanceC09PrivacyExclusion(t *testing.T) {
 	ctx := context.Background()
 	handle, err := Open(ctx, Options{
@@ -231,4 +272,3 @@ func TestConformanceC12IdentityConflictHandling(t *testing.T) {
 		t.Fatalf("expected workspace scope conflict, got %v", err)
 	}
 }
-
