@@ -58,6 +58,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -80,6 +82,45 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
 
+      - name: Generate Release Notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: release_notes
+        run: |
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | sed -n '2p')
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          # Collect commits (skip merge commits); escape backticks to prevent markdown code-fence breakage
+          COMMITS=$(git log $RANGE --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges \
+            | sed 's/`/\\`/g')
+
+          # Extract unique issue references (#123) from commit messages
+          ISSUES=$(git log $RANGE --pretty=format:"%s %b" --no-merges \
+            | grep -oE '#[0-9]+' | sort -u \
+            | sed 's|#\([0-9]*\)|[#\1](https://github.com/${{ github.repository }}/issues/\1)|' \
+            | tr '\n' ' ')
+
+          {
+            echo "## What's Changed"
+            echo ""
+            echo "$COMMITS"
+            if [ -n "$ISSUES" ]; then
+              echo ""
+              echo "## Referenced Issues"
+              echo ""
+              echo "$ISSUES"
+            fi
+            if [ -n "$PREV_TAG" ]; then
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG}"
+            fi
+          } > /tmp/release-notes.md
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -89,7 +130,7 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body_path: /tmp/release-notes.md
 
 
 
