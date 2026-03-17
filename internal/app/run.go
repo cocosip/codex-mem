@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	"codex-mem/internal/buildinfo"
 	"codex-mem/internal/config"
@@ -97,7 +98,11 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		defer func() {
 			_ = instance.Close()
 		}()
-		logger.Info("starting MCP stdio server")
+		logger.Info("starting MCP stdio server",
+			"pid", os.Getpid(),
+			"log_file", cfg.File.LogFilePath,
+			"log_level", cfg.File.LogLevel.String(),
+		)
 		return mcp.ServeStdio(ctx, mcp.NewSDKServer(instance.Handlers), stdin, stdout)
 	case "serve-http":
 		options, err := parseServeHTTPOptions(commandArgs)
@@ -112,9 +117,12 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			_ = instance.Close()
 		}()
 		logger.Info("starting MCP HTTP server",
+			"pid", os.Getpid(),
 			"listen", options.ListenAddr,
 			"path", options.EndpointPath,
 			"allowed_origins", options.AllowedOrigins,
+			"log_file", cfg.File.LogFilePath,
+			"log_level", cfg.File.LogLevel.String(),
 		)
 		return mcp.ServeHTTP(ctx, options.ListenAddr, mcp.NewSDKHTTPHandler(
 			mcp.NewSDKServer(instance.Handlers),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"codex-mem/internal/buildinfo"
 
@@ -13,6 +14,7 @@ import (
 // NewSDKServer constructs a go-sdk-backed MCP server that preserves the
 // existing codex-mem tool surface and response envelopes.
 func NewSDKServer(handlers *Handlers) *sdkmcp.Server {
+	logger := newServerLogger()
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
 		Name:    "codex-mem",
 		Version: buildinfo.Summary(),
@@ -21,6 +23,7 @@ func NewSDKServer(handlers *Handlers) *sdkmcp.Server {
 			Tools: &sdkmcp.ToolCapabilities{ListChanged: false},
 		},
 	})
+	server.AddReceivingMiddleware(requestLoggingMiddleware(logger))
 
 	for _, tool := range buildTools(handlers) {
 		tool := tool
@@ -29,11 +32,28 @@ func NewSDKServer(handlers *Handlers) *sdkmcp.Server {
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
 		}, func(ctx context.Context, request *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
+			started := time.Now()
+			attrs := toolLogAttrs(request, tool.Name, request.Params.Arguments)
 			result, err := tool.call(ctx, request.Params.Arguments)
 			if err != nil {
+				logger.Error("MCP tool call failed", appendAttrs(attrs, "duration_ms", time.Since(started).Milliseconds(), "err", err)...)
 				return nil, err
 			}
-			return sdkToolResult(result)
+
+			sdkResult, err := sdkToolResult(result)
+			if err != nil {
+				logger.Error("MCP tool result encoding failed", appendAttrs(attrs, "duration_ms", time.Since(started).Milliseconds(), "err", err)...)
+				return nil, err
+			}
+
+			attrs = append(attrs, "duration_ms", time.Since(started).Milliseconds(), "is_error", result.IsError)
+			attrs = append(attrs, summarizeToolResult(result.StructuredContent)...)
+			if result.IsError {
+				logger.Warn("MCP tool call completed with application error", attrs...)
+			} else {
+				logger.Info("MCP tool call completed", attrs...)
+			}
+			return sdkResult, nil
 		})
 	}
 
