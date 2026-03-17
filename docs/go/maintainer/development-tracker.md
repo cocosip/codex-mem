@@ -151,6 +151,13 @@ Immediate next tasks:
 
 ### 2026-03-17 Session Update
 
+- Completed: Added `--summary-only` to `cleanup-follow-imports` and `audit-follow-imports` for automation-friendly compact reports. The hygiene commands still compute the same target counts, fail-if-matched behavior, and follow-health status, but they now omit detailed checkpoint and retry-artifact path lists from text and JSON output when summary-only mode is requested. Parser coverage plus end-to-end run tests now verify both flag parsing and the suppression of per-path details, and the operator docs/README now show when to use the compact mode for scheduled hygiene runs.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether follow/import operators would benefit more from another report-shaping control such as capped path samples, or whether the next slice should move back to a new ingestion/follow capability.
+
+### 2026-03-17 Session Update
+
 - Completed: Added a fifth follow-import hygiene target preset: `--target-profile artifacts`. It expands to checkpoint-sidecar plus retry-artifact targets without touching follow-health snapshots, which fills the gap between `all` and the narrower `state` / `retry` profiles. Parser and end-to-end CLI tests now verify that `artifacts` selects state plus retry work while leaving follow-health out of both cleanup and audit reports, and the operator docs/README now advertise the new preset.
 - In progress: none.
 - Blockers: none.

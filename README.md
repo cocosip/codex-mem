@@ -81,9 +81,9 @@ They are not MCP tools and are not the normal end-user interaction path.
 - `codex-mem follow-imports --source watcher_import --input events-a.jsonl [--input events-b.jsonl ...] [--state-file events-a.offset.json --state-file events-b.offset.json ...] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--json]`
   Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state plus poll-catchup/recovery events and warnings alongside per-input imported-note results.
 - `codex-mem cleanup-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`
-  Removes selected follow-imports checkpoint, retry-artifact, and stale-health artifacts. `--target-profile` can enable common cleanup target sets before you add path, age, or dry-run filters.
+  Removes selected follow-imports checkpoint, retry-artifact, and stale-health artifacts. `--target-profile` can enable common cleanup target sets before you add path, age, dry-run, or `--summary-only` report filters.
 - `codex-mem audit-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`
-  Reports the same hygiene targets without deleting them. `--target-profile` can enable common audit target sets before you add path, age, or fail-if-matched controls.
+  Reports the same hygiene targets without deleting them. `--target-profile` can enable common audit target sets before you add path, age, fail-if-matched, or `--summary-only` controls.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`

@@ -67,6 +67,7 @@ type followImportsHygieneOptions struct {
 	CWD                string
 	JSON               bool
 	FailIfMatched      bool
+	SummaryOnly        bool
 	OlderThan          time.Duration
 	olderThanExplicit  bool
 }
@@ -221,6 +222,7 @@ type cleanupFollowImportsReport struct {
 	DryRun           bool                                 `json:"dry_run"`
 	FailIfMatched    bool                                 `json:"fail_if_matched"`
 	MatchFound       bool                                 `json:"match_found"`
+	SummaryOnly      bool                                 `json:"summary_only,omitempty"`
 	TargetProfile    string                               `json:"target_profile,omitempty"`
 	RetentionProfile string                               `json:"retention_profile,omitempty"`
 	OlderThanSeconds int64                                `json:"older_than_seconds,omitempty"`
@@ -270,6 +272,7 @@ type cleanupFollowImportsFollowHealthView struct {
 type auditFollowImportsReport struct {
 	FailIfMatched    bool                             `json:"fail_if_matched"`
 	MatchFound       bool                             `json:"match_found"`
+	SummaryOnly      bool                             `json:"summary_only,omitempty"`
 	TargetProfile    string                           `json:"target_profile,omitempty"`
 	RetentionProfile string                           `json:"retention_profile,omitempty"`
 	OlderThanSeconds int64                            `json:"older_than_seconds,omitempty"`
@@ -809,6 +812,9 @@ func parseFollowImportsHygieneBooleanFlag(arg string, options *followImportsHygi
 		return true
 	case "--fail-if-matched":
 		options.FailIfMatched = true
+		return true
+	case "--summary-only":
+		options.SummaryOnly = true
 		return true
 	default:
 		return false
@@ -1853,6 +1859,7 @@ func cleanupFollowImportsAt(cfg config.Config, options cleanupFollowImportsOptio
 	report := cleanupFollowImportsReport{
 		DryRun:           options.DryRun,
 		FailIfMatched:    options.FailIfMatched,
+		SummaryOnly:      options.SummaryOnly,
 		TargetProfile:    options.TargetProfile,
 		RetentionProfile: options.RetentionProfile,
 		OlderThanSeconds: int64(options.OlderThan / time.Second),
@@ -1889,6 +1896,9 @@ func cleanupFollowImportsAt(cfg config.Config, options cleanupFollowImportsOptio
 		}
 	}
 	report.MatchFound = cleanupFollowImportsHasMatches(report)
+	if options.SummaryOnly {
+		report = cleanupFollowImportsSummaryOnlyReport(report)
+	}
 
 	return report, nil
 }
@@ -1921,6 +1931,7 @@ func auditFollowImportsAt(cfg config.Config, options auditFollowImportsOptions, 
 	scanOptions := options.cleanupDryRunOptions()
 	report := auditFollowImportsReport{
 		FailIfMatched:    options.FailIfMatched,
+		SummaryOnly:      options.SummaryOnly,
 		TargetProfile:    options.TargetProfile,
 		RetentionProfile: options.RetentionProfile,
 		OlderThanSeconds: int64(options.OlderThan / time.Second),
@@ -1961,7 +1972,45 @@ func auditFollowImportsAt(cfg config.Config, options auditFollowImportsOptions, 
 	}
 
 	report.MatchFound = auditFollowImportsHasMatches(report)
+	if options.SummaryOnly {
+		report = auditFollowImportsSummaryOnlyReport(report)
+	}
 	return report, nil
+}
+
+func cleanupFollowImportsSummaryOnlyReport(report cleanupFollowImportsReport) cleanupFollowImportsReport {
+	report.StateFiles.MatchedPaths = nil
+	report.StateFiles.RemovedPaths = nil
+	report.StateFiles.MissingPaths = nil
+	report.StateFiles.SkippedByPatternPaths = nil
+	report.StateFiles.SkippedByAgePaths = nil
+	report.FailedOutputs.BasePaths = nil
+	report.FailedOutputs.MatchedPaths = nil
+	report.FailedOutputs.RemovedPaths = nil
+	report.FailedOutputs.SkippedByPatternPaths = nil
+	report.FailedOutputs.SkippedByAgePaths = nil
+	report.FailedManifests.BasePaths = nil
+	report.FailedManifests.MatchedPaths = nil
+	report.FailedManifests.RemovedPaths = nil
+	report.FailedManifests.SkippedByPatternPaths = nil
+	report.FailedManifests.SkippedByAgePaths = nil
+	return report
+}
+
+func auditFollowImportsSummaryOnlyReport(report auditFollowImportsReport) auditFollowImportsReport {
+	report.StateFiles.MatchedPaths = nil
+	report.StateFiles.MissingPaths = nil
+	report.StateFiles.SkippedByPatternPaths = nil
+	report.StateFiles.SkippedByAgePaths = nil
+	report.FailedOutputs.BasePaths = nil
+	report.FailedOutputs.MatchedPaths = nil
+	report.FailedOutputs.SkippedByPatternPaths = nil
+	report.FailedOutputs.SkippedByAgePaths = nil
+	report.FailedManifests.BasePaths = nil
+	report.FailedManifests.MatchedPaths = nil
+	report.FailedManifests.SkippedByPatternPaths = nil
+	report.FailedManifests.SkippedByAgePaths = nil
+	return report
 }
 
 func newAuditFollowImportsPathSummary(summary cleanupFollowImportsPathSummary) auditFollowImportsPathSummary {
@@ -2531,6 +2580,9 @@ func formatCleanupFollowImportsReport(report cleanupFollowImportsReport) string 
 		fmt.Sprintf("follow_health_pruned=%t", report.FollowHealth.Pruned),
 		fmt.Sprintf("follow_health_prune_reason=%s", fallbackString(report.FollowHealth.PruneReason)),
 	}
+	if report.SummaryOnly {
+		lines = append(lines, "summary_only=true")
+	}
 	if report.TargetProfile != "" {
 		lines = append(lines, fmt.Sprintf("target_profile=%s", report.TargetProfile))
 	}
@@ -2629,6 +2681,9 @@ func formatAuditFollowImportsReport(report auditFollowImportsReport) string {
 		fmt.Sprintf("follow_health_watch_poll_catchups=%d", report.FollowHealth.WatchPollCatchups),
 		fmt.Sprintf("follow_health_watch_poll_catchup_bytes=%d", report.FollowHealth.WatchPollCatchupBytes),
 		fmt.Sprintf("follow_health_warnings=%d", len(report.FollowHealth.Warnings)),
+	}
+	if report.SummaryOnly {
+		lines = append(lines, "summary_only=true")
 	}
 	if report.TargetProfile != "" {
 		lines = append(lines, fmt.Sprintf("target_profile=%s", report.TargetProfile))

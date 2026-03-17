@@ -129,6 +129,12 @@ Focus that audit on retry exports only:
 codex-mem.exe audit-follow-imports --target-profile retry --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --retention-profile daily --fail-if-matched
 ```
 
+Keep scheduled hygiene logs compact while preserving the matched counts:
+
+```powershell
+codex-mem.exe audit-follow-imports --target-profile artifacts --input .\events.jsonl --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --summary-only --json
+```
+
 Cover checkpoint plus retry artifacts together while leaving follow-health untouched:
 
 ```powershell
@@ -195,6 +201,8 @@ Useful flags:
   `cleanup-follow-imports` only. Optional. Computes the same cleanup candidates and reports what would be removed, but leaves every file in place.
 - `--fail-if-matched`
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Returns a non-zero exit after writing the report when the selected target set matched at least one checkpoint sidecar, retry artifact, or stale follow-health snapshot. This is especially useful for CI or scheduled hygiene audits.
+- `--summary-only`
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Keeps the same aggregate counts, target metadata, and follow-health status, but omits enumerated checkpoint and retry-artifact path lists from the text or JSON report. This is useful for scheduled automation where path-by-path detail would create noisy logs.
 - `--include <glob>`
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that act as a whitelist for checkpoint and retry-artifact candidate paths. Patterns are matched against both the absolute path and the basename.
 - `--exclude <glob>`
@@ -279,8 +287,9 @@ If `--failed-output` is set, the report also includes the resolved output path a
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
 Single-input `follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, transition count, cumulative poll-catchup count and bytes, any warning summaries, any structured watch events since the previous emitted report, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
 Multi-input `follow-imports` returns one aggregate report with command-level watch state, cumulative poll-catchup counters, warning summaries, per-process watch events, total consumed and pending bytes, and one nested per-input report for each followed file.
-`cleanup-follow-imports` reports whether the run was a dry-run, whether `--fail-if-matched` was active, whether the selected target set matched anything, the named retention profile when one is active, the configured age gate in seconds, any include/exclude patterns in effect, how many checkpoint sidecars and derived retry artifacts matched cleanup versus were actually removed, which files were skipped because they were filtered out by pattern or were too new, which explicit state files were already missing, and whether it pruned or would prune the stale follow-health sidecar.
-`audit-follow-imports` reports the same target-selection metadata and matched-versus-skipped counts as a read-only hygiene pass, plus whether the follow-health snapshot is present, when it was last updated, whether it is stale, and any warning summaries carried by that snapshot.
+`cleanup-follow-imports` reports whether the run was a dry-run, whether `--fail-if-matched` was active, whether the selected target set matched anything, whether `--summary-only` was active, the named retention profile when one is active, the configured age gate in seconds, any include/exclude patterns in effect, how many checkpoint sidecars and derived retry artifacts matched cleanup versus were actually removed, which files were skipped because they were filtered out by pattern or were too new, which explicit state files were already missing, and whether it pruned or would prune the stale follow-health sidecar.
+`audit-follow-imports` reports the same target-selection metadata and matched-versus-skipped counts as a read-only hygiene pass, plus whether `--summary-only` was active, whether the follow-health snapshot is present, when it was last updated, whether it is stale, and any warning summaries carried by that snapshot.
+When `--summary-only` is set, the aggregate counts stay the same but the detailed checkpoint and retry-artifact path lists are omitted from both text and JSON output.
 
 Checked-in sample outputs for common cleanup flows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
 
@@ -345,6 +354,7 @@ go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayI
 - If you want the same target selection and age/pattern filtering logic without any deletion, use `codex-mem.exe audit-follow-imports`. It is the cleaner fit for scheduled reports, pre-cleanup review, and automation that should fail on pending hygiene work before anything is removed.
 - Add `--dry-run` first when you are not fully sure about the target set. The report shows the same matched file list and stale-health outcome it would use for a real cleanup pass, but without deleting anything.
 - Add `--fail-if-matched` when the command should act as a hygiene gate instead of only as an informational report. On `audit-follow-imports` the command stays read-only; on `cleanup-follow-imports --dry-run` it behaves the same way while still showing what a future deletion pass would remove.
+- Add `--summary-only` when scheduled automation or CI should preserve the counts and status metadata but avoid printing long per-path lists into logs or inbox output.
 - Add `--older-than <duration>` when you want cleanup or audit to ignore very recent checkpoint or retry files. This age gate applies to checkpoint sidecars plus range-suffixed retry artifacts, not to the stale-health decision, which still uses the existing follow-health staleness policy.
 - Add `--include` when the cleanup or audit target should stay inside one file family, input label, or path prefix. This is especially useful for multi-input runs where you only want to inspect or clean artifacts related to one input at a time.
 - Add `--exclude` for the final guardrail when a broad include or input set still catches more than you want. Exclude patterns override includes, so they are the safer place to carve out known paths or suffixes.

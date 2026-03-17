@@ -930,6 +930,68 @@ func TestRunCleanupFollowImportsReportsTargetProfile(t *testing.T) {
 	}
 }
 
+func TestRunCleanupFollowImportsSummaryOnlySuppressesPathDetails(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--input", inputPath,
+		"--prune-state",
+		"--failed-output", failedOutputBase,
+		"--prune-failed-output",
+		"--failed-manifest", failedManifestBase,
+		"--prune-failed-manifest",
+		"--dry-run",
+		"--summary-only",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports with --summary-only: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"summary_only=true",
+		"state_files_matched=1",
+		"failed_output_matched=1",
+		"failed_manifest_matched=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup summary-only output missing %q:\n%s", fragment, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"state_file_matched_1=",
+		"failed_output_base_1=",
+		"failed_output_matched_1=",
+		"failed_manifest_base_1=",
+		"failed_manifest_matched_1=",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("cleanup summary-only output unexpectedly included %q:\n%s", forbidden, output)
+		}
+	}
+}
+
 func TestRunCleanupFollowImportsArtifactsTargetProfileSkipsFollowHealth(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
@@ -1148,6 +1210,68 @@ func TestRunAuditFollowImportsReportsPendingArtifacts(t *testing.T) {
 		if _, err := os.Stat(preserved); err != nil {
 			t.Fatalf("expected %s to remain after audit, stat err=%v", preserved, err)
 		}
+	}
+}
+
+func TestRunAuditFollowImportsSummaryOnlySuppressesJSONPathDetails(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"audit-follow-imports",
+		"--target-profile", "retry",
+		"--failed-output", failedOutputBase,
+		"--failed-manifest", failedManifestBase,
+		"--summary-only",
+		"--json",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run audit-follow-imports with --summary-only --json: %v", err)
+	}
+
+	var report map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal audit-follow-imports JSON: %v\n%s", err, stdout.String())
+	}
+	if got, ok := report["summary_only"].(bool); !ok || !got {
+		t.Fatalf("expected summary_only=true, got %#v", report["summary_only"])
+	}
+	failedOutputs, ok := report["failed_outputs"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected failed_outputs object, got %#v", report["failed_outputs"])
+	}
+	if _, exists := failedOutputs["base_paths"]; exists {
+		t.Fatalf("expected base_paths to be omitted in summary-only report: %#v", failedOutputs)
+	}
+	if _, exists := failedOutputs["matched_paths"]; exists {
+		t.Fatalf("expected matched_paths to be omitted in summary-only report: %#v", failedOutputs)
+	}
+	failedManifests, ok := report["failed_manifests"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected failed_manifests object, got %#v", report["failed_manifests"])
+	}
+	if _, exists := failedManifests["base_paths"]; exists {
+		t.Fatalf("expected manifest base_paths to be omitted in summary-only report: %#v", failedManifests)
+	}
+	if _, exists := failedManifests["matched_paths"]; exists {
+		t.Fatalf("expected manifest matched_paths to be omitted in summary-only report: %#v", failedManifests)
 	}
 }
 

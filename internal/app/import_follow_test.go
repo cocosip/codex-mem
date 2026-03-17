@@ -143,6 +143,7 @@ func TestParseCleanupFollowImportsOptions(t *testing.T) {
 		"--older-than", "2h",
 		"--dry-run",
 		"--fail-if-matched",
+		"--summary-only",
 		"--prune-state",
 		"--prune-failed-output",
 		"--prune-failed-manifest",
@@ -163,6 +164,9 @@ func TestParseCleanupFollowImportsOptions(t *testing.T) {
 	}
 	if !options.FailIfMatched {
 		t.Fatal("expected fail-if-matched option")
+	}
+	if !options.SummaryOnly {
+		t.Fatal("expected summary-only option")
 	}
 	if got, want := options.OlderThan, 2*time.Hour; got != want {
 		t.Fatalf("older-than mismatch: got %s want %s", got, want)
@@ -339,6 +343,7 @@ func TestParseAuditFollowImportsOptions(t *testing.T) {
 		"--cwd", "D:/Code/go/codex-mem",
 		"--older-than", "2h",
 		"--fail-if-matched",
+		"--summary-only",
 		"--check-state",
 		"--check-failed-output",
 		"--check-failed-manifest",
@@ -356,6 +361,9 @@ func TestParseAuditFollowImportsOptions(t *testing.T) {
 	}
 	if !options.FailIfMatched {
 		t.Fatal("expected fail-if-matched option")
+	}
+	if !options.SummaryOnly {
+		t.Fatal("expected summary-only option")
 	}
 	if got, want := options.OlderThan, 2*time.Hour; got != want {
 		t.Fatalf("older-than mismatch: got %s want %s", got, want)
