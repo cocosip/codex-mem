@@ -94,6 +94,12 @@ If your release gate wants specific warning codes to become release-blocking whi
 go run ./scripts/readiness-check --fail-on-warning-code WARN_FOLLOW_IMPORTS_HEALTH_STALE
 ```
 
+If you want a maintained preset instead of repeating the same release policy flags, run:
+
+```powershell
+go run ./scripts/readiness-check --policy-profile release
+```
+
 Confirm:
 
 - `required_schema_ok=true`
@@ -104,7 +110,7 @@ Confirm:
 - `exclusion_audit_ready=true`
 - `mcp_tool_count=11`
 
-If your deployment uses `follow-imports`, also inspect either the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check` or the embedded `doctor.follow_imports` object from `go run ./scripts/readiness-check --json`. Those fields surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state. The readiness helper now also emits overall run timing plus per-phase status and timing for `doctor`, stdio smoke, and HTTP smoke, which is useful when a release gate fails and you need to see which stage stopped and whether either the whole check or one phase is getting slower over time; `--keep-going` is available when you want later phases to continue running after an early failure, `--slow-run-ms` / `--slow-phase-ms` let the report surface slow-run warnings, and `--fail-on-warning-code` lets the release gate opt into failing on selected warning codes without making every warning globally fatal.
+If your deployment uses `follow-imports`, also inspect either the echoed `doctor_follow_imports_*` lines from `go run ./scripts/readiness-check` or the embedded `doctor.follow_imports` object from `go run ./scripts/readiness-check --json`. Those fields surface the last-known runtime watch-health snapshot from `doctor` for automation, but they remain informational unless your own release gate chooses to fail on stale or degraded follow state. The readiness helper now also emits overall run timing plus per-phase status and timing for `doctor`, stdio smoke, and HTTP smoke, which is useful when a release gate fails and you need to see which stage stopped and whether either the whole check or one phase is getting slower over time; `--keep-going` is available when you want later phases to continue running after an early failure, `--slow-run-ms` / `--slow-phase-ms` let the report surface slow-run warnings, `--fail-on-warning-code` lets the release gate opt into failing on selected warning codes without making every warning globally fatal, and `--policy-profile release` packages the current recommended release preset on top of those same underlying fields.
 
 ### 2. Test Suite
 

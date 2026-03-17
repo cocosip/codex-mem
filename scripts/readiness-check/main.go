@@ -19,15 +19,19 @@ const stringNone = "none"
 type readinessOptions struct {
 	JSON                 bool
 	KeepGoing            bool
+	PolicyProfile        string
 	SlowRunThresholdMS   int64
 	SlowPhaseThresholdMS int64
 	FailOnWarningCodes   []string
+	slowRunExplicit      bool
+	slowPhaseExplicit    bool
 }
 
 type readinessReport struct {
 	Status               string                 `json:"status"`
 	Summary              string                 `json:"summary"`
 	KeepGoing            bool                   `json:"keep_going"`
+	PolicyProfile        string                 `json:"policy_profile,omitempty"`
 	SlowRunThresholdMS   int64                  `json:"slow_run_threshold_ms,omitempty"`
 	SlowPhaseThresholdMS int64                  `json:"slow_phase_threshold_ms,omitempty"`
 	FailOnWarningCodes   []string               `json:"fail_on_warning_codes,omitempty"`
@@ -121,6 +125,9 @@ const (
 	readinessPhaseDoctor = "doctor"
 	readinessPhaseStdio  = "stdio_mcp_smoke_test"
 	readinessPhaseHTTP   = "http_mcp_smoke_test"
+
+	readinessPolicyProfileCI      = "ci"
+	readinessPolicyProfileRelease = "release"
 )
 
 func main() {
@@ -165,6 +172,10 @@ func parseOptions(args []string) (readinessOptions, error) {
 			}
 		}
 	}
+	options, err := applyPolicyProfile(options)
+	if err != nil {
+		return readinessOptions{}, err
+	}
 	return options, nil
 }
 
@@ -177,6 +188,7 @@ func parseExtendedOption(args []string, index int, options readinessOptions) (re
 			return readinessOptions{}, index, err
 		}
 		options.SlowRunThresholdMS = value
+		options.slowRunExplicit = true
 		return options, index, nil
 	case strings.HasPrefix(arg, "--slow-phase-ms="):
 		value, err := parsePositiveInt64Flag("slow-phase-ms", strings.TrimSpace(strings.TrimPrefix(arg, "--slow-phase-ms=")))
@@ -184,6 +196,7 @@ func parseExtendedOption(args []string, index int, options readinessOptions) (re
 			return readinessOptions{}, index, err
 		}
 		options.SlowPhaseThresholdMS = value
+		options.slowPhaseExplicit = true
 		return options, index, nil
 	case arg == "--slow-run-ms":
 		if index+1 >= len(args) {
@@ -194,6 +207,7 @@ func parseExtendedOption(args []string, index int, options readinessOptions) (re
 			return readinessOptions{}, index, err
 		}
 		options.SlowRunThresholdMS = value
+		options.slowRunExplicit = true
 		return options, index + 1, nil
 	case arg == "--slow-phase-ms":
 		if index+1 >= len(args) {
@@ -204,6 +218,24 @@ func parseExtendedOption(args []string, index int, options readinessOptions) (re
 			return readinessOptions{}, index, err
 		}
 		options.SlowPhaseThresholdMS = value
+		options.slowPhaseExplicit = true
+		return options, index + 1, nil
+	case strings.HasPrefix(arg, "--policy-profile="):
+		profile, err := normalizePolicyProfile(strings.TrimSpace(strings.TrimPrefix(arg, "--policy-profile=")))
+		if err != nil {
+			return readinessOptions{}, index, err
+		}
+		options.PolicyProfile = profile
+		return options, index, nil
+	case arg == "--policy-profile":
+		if index+1 >= len(args) {
+			return readinessOptions{}, index, errors.New(`missing value for "--policy-profile"`)
+		}
+		profile, err := normalizePolicyProfile(strings.TrimSpace(args[index+1]))
+		if err != nil {
+			return readinessOptions{}, index, err
+		}
+		options.PolicyProfile = profile
 		return options, index + 1, nil
 	case strings.HasPrefix(arg, "--fail-on-warning-code="):
 		values, err := parseWarningCodeFlagValues(strings.TrimSpace(strings.TrimPrefix(arg, "--fail-on-warning-code=")))
@@ -240,6 +272,47 @@ func parsePositiveInt64Flag(name string, raw string) (int64, error) {
 		return 0, fmt.Errorf(`invalid value for "--%s": %q must be > 0`, name, raw)
 	}
 	return value, nil
+}
+
+func normalizePolicyProfile(raw string) (string, error) {
+	profile := strings.ToLower(strings.TrimSpace(raw))
+	switch profile {
+	case readinessPolicyProfileCI, readinessPolicyProfileRelease:
+		return profile, nil
+	case "":
+		return "", errors.New(`invalid value for "--policy-profile": empty`)
+	default:
+		return "", fmt.Errorf(`invalid value for "--policy-profile": %q`, raw)
+	}
+}
+
+func applyPolicyProfile(options readinessOptions) (readinessOptions, error) {
+	switch options.PolicyProfile {
+	case "":
+		return options, nil
+	case readinessPolicyProfileCI:
+		if !options.slowRunExplicit {
+			options.SlowRunThresholdMS = 8000
+		}
+		if !options.slowPhaseExplicit {
+			options.SlowPhaseThresholdMS = 1000
+		}
+		return options, nil
+	case readinessPolicyProfileRelease:
+		if !options.slowRunExplicit {
+			options.SlowRunThresholdMS = 8000
+		}
+		if !options.slowPhaseExplicit {
+			options.SlowPhaseThresholdMS = 1000
+		}
+		options.FailOnWarningCodes = appendNormalizedWarningCodes(
+			[]string{"WARN_FOLLOW_IMPORTS_HEALTH_STALE"},
+			options.FailOnWarningCodes...,
+		)
+		return options, nil
+	default:
+		return readinessOptions{}, fmt.Errorf(`invalid value for "--policy-profile": %q`, options.PolicyProfile)
+	}
 }
 
 func parseWarningCodeFlagValues(raw string) ([]string, error) {
@@ -331,6 +404,7 @@ func newReadinessReport(options readinessOptions) readinessReport {
 		Status:               readinessStatusNotRun,
 		Summary:              "readiness phases have not run",
 		KeepGoing:            options.KeepGoing,
+		PolicyProfile:        options.PolicyProfile,
 		SlowRunThresholdMS:   options.SlowRunThresholdMS,
 		SlowPhaseThresholdMS: options.SlowPhaseThresholdMS,
 		FailOnWarningCodes:   append([]string(nil), options.FailOnWarningCodes...),
@@ -609,6 +683,7 @@ func writeReadinessSummary(w io.Writer, report readinessReport) error {
 		fmt.Sprintf("status=%s", report.Status),
 		fmt.Sprintf("summary=%s", fallbackString(report.Summary)),
 		fmt.Sprintf("keep_going=%t", report.KeepGoing),
+		fmt.Sprintf("policy_profile=%s", fallbackString(report.PolicyProfile)),
 		fmt.Sprintf("slow_run_threshold_ms=%d", report.SlowRunThresholdMS),
 		fmt.Sprintf("slow_phase_threshold_ms=%d", report.SlowPhaseThresholdMS),
 		fmt.Sprintf("fail_on_warning_codes=%s", csvOrNone(report.FailOnWarningCodes)),

@@ -451,6 +451,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether maintainers want a small set of documented threshold/policy presets for CI and release workflows, or whether explicit flags remain the right level of control.
+### 2026-03-17 Session Update
+
+- Completed: Added `--policy-profile` presets to `scripts/readiness-check` with initial `ci` and `release` profiles. Profiles expand to the existing threshold and warning-policy flags instead of introducing a second policy engine: `ci` sets the current slow-run thresholds, while `release` adds the stale follow-health failure policy on top. Explicit flags still override profile thresholds and append extra warning codes, and the final text/JSON outputs now expose `policy_profile` alongside the already-expanded thresholds and warning-policy fields. Tests now cover profile parsing, override behavior, lint is clean again, and `go test ./...` remains green.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current preset names and values are enough for automation consumers, or whether release/CI docs should publish concrete recommended invocation examples for different operator goals.
 
 ## Recommended Next Step
 
