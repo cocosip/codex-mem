@@ -1403,6 +1403,17 @@ func loadFollowImportsHealthSnapshot(logDir string) (*followImportsHealthSnapsho
 	return &snapshot, nil
 }
 
+func pruneFollowImportsHealthSnapshot(logDir string) error {
+	path := followImportsHealthPath(logDir)
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("remove follow-imports health snapshot: %w", err)
+	}
+	return nil
+}
+
 func newFollowImportsHealthSnapshotFromReport(report followImportsReport, options followImportsOptions) followImportsHealthSnapshot {
 	return followImportsHealthSnapshot{
 		Status:              report.Status,

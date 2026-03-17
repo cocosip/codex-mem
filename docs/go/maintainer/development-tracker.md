@@ -498,6 +498,20 @@ Current blockers:
 - Blockers: none.
 - Next step: decide whether the refresh helper should remain a mode on `readiness-check`, or move to a separate maintainer script if the checked-in example catalog grows further.
 
+### 2026-03-17 Session Update
+
+- Completed: Made the readiness example helper scale a bit better as the fixture catalog grows. `scripts/readiness-check` now supports `--list-examples` plus `--refresh-examples=<name[,name...]>`, validates requested fixture names up front, and test coverage now checks list output plus subset-only rewrites instead of assuming every refresh touches the full catalog.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current list-and-subset workflow is enough for maintainers, or whether the example catalog should eventually move into a small manifest file with richer metadata.
+
+### 2026-03-17 Session Update
+
+- Completed: Added explicit stale follow-health pruning to `doctor`. Operators can now run `doctor --prune-stale-follow-health` to remove only stale `follow-imports.health.json` sidecars, and the doctor text/JSON report now surfaces whether a snapshot was pruned plus the prune reason. App coverage now verifies stale snapshots are removed only when requested and that fresh snapshots are preserved.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether explicit stale pruning is enough operator hygiene, or whether a later slice should add a broader import/follow cleanup surface for old checkpoints and retry artifacts too.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:

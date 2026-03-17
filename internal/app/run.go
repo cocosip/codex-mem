@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"codex-mem/internal/buildinfo"
 	"codex-mem/internal/config"
@@ -63,7 +64,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		followHealth, err := loadFollowImportsHealthSnapshot(cfg.Meta.LogDir)
+		followHealth, healthPruned, healthPruneReason, err := loadDoctorFollowImportsHealth(cfg.Meta.LogDir, options.PruneStaleFollowHealth, time.Now().UTC())
 		if err != nil {
 			return err
 		}
@@ -75,8 +76,10 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 			"required_schema_ok", runtimeDiagnostics.RequiredSchemaOK,
 			"fts_ready", runtimeDiagnostics.FTSReady,
 			"json", options.JSON,
+			"prune_stale_follow_health", options.PruneStaleFollowHealth,
+			"follow_health_pruned", healthPruned,
 		)
-		report := buildDoctorReport(cfg, runtimeDiagnostics, mcp.ToolCount(), followHealth)
+		report := buildDoctorReport(cfg, runtimeDiagnostics, mcp.ToolCount(), followHealth, healthPruned, healthPruneReason)
 		output := formatDoctorReport(report)
 		if options.JSON {
 			output, err = formatDoctorReportJSON(report)

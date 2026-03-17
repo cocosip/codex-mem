@@ -20,7 +20,9 @@ const stringNone = "none"
 type readinessOptions struct {
 	JSON                 bool
 	KeepGoing            bool
+	ListExamples         bool
 	RefreshExamples      bool
+	RefreshExampleNames  []string
 	PolicyProfile        string
 	SlowRunThresholdMS   int64
 	SlowPhaseThresholdMS int64
@@ -149,8 +151,14 @@ func main() {
 	if err != nil {
 		failf("resolve working directory: %v", err)
 	}
+	if options.ListExamples {
+		if err := listReadinessExamples(os.Stdout); err != nil {
+			failf("list readiness examples: %v", err)
+		}
+		return
+	}
 	if options.RefreshExamples {
-		if err := refreshReadinessExamples(repoRoot, os.Stdout); err != nil {
+		if err := refreshReadinessExamples(repoRoot, options.RefreshExampleNames, os.Stdout); err != nil {
 			failf("refresh readiness examples: %v", err)
 		}
 		return
@@ -176,6 +184,8 @@ func parseOptions(args []string) (readinessOptions, error) {
 			options.JSON = true
 		case "--keep-going":
 			options.KeepGoing = true
+		case "--list-examples":
+			options.ListExamples = true
 		case "--refresh-examples":
 			options.RefreshExamples = true
 		default:
@@ -198,7 +208,21 @@ func parseOptions(args []string) (readinessOptions, error) {
 
 func validateOptions(options readinessOptions) error {
 	if !options.RefreshExamples {
+		if options.ListExamples {
+			if options.JSON ||
+				options.KeepGoing ||
+				options.PolicyProfile != "" ||
+				options.SlowRunThresholdMS != 0 ||
+				options.SlowPhaseThresholdMS != 0 ||
+				len(options.FailOnWarningCodes) > 0 ||
+				len(options.RefreshExampleNames) > 0 {
+				return errors.New(`"--list-examples" cannot be combined with other readiness-check flags`)
+			}
+		}
 		return nil
+	}
+	if options.ListExamples {
+		return errors.New(`"--list-examples" cannot be combined with "--refresh-examples"`)
 	}
 	if options.JSON ||
 		options.KeepGoing ||
@@ -207,6 +231,11 @@ func validateOptions(options readinessOptions) error {
 		options.SlowPhaseThresholdMS != 0 ||
 		len(options.FailOnWarningCodes) > 0 {
 		return errors.New(`"--refresh-examples" cannot be combined with other readiness-check flags`)
+	}
+	if len(options.RefreshExampleNames) > 0 {
+		if _, err := selectReadinessExampleFixtures(options.RefreshExampleNames); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -286,6 +315,14 @@ func parseExtendedOption(args []string, index int, options readinessOptions) (re
 		}
 		options.FailOnWarningCodes = appendNormalizedWarningCodes(options.FailOnWarningCodes, values...)
 		return options, index + 1, nil
+	case strings.HasPrefix(arg, "--refresh-examples="):
+		values, err := parseReadinessExampleNames(strings.TrimSpace(strings.TrimPrefix(arg, "--refresh-examples=")))
+		if err != nil {
+			return readinessOptions{}, index, err
+		}
+		options.RefreshExamples = true
+		options.RefreshExampleNames = append(options.RefreshExampleNames, values...)
+		return options, index, nil
 	default:
 		return readinessOptions{}, index, fmt.Errorf("unknown readiness-check flag %q", arg)
 	}
@@ -413,9 +450,9 @@ func runReadinessCheck(ctx context.Context, repoRoot string, options readinessOp
 	return runReadinessCheckWithRunner(ctx, repoRoot, options, runGo)
 }
 
-func refreshReadinessExamples(repoRoot string, w io.Writer) error {
+func refreshReadinessExamples(repoRoot string, names []string, w io.Writer) error {
 	baseDir := filepath.Join(repoRoot, "scripts", "readiness-check", readinessExampleDirName)
-	writtenPaths, err := writeReadinessExampleFixtures(baseDir)
+	writtenPaths, err := writeReadinessExampleFixtures(baseDir, names)
 	if err != nil {
 		return err
 	}
@@ -425,6 +462,21 @@ func refreshReadinessExamples(repoRoot string, w io.Writer) error {
 		}
 	}
 	_, err = fmt.Fprintf(w, "refreshed_examples=%d\n", len(writtenPaths))
+	return err
+}
+
+func listReadinessExamples(w io.Writer) error {
+	fixtures := readinessExampleFixtures()
+	for _, fixture := range fixtures {
+		format := "text"
+		if fixture.JSON {
+			format = "json"
+		}
+		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s\n", fixture.Name, filepath.Join(readinessExampleDirName, fixture.RelativePath), format); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(w, "example_count=%d\n", len(fixtures))
 	return err
 }
 

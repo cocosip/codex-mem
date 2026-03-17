@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -195,6 +196,8 @@ func TestRunDoctorFlagsStaleFollowImportsHealthSnapshot(t *testing.T) {
 	output := stdout.String()
 	for _, fragment := range []string{
 		"follow_imports_health_present=true",
+		"follow_imports_health_pruned=false",
+		"follow_imports_health_prune_reason=none",
 		"follow_imports_health_stale=true",
 		"follow_imports_warnings=1",
 		"follow_imports_warning_1_code=WARN_FOLLOW_IMPORTS_HEALTH_STALE",
@@ -202,6 +205,125 @@ func TestRunDoctorFlagsStaleFollowImportsHealthSnapshot(t *testing.T) {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
 		}
+	}
+}
+
+func TestRunDoctorPrunesStaleFollowImportsHealthSnapshotWhenRequested(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		File: config.FileConfig{
+			DatabasePath:      filepath.Join(root, "data", "codex-mem.db"),
+			DefaultSystemName: "codex-mem",
+			SQLiteDriver:      "sqlite",
+			BusyTimeout:       5 * time.Second,
+			JournalMode:       "WAL",
+			LogFilePath:       filepath.Join(root, "logs", "codex-mem.log"),
+			LogMaxSizeMB:      20,
+			LogMaxBackups:     10,
+			LogMaxAgeDays:     30,
+			LogCompress:       true,
+			LogAlsoStderr:     false,
+		},
+		Meta: config.LoadMetadata{
+			ConfigDir:      filepath.Join(root, "configs"),
+			ConfigFilePath: filepath.Join(root, "configs", "codex-mem.json"),
+			LogDir:         filepath.Join(root, "logs"),
+		},
+	}
+
+	snapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, snapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"doctor", "--prune-stale-follow-health"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run doctor --prune-stale-follow-health: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"follow_imports_health_present=false",
+		"follow_imports_health_pruned=true",
+		"follow_imports_health_prune_reason=stale",
+		"follow_imports_health_stale=false",
+		"follow_imports_warnings=0",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	if _, err := os.Stat(followImportsHealthPath(cfg.Meta.LogDir)); !os.IsNotExist(err) {
+		t.Fatalf("expected stale follow health snapshot to be removed, stat err=%v", err)
+	}
+}
+
+func TestRunDoctorDoesNotPruneFreshFollowImportsHealthSnapshot(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		File: config.FileConfig{
+			DatabasePath:      filepath.Join(root, "data", "codex-mem.db"),
+			DefaultSystemName: "codex-mem",
+			SQLiteDriver:      "sqlite",
+			BusyTimeout:       5 * time.Second,
+			JournalMode:       "WAL",
+			LogFilePath:       filepath.Join(root, "logs", "codex-mem.log"),
+			LogMaxSizeMB:      20,
+			LogMaxBackups:     10,
+			LogMaxAgeDays:     30,
+			LogCompress:       true,
+			LogAlsoStderr:     false,
+		},
+		Meta: config.LoadMetadata{
+			ConfigDir:      filepath.Join(root, "configs"),
+			ConfigFilePath: filepath.Join(root, "configs", "codex-mem.json"),
+			LogDir:         filepath.Join(root, "logs"),
+		},
+	}
+
+	snapshot := followImportsHealthSnapshot{
+		Status:              "partial",
+		UpdatedAt:           time.Now().UTC(),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, snapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{"doctor", "--prune-stale-follow-health"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run doctor --prune-stale-follow-health: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"follow_imports_health_present=true",
+		"follow_imports_health_pruned=false",
+		"follow_imports_health_prune_reason=none",
+		"follow_imports_health_stale=false",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("doctor output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	if _, err := os.Stat(followImportsHealthPath(cfg.Meta.LogDir)); err != nil {
+		t.Fatalf("expected fresh follow health snapshot to remain, stat err=%v", err)
 	}
 }
 
@@ -481,5 +603,15 @@ func TestRunDoctorRejectsUnknownFlag(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `unknown doctor flag "--yaml"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseDoctorOptionsEnablesPruneStaleFollowHealth(t *testing.T) {
+	options, err := parseDoctorOptions([]string{"--prune-stale-follow-health"})
+	if err != nil {
+		t.Fatalf("parseDoctorOptions: %v", err)
+	}
+	if !options.PruneStaleFollowHealth {
+		t.Fatal("expected prune-stale-follow-health option to be enabled")
 	}
 }

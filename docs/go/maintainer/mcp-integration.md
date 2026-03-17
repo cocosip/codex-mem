@@ -220,6 +220,13 @@ If a deliberate readiness-output change makes those fixtures drift, refresh them
 go run ./scripts/readiness-check --refresh-examples
 ```
 
+If you only need one or two fixtures while iterating on a specific output shape, first list the available fixture names and then refresh just the subset you want:
+
+```powershell
+go run ./scripts/readiness-check --list-examples
+go run ./scripts/readiness-check --refresh-examples=ci-json
+```
+
 Then rerun `go test ./scripts/readiness-check -run TestReadinessExampleOutputsStayInSync` plus the normal repo checks so the updated fixtures are verified in read-only mode again.
 
 That combined check now covers:

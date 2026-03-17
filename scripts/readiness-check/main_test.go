@@ -136,12 +136,55 @@ func TestParseOptionsEnablesRefreshExamples(t *testing.T) {
 	}
 }
 
+func TestParseOptionsSelectsNamedRefreshExamples(t *testing.T) {
+	options, err := parseOptions([]string{"--refresh-examples=ci-json,slow-ci-text,ci-json"})
+	if err != nil {
+		t.Fatalf("parseOptions: %v", err)
+	}
+	if !options.RefreshExamples {
+		t.Fatal("expected refresh-examples option to be enabled")
+	}
+	if !slices.Equal(options.RefreshExampleNames, []string{"ci-json", "slow-ci-text"}) {
+		t.Fatalf("unexpected refresh example names: %+v", options.RefreshExampleNames)
+	}
+}
+
+func TestParseOptionsRejectsUnknownRefreshExampleName(t *testing.T) {
+	_, err := parseOptions([]string{"--refresh-examples=missing-example"})
+	if err == nil {
+		t.Fatal("expected error for unknown refresh example")
+	}
+	if !strings.Contains(err.Error(), `unknown readiness example "missing-example"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseOptionsRejectsRefreshExamplesWithOtherFlags(t *testing.T) {
 	_, err := parseOptions([]string{"--refresh-examples", "--json"})
 	if err == nil {
 		t.Fatal("expected error for incompatible refresh-examples flags")
 	}
 	if !strings.Contains(err.Error(), `"--refresh-examples"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseOptionsEnablesListExamples(t *testing.T) {
+	options, err := parseOptions([]string{"--list-examples"})
+	if err != nil {
+		t.Fatalf("parseOptions: %v", err)
+	}
+	if !options.ListExamples {
+		t.Fatal("expected list-examples option to be enabled")
+	}
+}
+
+func TestParseOptionsRejectsListExamplesWithRefreshExamples(t *testing.T) {
+	_, err := parseOptions([]string{"--list-examples", "--refresh-examples"})
+	if err == nil {
+		t.Fatal("expected error for incompatible list-examples flags")
+	}
+	if !strings.Contains(err.Error(), `"--list-examples"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -636,7 +679,7 @@ func assertReadinessExampleOutput(t *testing.T, relativePath string, jsonOutput 
 func TestWriteReadinessExampleFixtures(t *testing.T) {
 	tempDir := t.TempDir()
 
-	writtenPaths, err := writeReadinessExampleFixtures(tempDir)
+	writtenPaths, err := writeReadinessExampleFixtures(tempDir, nil)
 	if err != nil {
 		t.Fatalf("writeReadinessExampleFixtures: %v", err)
 	}
@@ -656,6 +699,50 @@ func TestWriteReadinessExampleFixtures(t *testing.T) {
 		}
 		if !bytes.Equal(got, body) {
 			t.Fatalf("written fixture mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", fixture.RelativePath, string(got), string(body))
+		}
+	}
+}
+
+func TestWriteReadinessExampleFixturesSelectsNamedSubset(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPaths, err := writeReadinessExampleFixtures(tempDir, []string{"ci-json"})
+	if err != nil {
+		t.Fatalf("writeReadinessExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) != 1 {
+		t.Fatalf("unexpected written path count: got %d want 1", len(writtenPaths))
+	}
+
+	selected, err := selectReadinessExampleFixtures([]string{"ci-json"})
+	if err != nil {
+		t.Fatalf("selectReadinessExampleFixtures: %v", err)
+	}
+	fixture := selected[0]
+	path := filepath.Join(tempDir, fixture.RelativePath)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("Stat(%q): %v", path, err)
+	}
+	otherPath := filepath.Join(tempDir, "example-slow-ci-success.txt")
+	if _, err := os.Stat(otherPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no slow-ci fixture, got err=%v", err)
+	}
+}
+
+func TestListReadinessExamples(t *testing.T) {
+	var buffer bytes.Buffer
+	if err := listReadinessExamples(&buffer); err != nil {
+		t.Fatalf("listReadinessExamples: %v", err)
+	}
+	output := buffer.String()
+	for _, fragment := range []string{
+		"example=ci-json path=testdata\\example-ci-success.json format=json",
+		"example=slow-ci-text path=testdata\\example-slow-ci-success.txt format=text",
+		"example=release-warning-failure-text path=testdata\\example-release-warning-failure.txt format=text",
+		"example_count=3",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("list output missing %q:\n%s", fragment, output)
 		}
 	}
 }

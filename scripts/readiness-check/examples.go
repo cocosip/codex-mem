@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -44,6 +48,61 @@ func readinessExampleFixtures() []readinessExampleFixture {
 	}
 }
 
+func selectReadinessExampleFixtures(names []string) ([]readinessExampleFixture, error) {
+	all := readinessExampleFixtures()
+	if len(names) == 0 {
+		return all, nil
+	}
+
+	byName := make(map[string]readinessExampleFixture, len(all))
+	for _, fixture := range all {
+		byName[normalizeReadinessExampleName(fixture.Name)] = fixture
+	}
+
+	selected := make([]readinessExampleFixture, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		normalized := normalizeReadinessExampleName(name)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		fixture, ok := byName[normalized]
+		if !ok {
+			return nil, fmt.Errorf("unknown readiness example %q", name)
+		}
+		selected = append(selected, fixture)
+		seen[normalized] = struct{}{}
+	}
+	return selected, nil
+}
+
+func normalizeReadinessExampleName(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func parseReadinessExampleNames(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, errors.New(`invalid value for "--refresh-examples": empty`)
+	}
+	parts := strings.Split(raw, ",")
+	names := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := normalizeReadinessExampleName(part)
+		if name == "" {
+			return nil, fmt.Errorf(`invalid value for "--refresh-examples": %q`, raw)
+		}
+		if slices.Contains(names, name) {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 func renderReadinessExample(report readinessReport, jsonOutput bool) ([]byte, error) {
 	var buffer bytes.Buffer
 	var err error
@@ -58,8 +117,11 @@ func renderReadinessExample(report readinessReport, jsonOutput bool) ([]byte, er
 	return buffer.Bytes(), nil
 }
 
-func writeReadinessExampleFixtures(baseDir string) ([]string, error) {
-	fixtures := readinessExampleFixtures()
+func writeReadinessExampleFixtures(baseDir string, names []string) ([]string, error) {
+	fixtures, err := selectReadinessExampleFixtures(names)
+	if err != nil {
+		return nil, err
+	}
 	writtenPaths := make([]string, 0, len(fixtures))
 	for _, fixture := range fixtures {
 		body, err := renderReadinessExample(fixture.Report, fixture.JSON)

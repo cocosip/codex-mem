@@ -13,7 +13,8 @@ import (
 )
 
 type doctorOptions struct {
-	JSON bool
+	JSON                   bool
+	PruneStaleFollowHealth bool
 }
 
 type doctorReport struct {
@@ -92,6 +93,8 @@ type doctorLoggingReport struct {
 type doctorFollowReport struct {
 	HealthFile            string           `json:"health_file"`
 	HealthPresent         bool             `json:"health_present"`
+	HealthPruned          bool             `json:"health_pruned"`
+	HealthPruneReason     string           `json:"health_prune_reason,omitempty"`
 	LastUpdatedAt         *time.Time       `json:"last_updated_at,omitempty"`
 	Status                string           `json:"status,omitempty"`
 	Source                string           `json:"source,omitempty"`
@@ -117,6 +120,7 @@ type doctorMCPReport struct {
 
 const (
 	doctorJSONFlag                    = "--json"
+	doctorPruneStaleFollowHealthFlag  = "--prune-stale-follow-health"
 	stringNone                        = "none"
 	doctorFollowHealthStaleMultiplier = 3
 	doctorFollowHealthMinimumWindow   = 30 * time.Second
@@ -130,6 +134,8 @@ func parseDoctorOptions(args []string) (doctorOptions, error) {
 			continue
 		case doctorJSONFlag:
 			options.JSON = true
+		case doctorPruneStaleFollowHealthFlag:
+			options.PruneStaleFollowHealth = true
 		default:
 			return doctorOptions{}, fmt.Errorf("unknown doctor flag %q", arg)
 		}
@@ -137,11 +143,13 @@ func parseDoctorOptions(args []string) (doctorOptions, error) {
 	return options, nil
 }
 
-func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCount int, followHealth *followImportsHealthSnapshot) doctorReport {
+func buildDoctorReport(cfg config.Config, runtime db.RuntimeDiagnostics, toolCount int, followHealth *followImportsHealthSnapshot, healthPruned bool, healthPruneReason string) doctorReport {
 	now := time.Now().UTC()
 	followReport := doctorFollowReport{
-		HealthFile:    followImportsHealthPath(cfg.Meta.LogDir),
-		HealthPresent: followHealth != nil,
+		HealthFile:        followImportsHealthPath(cfg.Meta.LogDir),
+		HealthPresent:     followHealth != nil,
+		HealthPruned:      healthPruned,
+		HealthPruneReason: strings.TrimSpace(healthPruneReason),
 	}
 	if followHealth != nil {
 		age, stale := evaluateFollowImportsHealthStaleness(*followHealth, now)
@@ -281,6 +289,8 @@ func formatDoctorReport(report doctorReport) string {
 		fmt.Sprintf("log_stderr=%t", report.Logging.LogStderr),
 		fmt.Sprintf("follow_imports_health_file=%s", report.Follow.HealthFile),
 		fmt.Sprintf("follow_imports_health_present=%t", report.Follow.HealthPresent),
+		fmt.Sprintf("follow_imports_health_pruned=%t", report.Follow.HealthPruned),
+		fmt.Sprintf("follow_imports_health_prune_reason=%s", fallbackString(report.Follow.HealthPruneReason)),
 		fmt.Sprintf("follow_imports_last_updated_at=%s", pointerTimeOrNone(report.Follow.LastUpdatedAt)),
 		fmt.Sprintf("follow_imports_status=%s", fallbackString(report.Follow.Status)),
 		fmt.Sprintf("follow_imports_source=%s", fallbackString(report.Follow.Source)),
@@ -366,4 +376,22 @@ func followImportsHealthStaleWarnings(_ followImportsHealthSnapshot, age time.Du
 		Code:    common.WarnFollowImportsHealthStale,
 		Message: fmt.Sprintf("follow-imports health snapshot is stale at %s", age.Truncate(time.Second)),
 	}}
+}
+
+func loadDoctorFollowImportsHealth(logDir string, pruneStale bool, now time.Time) (*followImportsHealthSnapshot, bool, string, error) {
+	followHealth, err := loadFollowImportsHealthSnapshot(logDir)
+	if err != nil {
+		return nil, false, "", err
+	}
+	if !pruneStale || followHealth == nil {
+		return followHealth, false, "", nil
+	}
+	_, stale := evaluateFollowImportsHealthStaleness(*followHealth, now)
+	if !stale {
+		return followHealth, false, "", nil
+	}
+	if err := pruneFollowImportsHealthSnapshot(logDir); err != nil {
+		return nil, false, "", err
+	}
+	return nil, true, "stale", nil
 }
