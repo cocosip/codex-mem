@@ -259,6 +259,13 @@ Immediate next tasks:
 - Blockers: none.
 - Next step: decide whether cleanup automation now has enough signaling, or whether follow/import operator workflows would benefit more from a dedicated scheduled-check/report command instead of adding more flags to cleanup itself.
 
+### 2026-03-17 Session Update
+
+- Completed: Added a dedicated `audit-follow-imports` read-only hygiene command for scheduled checks and operator review. It reuses the existing follow-artifact target derivation plus age/pattern filtering logic, reports pending checkpoint and retry-artifact matches without deleting them, includes detailed follow-health snapshot presence/staleness metadata, and supports `--fail-if-matched` for automation gating without requiring `cleanup-follow-imports --dry-run`.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the new audit command is enough operator-facing hygiene surface, or whether it should eventually grow checked-in sample outputs like the readiness and cleanup commands.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:

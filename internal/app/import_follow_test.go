@@ -336,6 +336,75 @@ func TestParseCleanupFollowImportsOptionsRejectsListExamplesWithRefreshExamples(
 	}
 }
 
+func TestParseAuditFollowImportsOptions(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--input", "events.jsonl",
+		"--state-file", "events.offset.json",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+		"--include", "*.offset.json,*.0-42.*",
+		"--exclude", "*.43-84.*",
+		"--retention-profile", "daily",
+		"--cwd", "D:/Code/go/codex-mem",
+		"--older-than", "2h",
+		"--fail-if-matched",
+		"--check-state",
+		"--check-failed-output",
+		"--check-failed-manifest",
+		"--check-follow-health",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if !options.CheckState || !options.CheckFailedOutput || !options.CheckFailedManifest || !options.CheckFollowHealth {
+		t.Fatalf("expected all audit targets to be enabled, got %+v", options)
+	}
+	if !options.JSON {
+		t.Fatal("expected JSON output")
+	}
+	if !options.FailIfMatched {
+		t.Fatal("expected fail-if-matched option")
+	}
+	if got, want := options.OlderThan, 2*time.Hour; got != want {
+		t.Fatalf("older-than mismatch: got %s want %s", got, want)
+	}
+	if got, want := options.RetentionProfile, cleanupFollowImportsRetentionProfileDaily; got != want {
+		t.Fatalf("retention profile mismatch: got %q want %q", got, want)
+	}
+	if got, want := len(options.IncludePatterns), 2; got != want {
+		t.Fatalf("include pattern count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(options.ExcludePatterns), 1; got != want {
+		t.Fatalf("exclude pattern count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsRejectsMissingTargets(t *testing.T) {
+	_, err := parseAuditFollowImportsOptions(nil)
+	if err == nil {
+		t.Fatal("expected missing target error")
+	}
+	if !strings.Contains(err.Error(), "audit-follow-imports requires at least one check target") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsRejectsStateFileCountMismatch(t *testing.T) {
+	_, err := parseAuditFollowImportsOptions([]string{
+		"--input", "events-a.jsonl",
+		"--input", "events-b.jsonl",
+		"--state-file", "events.offset.json",
+		"--check-state",
+	})
+	if err == nil {
+		t.Fatal("expected mismatched state-file error")
+	}
+	if !strings.Contains(err.Error(), "audit-follow-imports state-file count (1) must match input count (2)") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWriteCleanupFollowImportsExampleFixtures(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -680,6 +749,141 @@ func TestCleanupFollowImportsIncludeExcludePatterns(t *testing.T) {
 		if _, err := os.Stat(preserved); err != nil {
 			t.Fatalf("expected %s to remain, stat err=%v", preserved, err)
 		}
+	}
+}
+
+func TestAuditFollowImportsReportsPendingArtifactsWithoutDeleting(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 3, 17, 4, 0, 0, 0, time.UTC)
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+	oldTime := now.Add(-2 * time.Hour)
+	for _, path := range []string{statePath, failedOutput, failedManifest} {
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "partial",
+		UpdatedAt:           now.Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	report, err := auditFollowImportsAt(cfg, auditFollowImportsOptions{
+		InputPaths:          []string{inputPath},
+		FailedOutputPath:    failedOutputBase,
+		FailedManifestPath:  failedManifestBase,
+		CWD:                 root,
+		OlderThan:           time.Hour,
+		FailIfMatched:       true,
+		CheckState:          true,
+		CheckFailedOutput:   true,
+		CheckFailedManifest: true,
+		CheckFollowHealth:   true,
+	}, now)
+	if err != nil {
+		t.Fatalf("auditFollowImportsAt: %v", err)
+	}
+
+	if !report.MatchFound {
+		t.Fatalf("expected audit report to find matches, got %+v", report)
+	}
+	if got, want := report.StateFiles.Matched, 1; got != want {
+		t.Fatalf("state matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutputs.Matched, 1; got != want {
+		t.Fatalf("failed output matched mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedManifests.Matched, 1; got != want {
+		t.Fatalf("failed manifest matched mismatch: got %d want %d", got, want)
+	}
+	if !report.FollowHealth.Present || !report.FollowHealth.Stale {
+		t.Fatalf("unexpected follow health audit view: %+v", report.FollowHealth)
+	}
+	if got, want := len(report.FollowHealth.Warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+
+	for _, preserved := range []string{statePath, failedOutput, failedManifest, followImportsHealthPath(cfg.Meta.LogDir)} {
+		if _, err := os.Stat(preserved); err != nil {
+			t.Fatalf("expected %s to remain after audit, stat err=%v", preserved, err)
+		}
+	}
+}
+
+func TestAuditFollowImportsReportsHealthyFollowHealthWithoutMatch(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 3, 17, 4, 0, 0, 0, time.UTC)
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+	healthySnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           now.Add(-10 * time.Second),
+		Source:              "watcher_import",
+		InputCount:          2,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+		RequestedWatchMode:  "auto",
+		ActiveWatchMode:     "notify",
+		Warnings: []common.Warning{{
+			Code:    common.WarnFollowImportsPollCatchup,
+			Message: "notify mode required poll catchup 3 times and 96 bytes so far",
+		}},
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, healthySnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	report, err := auditFollowImportsAt(cfg, auditFollowImportsOptions{
+		CheckFollowHealth: true,
+	}, now)
+	if err != nil {
+		t.Fatalf("auditFollowImportsAt: %v", err)
+	}
+
+	if report.MatchFound {
+		t.Fatalf("expected no audit match for healthy follow health, got %+v", report)
+	}
+	if !report.FollowHealth.Present {
+		t.Fatal("expected follow health to be present")
+	}
+	if report.FollowHealth.Stale {
+		t.Fatalf("expected fresh follow health snapshot, got %+v", report.FollowHealth)
+	}
+	if got, want := len(report.FollowHealth.Warnings), 1; got != want {
+		t.Fatalf("warning count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FollowHealth.Status, "ok"; got != want {
+		t.Fatalf("status mismatch: got %q want %q", got, want)
 	}
 }
 

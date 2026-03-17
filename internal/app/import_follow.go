@@ -62,6 +62,25 @@ type cleanupFollowImportsOptions struct {
 	PruneStaleFollowHealth bool
 }
 
+type auditFollowImportsOptions struct {
+	InputPaths          []string
+	StatePaths          []string
+	FailedOutputPath    string
+	FailedManifestPath  string
+	IncludePatterns     []string
+	ExcludePatterns     []string
+	RetentionProfile    string
+	CWD                 string
+	JSON                bool
+	FailIfMatched       bool
+	OlderThan           time.Duration
+	olderThanExplicit   bool
+	CheckState          bool
+	CheckFailedOutput   bool
+	CheckFailedManifest bool
+	CheckFollowHealth   bool
+}
+
 type followImportsWatchMode string
 
 const (
@@ -255,6 +274,64 @@ type cleanupFollowImportsFollowHealthView struct {
 	PruneReason string `json:"prune_reason,omitempty"`
 }
 
+type auditFollowImportsReport struct {
+	FailIfMatched    bool                             `json:"fail_if_matched"`
+	MatchFound       bool                             `json:"match_found"`
+	RetentionProfile string                           `json:"retention_profile,omitempty"`
+	OlderThanSeconds int64                            `json:"older_than_seconds,omitempty"`
+	IncludePatterns  []string                         `json:"include_patterns,omitempty"`
+	ExcludePatterns  []string                         `json:"exclude_patterns,omitempty"`
+	Status           string                           `json:"status"`
+	StateFiles       auditFollowImportsPathSummary    `json:"state_files"`
+	FailedOutputs    auditFollowImportsPatternSummary `json:"failed_outputs"`
+	FailedManifests  auditFollowImportsPatternSummary `json:"failed_manifests"`
+	FollowHealth     auditFollowImportsHealthView     `json:"follow_health"`
+}
+
+type auditFollowImportsPathSummary struct {
+	Requested             int      `json:"requested"`
+	Matched               int      `json:"matched"`
+	Missing               int      `json:"missing"`
+	SkippedByAge          int      `json:"skipped_by_age,omitempty"`
+	SkippedByPattern      int      `json:"skipped_by_pattern,omitempty"`
+	MatchedPaths          []string `json:"matched_paths,omitempty"`
+	MissingPaths          []string `json:"missing_paths,omitempty"`
+	SkippedByPatternPaths []string `json:"skipped_by_pattern_paths,omitempty"`
+	SkippedByAgePaths     []string `json:"skipped_by_age_paths,omitempty"`
+}
+
+type auditFollowImportsPatternSummary struct {
+	Bases                 int      `json:"bases"`
+	Matched               int      `json:"matched"`
+	SkippedByAge          int      `json:"skipped_by_age,omitempty"`
+	SkippedByPattern      int      `json:"skipped_by_pattern,omitempty"`
+	BasePaths             []string `json:"base_paths,omitempty"`
+	MatchedPaths          []string `json:"matched_paths,omitempty"`
+	SkippedByPatternPaths []string `json:"skipped_by_pattern_paths,omitempty"`
+	SkippedByAgePaths     []string `json:"skipped_by_age_paths,omitempty"`
+}
+
+type auditFollowImportsHealthView struct {
+	File                  string           `json:"file"`
+	Present               bool             `json:"present"`
+	LastUpdatedAt         *time.Time       `json:"last_updated_at,omitempty"`
+	Status                string           `json:"status,omitempty"`
+	Source                string           `json:"source,omitempty"`
+	InputCount            int              `json:"input_count,omitempty"`
+	Continuous            bool             `json:"continuous"`
+	PollIntervalSeconds   int64            `json:"poll_interval_seconds,omitempty"`
+	SnapshotAgeSeconds    int64            `json:"snapshot_age_seconds,omitempty"`
+	Stale                 bool             `json:"stale"`
+	RequestedWatchMode    string           `json:"requested_watch_mode,omitempty"`
+	ActiveWatchMode       string           `json:"active_watch_mode,omitempty"`
+	WatchFallbacks        int              `json:"watch_fallbacks,omitempty"`
+	WatchTransitions      int              `json:"watch_transitions,omitempty"`
+	LastFallbackReason    string           `json:"last_fallback_reason,omitempty"`
+	WatchPollCatchups     int              `json:"watch_poll_catchups,omitempty"`
+	WatchPollCatchupBytes int              `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings              []common.Warning `json:"warnings,omitempty"`
+}
+
 type followImportsRunTrigger string
 
 const (
@@ -379,6 +456,34 @@ func runCleanupFollowImports(cfg config.Config, stdout io.Writer, args []string)
 		return err
 	}
 	return cleanupFollowImportsMatchError(options, report)
+}
+
+func runAuditFollowImports(cfg config.Config, stdout io.Writer, args []string) error {
+	options, err := parseAuditFollowImportsOptions(args)
+	if err != nil {
+		return err
+	}
+
+	report, err := auditFollowImports(cfg, options)
+	if err != nil {
+		return err
+	}
+
+	if options.JSON {
+		body, err := marshalIndented(report)
+		if err != nil {
+			return err
+		}
+		if _, err = io.WriteString(stdout, body); err != nil {
+			return err
+		}
+		return auditFollowImportsMatchError(options, report)
+	}
+
+	if _, err = io.WriteString(stdout, formatAuditFollowImportsReport(report)); err != nil {
+		return err
+	}
+	return auditFollowImportsMatchError(options, report)
 }
 
 func runFollowImportsPollingLoop(ctx context.Context, pollInterval time.Duration, runOnce func(trigger followImportsRunTrigger) error) error {
@@ -758,6 +863,94 @@ func parseCleanupFollowImportsOptionValue(args []string, index int, arg string, 
 	return next, nil
 }
 
+func parseAuditFollowImportsOptions(args []string) (auditFollowImportsOptions, error) {
+	var options auditFollowImportsOptions
+
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		next, err := parseAuditFollowImportsOption(args, i, arg, &options)
+		if err != nil {
+			return auditFollowImportsOptions{}, err
+		}
+		i = next
+	}
+
+	options = applyAuditFollowImportsRetentionProfile(options)
+	if err := validateAuditFollowImportsOptions(options); err != nil {
+		return auditFollowImportsOptions{}, err
+	}
+	return options, nil
+}
+
+func parseAuditFollowImportsOption(args []string, index int, arg string, options *auditFollowImportsOptions) (int, error) {
+	if options == nil {
+		return index, fmt.Errorf("audit-follow-imports options are required")
+	}
+	switch arg {
+	case "":
+		return index, nil
+	case "--json":
+		options.JSON = true
+		return index, nil
+	case "--fail-if-matched":
+		options.FailIfMatched = true
+		return index, nil
+	case "--check-state":
+		options.CheckState = true
+		return index, nil
+	case "--check-failed-output":
+		options.CheckFailedOutput = true
+		return index, nil
+	case "--check-failed-manifest":
+		options.CheckFailedManifest = true
+		return index, nil
+	case "--check-follow-health":
+		options.CheckFollowHealth = true
+		return index, nil
+	default:
+		return parseAuditFollowImportsOptionValue(args, index, arg, options)
+	}
+}
+
+func parseAuditFollowImportsOptionValue(args []string, index int, arg string, options *auditFollowImportsOptions) (int, error) {
+	value, next, err := optionValue(args, index)
+	if err != nil {
+		return index, err
+	}
+	switch arg {
+	case "--input":
+		options.InputPaths = append(options.InputPaths, value)
+	case "--state-file":
+		options.StatePaths = append(options.StatePaths, value)
+	case "--failed-output":
+		options.FailedOutputPath = value
+	case "--failed-manifest":
+		options.FailedManifestPath = value
+	case "--include":
+		options.IncludePatterns = append(options.IncludePatterns, parseCleanupFollowImportsPatterns(value)...)
+	case "--exclude":
+		options.ExcludePatterns = append(options.ExcludePatterns, parseCleanupFollowImportsPatterns(value)...)
+	case "--retention-profile":
+		profile, err := normalizeCleanupFollowImportsRetentionProfile(value)
+		if err != nil {
+			return index, err
+		}
+		options.RetentionProfile = profile
+	case "--cwd":
+		options.CWD = value
+	case "--older-than":
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			return index, fmt.Errorf("invalid audit-follow-imports older-than duration %q", value)
+		}
+		options.OlderThan = duration
+		options.olderThanExplicit = true
+	default:
+		return index, fmt.Errorf("unknown audit-follow-imports flag %q", arg)
+	}
+	return next, nil
+}
+
 func validateFollowImportsOptions(options followImportsOptions) error {
 	if err := options.Source.Validate(); err != nil {
 		if strings.TrimSpace(string(options.Source)) == "" {
@@ -884,6 +1077,50 @@ func validateCleanupFollowImportsAge(options cleanupFollowImportsOptions) error 
 	return nil
 }
 
+func validateAuditFollowImportsOptions(options auditFollowImportsOptions) error {
+	if err := validateAuditFollowImportsTargets(options); err != nil {
+		return err
+	}
+	if err := validateCleanupFollowImportsPatterns(options.IncludePatterns, "--include"); err != nil {
+		return err
+	}
+	if err := validateCleanupFollowImportsPatterns(options.ExcludePatterns, "--exclude"); err != nil {
+		return err
+	}
+	if options.OlderThan < 0 {
+		return fmt.Errorf("audit-follow-imports --older-than must be greater than or equal to zero")
+	}
+	return nil
+}
+
+func validateAuditFollowImportsTargets(options auditFollowImportsOptions) error {
+	if !options.CheckState && !options.CheckFailedOutput && !options.CheckFailedManifest && !options.CheckFollowHealth {
+		return fmt.Errorf("audit-follow-imports requires at least one check target")
+	}
+	if len(options.StatePaths) > 0 && !options.CheckState {
+		return fmt.Errorf("audit-follow-imports --state-file requires --check-state")
+	}
+	if options.FailedOutputPath != "" && !options.CheckFailedOutput {
+		return fmt.Errorf("audit-follow-imports --failed-output requires --check-failed-output")
+	}
+	if options.FailedManifestPath != "" && !options.CheckFailedManifest {
+		return fmt.Errorf("audit-follow-imports --failed-manifest requires --check-failed-manifest")
+	}
+	if options.CheckState && len(options.StatePaths) == 0 && len(options.InputPaths) == 0 {
+		return fmt.Errorf("audit-follow-imports --check-state requires --input or --state-file")
+	}
+	if len(options.StatePaths) > 0 && len(options.InputPaths) > 0 && len(options.StatePaths) != len(options.InputPaths) {
+		return fmt.Errorf("audit-follow-imports state-file count (%d) must match input count (%d)", len(options.StatePaths), len(options.InputPaths))
+	}
+	if options.CheckFailedOutput && strings.TrimSpace(options.FailedOutputPath) == "" {
+		return fmt.Errorf("audit-follow-imports --check-failed-output requires --failed-output")
+	}
+	if options.CheckFailedManifest && strings.TrimSpace(options.FailedManifestPath) == "" {
+		return fmt.Errorf("audit-follow-imports --check-failed-manifest requires --failed-manifest")
+	}
+	return nil
+}
+
 func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
 	profile := strings.ToLower(strings.TrimSpace(raw))
 	switch profile {
@@ -897,26 +1134,29 @@ func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
 }
 
 func applyCleanupFollowImportsRetentionProfile(options cleanupFollowImportsOptions) cleanupFollowImportsOptions {
-	switch options.RetentionProfile {
-	case "":
-		return options
+	if !options.olderThanExplicit {
+		options.OlderThan = cleanupFollowImportsRetentionProfileOlderThan(options.RetentionProfile)
+	}
+	return options
+}
+
+func applyAuditFollowImportsRetentionProfile(options auditFollowImportsOptions) auditFollowImportsOptions {
+	if !options.olderThanExplicit {
+		options.OlderThan = cleanupFollowImportsRetentionProfileOlderThan(options.RetentionProfile)
+	}
+	return options
+}
+
+func cleanupFollowImportsRetentionProfileOlderThan(profile string) time.Duration {
+	switch profile {
 	case cleanupFollowImportsRetentionProfileStale:
-		if !options.olderThanExplicit {
-			options.OlderThan = time.Hour
-		}
-		return options
+		return time.Hour
 	case cleanupFollowImportsRetentionProfileDaily:
-		if !options.olderThanExplicit {
-			options.OlderThan = 24 * time.Hour
-		}
-		return options
+		return 24 * time.Hour
 	case cleanupFollowImportsRetentionProfileReset:
-		if !options.olderThanExplicit {
-			options.OlderThan = 0
-		}
-		return options
+		return 0
 	default:
-		return options
+		return 0
 	}
 }
 
@@ -1716,6 +1956,159 @@ func cleanupFollowImportsMatchError(options cleanupFollowImportsOptions, report 
 	return fmt.Errorf("cleanup-follow-imports found matching artifacts; see report output")
 }
 
+func auditFollowImports(cfg config.Config, options auditFollowImportsOptions) (auditFollowImportsReport, error) {
+	return auditFollowImportsAt(cfg, options, time.Now().UTC())
+}
+
+func auditFollowImportsAt(cfg config.Config, options auditFollowImportsOptions, now time.Time) (auditFollowImportsReport, error) {
+	targets, err := buildAuditFollowImportsTargets(options)
+	if err != nil {
+		return auditFollowImportsReport{}, err
+	}
+
+	scanOptions := options.cleanupDryRunOptions()
+	report := auditFollowImportsReport{
+		FailIfMatched:    options.FailIfMatched,
+		RetentionProfile: options.RetentionProfile,
+		OlderThanSeconds: int64(options.OlderThan / time.Second),
+		IncludePatterns:  append([]string(nil), options.IncludePatterns...),
+		ExcludePatterns:  append([]string(nil), options.ExcludePatterns...),
+		Status:           "ok",
+		FollowHealth: auditFollowImportsHealthView{
+			File: followImportsHealthPath(cfg.Meta.LogDir),
+		},
+	}
+
+	if options.CheckState {
+		summary, err := pruneCleanupFollowImportsPaths(targets.statePaths, scanOptions, now)
+		if err != nil {
+			return auditFollowImportsReport{}, err
+		}
+		report.StateFiles = newAuditFollowImportsPathSummary(summary)
+	}
+	if options.CheckFailedOutput {
+		summary, err := pruneCleanupFollowImportsPatternTargets(targets.failedOutputBases, scanOptions, now)
+		if err != nil {
+			return auditFollowImportsReport{}, err
+		}
+		report.FailedOutputs = newAuditFollowImportsPatternSummary(summary)
+	}
+	if options.CheckFailedManifest {
+		summary, err := pruneCleanupFollowImportsPatternTargets(targets.failedManifestBases, scanOptions, now)
+		if err != nil {
+			return auditFollowImportsReport{}, err
+		}
+		report.FailedManifests = newAuditFollowImportsPatternSummary(summary)
+	}
+	if options.CheckFollowHealth {
+		report.FollowHealth, err = inspectAuditFollowImportsHealth(cfg.Meta.LogDir, now)
+		if err != nil {
+			return auditFollowImportsReport{}, err
+		}
+	}
+
+	report.MatchFound = auditFollowImportsHasMatches(report)
+	return report, nil
+}
+
+func newAuditFollowImportsPathSummary(summary cleanupFollowImportsPathSummary) auditFollowImportsPathSummary {
+	return auditFollowImportsPathSummary{
+		Requested:             summary.Requested,
+		Matched:               summary.Matched,
+		Missing:               summary.Missing,
+		SkippedByAge:          summary.SkippedByAge,
+		SkippedByPattern:      summary.SkippedByPattern,
+		MatchedPaths:          append([]string(nil), summary.MatchedPaths...),
+		MissingPaths:          append([]string(nil), summary.MissingPaths...),
+		SkippedByPatternPaths: append([]string(nil), summary.SkippedByPatternPaths...),
+		SkippedByAgePaths:     append([]string(nil), summary.SkippedByAgePaths...),
+	}
+}
+
+func newAuditFollowImportsPatternSummary(summary cleanupFollowImportsPatternSummary) auditFollowImportsPatternSummary {
+	return auditFollowImportsPatternSummary{
+		Bases:                 summary.Bases,
+		Matched:               summary.Matched,
+		SkippedByAge:          summary.SkippedByAge,
+		SkippedByPattern:      summary.SkippedByPattern,
+		BasePaths:             append([]string(nil), summary.BasePaths...),
+		MatchedPaths:          append([]string(nil), summary.MatchedPaths...),
+		SkippedByPatternPaths: append([]string(nil), summary.SkippedByPatternPaths...),
+		SkippedByAgePaths:     append([]string(nil), summary.SkippedByAgePaths...),
+	}
+}
+
+func inspectAuditFollowImportsHealth(logDir string, now time.Time) (auditFollowImportsHealthView, error) {
+	view := auditFollowImportsHealthView{
+		File: followImportsHealthPath(logDir),
+	}
+	followHealth, err := loadFollowImportsHealthSnapshot(logDir)
+	if err != nil {
+		return auditFollowImportsHealthView{}, err
+	}
+	if followHealth == nil {
+		return view, nil
+	}
+
+	updatedAt := followHealth.UpdatedAt
+	age, stale := evaluateFollowImportsHealthStaleness(*followHealth, now)
+	view.Present = true
+	view.LastUpdatedAt = &updatedAt
+	view.Status = followHealth.Status
+	view.Source = followHealth.Source
+	view.InputCount = followHealth.InputCount
+	view.Continuous = followHealth.Continuous
+	view.PollIntervalSeconds = followHealth.PollIntervalSeconds
+	view.SnapshotAgeSeconds = int64(age / time.Second)
+	view.Stale = stale
+	view.RequestedWatchMode = followHealth.RequestedWatchMode
+	view.ActiveWatchMode = followHealth.ActiveWatchMode
+	view.WatchFallbacks = followHealth.WatchFallbacks
+	view.WatchTransitions = followHealth.WatchTransitions
+	view.LastFallbackReason = followHealth.LastFallbackReason
+	view.WatchPollCatchups = followHealth.WatchPollCatchups
+	view.WatchPollCatchupBytes = followHealth.WatchCatchupBytes
+	view.Warnings = common.MergeWarnings(
+		append([]common.Warning(nil), followHealth.Warnings...),
+		followImportsHealthStaleWarnings(*followHealth, age, stale),
+	)
+	return view, nil
+}
+
+func auditFollowImportsHasMatches(report auditFollowImportsReport) bool {
+	return report.StateFiles.Matched > 0 ||
+		report.FailedOutputs.Matched > 0 ||
+		report.FailedManifests.Matched > 0 ||
+		report.FollowHealth.Stale
+}
+
+func auditFollowImportsMatchError(options auditFollowImportsOptions, report auditFollowImportsReport) error {
+	if !options.FailIfMatched || !report.MatchFound {
+		return nil
+	}
+	return fmt.Errorf("audit-follow-imports found matching artifacts; see report output")
+}
+
+func (options auditFollowImportsOptions) cleanupDryRunOptions() cleanupFollowImportsOptions {
+	return cleanupFollowImportsOptions{
+		InputPaths:             append([]string(nil), options.InputPaths...),
+		StatePaths:             append([]string(nil), options.StatePaths...),
+		FailedOutputPath:       options.FailedOutputPath,
+		FailedManifestPath:     options.FailedManifestPath,
+		IncludePatterns:        append([]string(nil), options.IncludePatterns...),
+		ExcludePatterns:        append([]string(nil), options.ExcludePatterns...),
+		RetentionProfile:       options.RetentionProfile,
+		CWD:                    options.CWD,
+		DryRun:                 true,
+		OlderThan:              options.OlderThan,
+		olderThanExplicit:      options.olderThanExplicit,
+		PruneState:             options.CheckState,
+		PruneFailedOutput:      options.CheckFailedOutput,
+		PruneFailedManifest:    options.CheckFailedManifest,
+		PruneStaleFollowHealth: options.CheckFollowHealth,
+	}
+}
+
 type cleanupFollowImportsTargets struct {
 	statePaths          []string
 	failedOutputBases   []string
@@ -1766,6 +2159,50 @@ func buildCleanupFollowImportsTargets(options cleanupFollowImportsOptions) (clea
 	return targets, nil
 }
 
+func buildAuditFollowImportsTargets(options auditFollowImportsOptions) (cleanupFollowImportsTargets, error) {
+	cwd, err := resolveIngestImportsCWD(options.CWD)
+	if err != nil {
+		return cleanupFollowImportsTargets{}, err
+	}
+
+	inputs, err := resolveAuditFollowImportsInputs(options.InputPaths, cwd)
+	if err != nil {
+		return cleanupFollowImportsTargets{}, err
+	}
+
+	var targets cleanupFollowImportsTargets
+	if options.CheckState {
+		if len(options.StatePaths) > 0 {
+			targets.statePaths, err = resolveCleanupFollowImportsPaths(options.StatePaths, cwd)
+			if err != nil {
+				return cleanupFollowImportsTargets{}, err
+			}
+		} else {
+			for _, inputPath := range inputs {
+				statePath, err := resolveFollowImportsStatePath(inputPath, "", cwd)
+				if err != nil {
+					return cleanupFollowImportsTargets{}, err
+				}
+				targets.statePaths = append(targets.statePaths, statePath)
+			}
+		}
+		targets.statePaths = dedupeCleanupFollowImportsPaths(targets.statePaths)
+	}
+	if options.CheckFailedOutput {
+		targets.failedOutputBases, err = resolveAuditFollowImportsArtifactBases(options.FailedOutputPath, inputs, cwd)
+		if err != nil {
+			return cleanupFollowImportsTargets{}, err
+		}
+	}
+	if options.CheckFailedManifest {
+		targets.failedManifestBases, err = resolveAuditFollowImportsArtifactBases(options.FailedManifestPath, inputs, cwd)
+		if err != nil {
+			return cleanupFollowImportsTargets{}, err
+		}
+	}
+	return targets, nil
+}
+
 func resolveCleanupFollowImportsInputs(inputPaths []string, cwd string) ([]string, error) {
 	resolved, err := resolveCleanupFollowImportsPaths(inputPaths, cwd)
 	if err != nil {
@@ -1776,6 +2213,22 @@ func resolveCleanupFollowImportsInputs(inputPaths []string, cwd string) ([]strin
 		key := followImportsPathKey(inputPath)
 		if _, ok := seen[key]; ok {
 			return nil, fmt.Errorf("cleanup-follow-imports input %q is duplicated", inputPath)
+		}
+		seen[key] = struct{}{}
+	}
+	return resolved, nil
+}
+
+func resolveAuditFollowImportsInputs(inputPaths []string, cwd string) ([]string, error) {
+	resolved, err := resolveCleanupFollowImportsPaths(inputPaths, cwd)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(resolved))
+	for _, inputPath := range resolved {
+		key := followImportsPathKey(inputPath)
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("audit-follow-imports input %q is duplicated", inputPath)
 		}
 		seen[key] = struct{}{}
 	}
@@ -1795,6 +2248,21 @@ func resolveCleanupFollowImportsPaths(paths []string, cwd string) ([]string, err
 		resolved = append(resolved, resolvedPath)
 	}
 	return resolved, nil
+}
+
+func resolveAuditFollowImportsArtifactBases(base string, inputs []string, cwd string) ([]string, error) {
+	resolvedBase, err := resolveIngestImportsPath(base, cwd)
+	if err != nil {
+		return nil, err
+	}
+	if len(inputs) == 0 {
+		return []string{resolvedBase}, nil
+	}
+	bases := make([]string, 0, len(inputs))
+	for _, inputPath := range inputs {
+		bases = append(bases, deriveFollowImportsInputBasePath(resolvedBase, inputPath, len(inputs)))
+	}
+	return dedupeCleanupFollowImportsPaths(bases), nil
 }
 
 func resolveCleanupFollowImportsArtifactBases(base string, inputs []string, cwd string) ([]string, error) {
@@ -2157,6 +2625,100 @@ func formatCleanupFollowImportsReport(report cleanupFollowImportsReport) string 
 	}
 	for i, path := range report.FailedManifests.SkippedByAgePaths {
 		lines = append(lines, fmt.Sprintf("failed_manifest_skipped_by_age_%d=%s", i+1, path))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func formatAuditFollowImportsReport(report auditFollowImportsReport) string {
+	lines := []string{
+		"audit follow-imports ok",
+		fmt.Sprintf("status=%s", report.Status),
+		fmt.Sprintf("fail_if_matched=%t", report.FailIfMatched),
+		fmt.Sprintf("match_found=%t", report.MatchFound),
+		fmt.Sprintf("retention_profile=%s", fallbackString(report.RetentionProfile)),
+		fmt.Sprintf("older_than_seconds=%d", report.OlderThanSeconds),
+		fmt.Sprintf("include_patterns=%d", len(report.IncludePatterns)),
+		fmt.Sprintf("exclude_patterns=%d", len(report.ExcludePatterns)),
+		fmt.Sprintf("state_files_requested=%d", report.StateFiles.Requested),
+		fmt.Sprintf("state_files_matched=%d", report.StateFiles.Matched),
+		fmt.Sprintf("state_files_missing=%d", report.StateFiles.Missing),
+		fmt.Sprintf("state_files_skipped_by_pattern=%d", report.StateFiles.SkippedByPattern),
+		fmt.Sprintf("state_files_skipped_by_age=%d", report.StateFiles.SkippedByAge),
+		fmt.Sprintf("failed_output_bases=%d", report.FailedOutputs.Bases),
+		fmt.Sprintf("failed_output_matched=%d", report.FailedOutputs.Matched),
+		fmt.Sprintf("failed_output_skipped_by_pattern=%d", report.FailedOutputs.SkippedByPattern),
+		fmt.Sprintf("failed_output_skipped_by_age=%d", report.FailedOutputs.SkippedByAge),
+		fmt.Sprintf("failed_manifest_bases=%d", report.FailedManifests.Bases),
+		fmt.Sprintf("failed_manifest_matched=%d", report.FailedManifests.Matched),
+		fmt.Sprintf("failed_manifest_skipped_by_pattern=%d", report.FailedManifests.SkippedByPattern),
+		fmt.Sprintf("failed_manifest_skipped_by_age=%d", report.FailedManifests.SkippedByAge),
+		fmt.Sprintf("follow_health_file=%s", report.FollowHealth.File),
+		fmt.Sprintf("follow_health_present=%t", report.FollowHealth.Present),
+		fmt.Sprintf("follow_health_last_updated_at=%s", pointerTimeOrNone(report.FollowHealth.LastUpdatedAt)),
+		fmt.Sprintf("follow_health_status=%s", fallbackString(report.FollowHealth.Status)),
+		fmt.Sprintf("follow_health_source=%s", fallbackString(report.FollowHealth.Source)),
+		fmt.Sprintf("follow_health_input_count=%d", report.FollowHealth.InputCount),
+		fmt.Sprintf("follow_health_continuous=%t", report.FollowHealth.Continuous),
+		fmt.Sprintf("follow_health_poll_interval_seconds=%d", report.FollowHealth.PollIntervalSeconds),
+		fmt.Sprintf("follow_health_snapshot_age_seconds=%d", report.FollowHealth.SnapshotAgeSeconds),
+		fmt.Sprintf("follow_health_stale=%t", report.FollowHealth.Stale),
+		fmt.Sprintf("follow_health_requested_watch_mode=%s", fallbackString(report.FollowHealth.RequestedWatchMode)),
+		fmt.Sprintf("follow_health_active_watch_mode=%s", fallbackString(report.FollowHealth.ActiveWatchMode)),
+		fmt.Sprintf("follow_health_watch_fallbacks=%d", report.FollowHealth.WatchFallbacks),
+		fmt.Sprintf("follow_health_watch_transitions=%d", report.FollowHealth.WatchTransitions),
+		fmt.Sprintf("follow_health_last_fallback_reason=%s", fallbackString(report.FollowHealth.LastFallbackReason)),
+		fmt.Sprintf("follow_health_watch_poll_catchups=%d", report.FollowHealth.WatchPollCatchups),
+		fmt.Sprintf("follow_health_watch_poll_catchup_bytes=%d", report.FollowHealth.WatchPollCatchupBytes),
+		fmt.Sprintf("follow_health_warnings=%d", len(report.FollowHealth.Warnings)),
+	}
+	for i, pattern := range report.IncludePatterns {
+		lines = append(lines, fmt.Sprintf("include_pattern_%d=%s", i+1, pattern))
+	}
+	for i, pattern := range report.ExcludePatterns {
+		lines = append(lines, fmt.Sprintf("exclude_pattern_%d=%s", i+1, pattern))
+	}
+	for i, path := range report.StateFiles.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("state_file_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.MissingPaths {
+		lines = append(lines, fmt.Sprintf("state_file_missing_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("state_file_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.StateFiles.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("state_file_skipped_by_age_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.BasePaths {
+		lines = append(lines, fmt.Sprintf("failed_output_base_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("failed_output_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("failed_output_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedOutputs.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("failed_output_skipped_by_age_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.BasePaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_base_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.MatchedPaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_matched_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.SkippedByPatternPaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_skipped_by_pattern_%d=%s", i+1, path))
+	}
+	for i, path := range report.FailedManifests.SkippedByAgePaths {
+		lines = append(lines, fmt.Sprintf("failed_manifest_skipped_by_age_%d=%s", i+1, path))
+	}
+	for i, warning := range report.FollowHealth.Warnings {
+		prefix := fmt.Sprintf("follow_health_warning_%d", i+1)
+		lines = append(lines,
+			fmt.Sprintf("%s_code=%s", prefix, warning.Code),
+			fmt.Sprintf("%s_message=%s", prefix, warning.Message),
+		)
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

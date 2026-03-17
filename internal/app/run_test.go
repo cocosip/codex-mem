@@ -948,6 +948,129 @@ func TestRunCleanupFollowImportsFailIfMatchedPassesWhenNothingMatches(t *testing
 	}
 }
 
+func TestRunAuditFollowImportsReportsPendingArtifacts(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+	oldTime := time.Now().UTC().Add(-48 * time.Hour)
+	for _, path := range []string{statePath, failedOutput, failedManifest} {
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "partial",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"audit-follow-imports",
+		"--input", inputPath,
+		"--check-state",
+		"--failed-output", failedOutputBase,
+		"--check-failed-output",
+		"--failed-manifest", failedManifestBase,
+		"--check-failed-manifest",
+		"--check-follow-health",
+		"--retention-profile", "daily",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run audit-follow-imports: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"audit follow-imports ok",
+		"match_found=true",
+		"retention_profile=daily",
+		"state_files_matched=1",
+		"failed_output_matched=1",
+		"failed_manifest_matched=1",
+		"follow_health_present=true",
+		"follow_health_stale=true",
+		"follow_health_warning_1_code=WARN_FOLLOW_IMPORTS_HEALTH_STALE",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("audit output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	for _, preserved := range []string{statePath, failedOutput, failedManifest, followImportsHealthPath(cfg.Meta.LogDir)} {
+		if _, err := os.Stat(preserved); err != nil {
+			t.Fatalf("expected %s to remain after audit, stat err=%v", preserved, err)
+		}
+	}
+}
+
+func TestRunAuditFollowImportsFailIfMatchedReturnsErrorAfterWritingReport(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll state dir: %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile state file: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := Run(context.Background(), cfg, []string{
+		"audit-follow-imports",
+		"--input", inputPath,
+		"--check-state",
+		"--fail-if-matched",
+	}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected fail-if-matched error")
+	}
+	if !strings.Contains(err.Error(), "found matching artifacts") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"fail_if_matched=true",
+		"match_found=true",
+		"state_files_matched=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("audit fail-if-matched output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
 func TestRunCleanupFollowImportsListsExamples(t *testing.T) {
 	var stdout bytes.Buffer
 	if err := Run(context.Background(), config.Config{}, []string{"cleanup-follow-imports", "--list-examples"}, strings.NewReader(""), &stdout); err != nil {

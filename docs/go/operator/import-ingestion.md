@@ -25,6 +25,7 @@ Do not use this for:
 Use `ingest-imports` when you already have a bounded batch to replay.
 Use `follow-imports` when another process keeps appending to the same JSONL file and you want `codex-mem` to checkpoint progress between notification or polling passes.
 `follow-imports` can now fan in multiple files by repeating `--input`.
+Use `audit-follow-imports` when you want a read-only hygiene report for pending checkpoint, retry-artifact, or stale-health cleanup work before deciding whether to run deletion.
 
 Minimal stdin example:
 
@@ -110,6 +111,12 @@ Audit whether cleanup work is pending and fail the command if anything in the se
 codex-mem.exe cleanup-follow-imports --input .\events.jsonl --prune-state --dry-run --fail-if-matched
 ```
 
+Run the same hygiene audit as a dedicated read-only report command:
+
+```powershell
+codex-mem.exe audit-follow-imports --input .\events.jsonl --check-state --failed-output .\failed-events.jsonl --check-failed-output --failed-manifest .\failed-events.json --check-failed-manifest --check-follow-health --retention-profile daily --fail-if-matched
+```
+
 Useful flags:
 
 - `--source watcher_import|relay_import`
@@ -117,6 +124,7 @@ Useful flags:
 - `--input <path>`
   Optional for `ingest-imports`. Reads JSONL from a file instead of stdin.
   Required for `follow-imports`. Repeat it to follow multiple files in one process.
+  For `cleanup-follow-imports` and `audit-follow-imports`, pair it with checkpoint or retry-artifact target flags when you want the command to derive the same per-input sidecar and retry base paths that `follow-imports` would use.
 - `--cwd <path>`
   Optional. Resolves scope from a specific workspace root.
 - `--branch-name <name>`
@@ -132,12 +140,15 @@ Useful flags:
 - `--failed-output <path>`
   Optional. For `ingest-imports`, requires `--continue-on-error` and writes the original failed input lines to a JSONL file for manual fix-up or replay.
   For `follow-imports`, each polling batch derives a range-suffixed file from the provided base path so earlier failures are not overwritten.
+  For `cleanup-follow-imports` and `audit-follow-imports`, pass the same base path so the command can target the derived range-suffixed retry exports without touching the unsuffixed base file.
 - `--failed-manifest <path>`
   Optional. For `ingest-imports`, requires `--continue-on-error` and writes a JSON manifest with per-line error metadata and raw failed input.
   For `follow-imports`, each polling batch derives a range-suffixed manifest path from the provided base path.
+  For `cleanup-follow-imports` and `audit-follow-imports`, pass the same base path so the command can target the derived range-suffixed retry manifests without touching the unsuffixed base file.
 - `--state-file <path>`
   `follow-imports` only. Optional. Stores the consumed byte offset checkpoint. Defaults to `<input>.offset.json`.
   When `follow-imports` uses multiple `--input` flags, either omit `--state-file` and let each input use its own default sidecar, or repeat `--state-file` once per `--input` in the same order.
+  For `cleanup-follow-imports` and `audit-follow-imports`, pair explicit `--state-file` values with `--prune-state` or `--check-state` when you want to target checkpoint sidecars directly instead of deriving them from `--input`.
 - `--poll-interval <duration>`
   `follow-imports` only. Optional. Controls how often the input file is polled for appended complete lines and how often notify mode performs a safety poll. Defaults to `5s`.
 - `--watch-mode auto|notify|poll`
@@ -152,18 +163,26 @@ Useful flags:
   `cleanup-follow-imports` only. Removes only the range-suffixed JSON retry manifests derived from the provided `--failed-manifest` base path. The unsuffixed base file itself is left alone.
 - `--prune-stale-follow-health`
   `cleanup-follow-imports` only. Reuses the same stale-health rule as `doctor --prune-stale-follow-health` and removes the `follow-imports.health.json` sidecar only when it is currently stale.
+- `--check-state`
+  `audit-follow-imports` only. Audits follow-imports checkpoint sidecars without deleting them. Pair it with `--input` to inspect the default `<input>.offset.json` files, or pair it with explicit `--state-file` paths.
+- `--check-failed-output`
+  `audit-follow-imports` only. Audits only the range-suffixed JSONL retry exports derived from the provided `--failed-output` base path and leaves the base file untouched.
+- `--check-failed-manifest`
+  `audit-follow-imports` only. Audits only the range-suffixed JSON retry manifests derived from the provided `--failed-manifest` base path and leaves the base file untouched.
+- `--check-follow-health`
+  `audit-follow-imports` only. Reports whether the last-known `follow-imports.health.json` snapshot is present, stale, and carrying any warnings, without deleting it.
 - `--older-than <duration>`
-  `cleanup-follow-imports` only. Optional. Limits checkpoint-sidecar and retry-artifact cleanup to files at least this old based on filesystem modification time. Use values such as `30m`, `1h`, or `24h`.
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Limits checkpoint-sidecar and retry-artifact matching to files at least this old based on filesystem modification time. Use values such as `30m`, `1h`, or `24h`.
 - `--dry-run`
   `cleanup-follow-imports` only. Optional. Computes the same cleanup candidates and reports what would be removed, but leaves every file in place.
 - `--fail-if-matched`
-  `cleanup-follow-imports` only. Optional. Returns a non-zero exit after writing the report when the selected cleanup target set matched at least one checkpoint sidecar, retry artifact, or stale follow-health snapshot. This is especially useful with `--dry-run` for CI or scheduled hygiene audits.
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Returns a non-zero exit after writing the report when the selected target set matched at least one checkpoint sidecar, retry artifact, or stale follow-health snapshot. This is especially useful for CI or scheduled hygiene audits.
 - `--include <glob>`
-  `cleanup-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that act as a whitelist for checkpoint and retry-artifact candidate paths. Patterns are matched against both the absolute path and the basename.
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that act as a whitelist for checkpoint and retry-artifact candidate paths. Patterns are matched against both the absolute path and the basename.
 - `--exclude <glob>`
-  `cleanup-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that remove checkpoint and retry-artifact candidates from the cleanup set after includes are considered. Excludes win over includes.
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that remove checkpoint and retry-artifact candidates from the matched set after includes are considered. Excludes win over includes.
 - `--retention-profile stale|daily|reset`
-  `cleanup-follow-imports` only. Optional. Expands to a documented default age threshold instead of making you spell out `--older-than` every time. `stale` means `1h`, `daily` means `24h`, and `reset` means `0s`. An explicit `--older-than` still overrides the profile.
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Expands to a documented default age threshold instead of making you spell out `--older-than` every time. `stale` means `1h`, `daily` means `24h`, and `reset` means `0s`. An explicit `--older-than` still overrides the profile.
 - `--list-examples`
   `cleanup-follow-imports` only. Maintainer-oriented. Lists the checked-in cleanup sample fixture names and relative paths.
 - `--refresh-examples[=<name[,name...]>]`
@@ -245,6 +264,7 @@ If `--failed-manifest` is set, the report also includes the manifest path and ho
 Single-input `follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, transition count, cumulative poll-catchup count and bytes, any warning summaries, any structured watch events since the previous emitted report, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
 Multi-input `follow-imports` returns one aggregate report with command-level watch state, cumulative poll-catchup counters, warning summaries, per-process watch events, total consumed and pending bytes, and one nested per-input report for each followed file.
 `cleanup-follow-imports` reports whether the run was a dry-run, whether `--fail-if-matched` was active, whether the selected target set matched anything, the named retention profile when one is active, the configured age gate in seconds, any include/exclude patterns in effect, how many checkpoint sidecars and derived retry artifacts matched cleanup versus were actually removed, which files were skipped because they were filtered out by pattern or were too new, which explicit state files were already missing, and whether it pruned or would prune the stale follow-health sidecar.
+`audit-follow-imports` reports the same target-selection metadata and matched-versus-skipped counts as a read-only hygiene pass, plus whether the follow-health snapshot is present, when it was last updated, whether it is stale, and any warning summaries carried by that snapshot.
 
 Checked-in sample outputs for common cleanup flows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
 
@@ -281,12 +301,13 @@ codex-mem.exe cleanup-follow-imports --refresh-examples=filtered-cleanup-json
 - For continuous follow mode, `doctor` now marks that sidecar as stale when it has not been refreshed for roughly three poll intervals, with a minimum freshness window of 30 seconds. Stale follow health adds `WARN_FOLLOW_IMPORTS_HEALTH_STALE` so operators can distinguish a healthy last-known state from an old snapshot left behind by a stopped process.
 - If you want to clear only stale follow-health sidecars without touching fresh ones, run `codex-mem.exe doctor --prune-stale-follow-health`. The doctor report then tells you whether it actually removed a stale snapshot via `follow_imports_health_pruned` and `follow_imports_health_prune_reason`.
 - If you want one explicit operator cleanup pass for follow-imports state, use `codex-mem.exe cleanup-follow-imports`. It removes only the artifacts you target with prune flags; it does not infer or delete anything unless you ask for that specific cleanup class.
+- If you want the same target selection and age/pattern filtering logic without any deletion, use `codex-mem.exe audit-follow-imports`. It is the cleaner fit for scheduled reports, pre-cleanup review, and automation that should fail on pending hygiene work before anything is removed.
 - Add `--dry-run` first when you are not fully sure about the target set. The report shows the same matched file list and stale-health outcome it would use for a real cleanup pass, but without deleting anything.
-- Add `--fail-if-matched` when the command should act as a hygiene gate instead of only as an informational report. In dry-run mode this makes pending cleanup work visible to automation through both the report body and the process exit code.
-- Add `--older-than <duration>` when you want cleanup to ignore very recent checkpoint or retry files. This age gate applies to checkpoint sidecars plus range-suffixed retry artifacts, not to the stale-health decision, which still uses the existing follow-health staleness policy.
-- Add `--include` when the cleanup target should stay inside one file family, input label, or path prefix. This is especially useful for multi-input runs where you only want to clean artifacts related to one input at a time.
+- Add `--fail-if-matched` when the command should act as a hygiene gate instead of only as an informational report. On `audit-follow-imports` the command stays read-only; on `cleanup-follow-imports --dry-run` it behaves the same way while still showing what a future deletion pass would remove.
+- Add `--older-than <duration>` when you want cleanup or audit to ignore very recent checkpoint or retry files. This age gate applies to checkpoint sidecars plus range-suffixed retry artifacts, not to the stale-health decision, which still uses the existing follow-health staleness policy.
+- Add `--include` when the cleanup or audit target should stay inside one file family, input label, or path prefix. This is especially useful for multi-input runs where you only want to inspect or clean artifacts related to one input at a time.
 - Add `--exclude` for the final guardrail when a broad include or input set still catches more than you want. Exclude patterns override includes, so they are the safer place to carve out known paths or suffixes.
-- Use `--retention-profile stale` when you want a quick ad-hoc cleanup pass that ignores artifacts newer than one hour, `--retention-profile daily` for a broader once-per-day sweep, and `--retention-profile reset` when you want the selected target set cleaned immediately. If one preset is close but not quite right, keep the profile for readability and add an explicit `--older-than` override.
+- Use `--retention-profile stale` when you want a quick ad-hoc cleanup or audit pass that ignores artifacts newer than one hour, `--retention-profile daily` for a broader once-per-day sweep, and `--retention-profile reset` when you want the selected target set matched immediately. If one preset is close but not quite right, keep the profile for readability and add an explicit `--older-than` override.
 - `cleanup-follow-imports --prune-state` derives the same default checkpoint path that `follow-imports` would use for each `--input`, so you can clean old sidecars without repeating every `.offset.json` name manually.
 - `cleanup-follow-imports --prune-failed-output` and `--prune-failed-manifest` remove only batch-scoped retry artifacts whose names end in the byte-range suffix that `follow-imports` generates (for example `failed.events-a.0-42.jsonl`). The base path you pass stays untouched, which avoids deleting a placeholder or unrelated manually curated file with the unsuffixed name.
 - When multi-input follow mode shares failed-output or failed-manifest bases, pass the same `--input` set to `cleanup-follow-imports` so it derives the same per-input filenames before scanning for range-suffixed artifacts.
