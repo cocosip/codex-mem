@@ -100,6 +100,12 @@ If you want a maintained preset instead of repeating the same release policy fla
 go run ./scripts/readiness-check --policy-profile release
 ```
 
+If your CI runners are materially slower than your release hosts and you only want relaxed timing thresholds without changing warning-failure policy, run:
+
+```powershell
+go run ./scripts/readiness-check --policy-profile slow-ci
+```
+
 Recommended release-gate invocations:
 
 1. Human-readable release gate:

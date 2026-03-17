@@ -463,6 +463,12 @@ Current blockers:
 - In progress: none.
 - Blockers: none.
 - Next step: decide whether the current `ci` and `release` preset values should stay fixed, or whether operators need a third preset or different threshold defaults for slower environments.
+### 2026-03-17 Session Update
+
+- Completed: Added a third `readiness-check` preset for slower environments: `--policy-profile slow-ci`. It expands to more forgiving timing thresholds (`slow_run_ms=20000`, `slow_phase_ms=4000`) without changing warning-failure policy, so slower or more contended CI runners can stay on a named preset instead of copying custom threshold flags. Tests now cover the new preset and summary output, and the README plus maintainer/operator docs now show when to use `ci`, `slow-ci`, and `release`.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the preset catalog is complete enough now, or whether operators would benefit more from real-world sample output snippets than from additional preset names.
 
 ## Recommended Next Step
 

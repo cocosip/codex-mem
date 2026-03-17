@@ -166,13 +166,15 @@ If you want a named preset instead of repeating the same flag bundle each time, 
 
 ```powershell
 go run ./scripts/readiness-check --policy-profile ci
+go run ./scripts/readiness-check --policy-profile slow-ci
 go run ./scripts/readiness-check --policy-profile release
 ```
 
 Today those profiles expand to:
 
 1. `ci`: `--slow-run-ms=8000 --slow-phase-ms=1000`
-2. `release`: the `ci` thresholds plus `--fail-on-warning-code WARN_FOLLOW_IMPORTS_HEALTH_STALE`
+2. `slow-ci`: `--slow-run-ms=20000 --slow-phase-ms=4000`
+3. `release`: the `ci` thresholds plus `--fail-on-warning-code WARN_FOLLOW_IMPORTS_HEALTH_STALE`
 
 Recommended starting points:
 
@@ -188,13 +190,19 @@ go run ./scripts/readiness-check
 go run ./scripts/readiness-check --json --policy-profile ci
 ```
 
-3. Release-oriented run that keeps phase timing and fails on stale follow-health warnings:
+3. Slower or more contended CI runner with a more forgiving threshold preset:
+
+```powershell
+go run ./scripts/readiness-check --json --policy-profile slow-ci
+```
+
+4. Release-oriented run that keeps phase timing and fails on stale follow-health warnings:
 
 ```powershell
 go run ./scripts/readiness-check --json --policy-profile release
 ```
 
-4. Failure-investigation run that gathers every phase it can before exiting:
+5. Failure-investigation run that gathers every phase it can before exiting:
 
 ```powershell
 go run ./scripts/readiness-check --json --keep-going --policy-profile release

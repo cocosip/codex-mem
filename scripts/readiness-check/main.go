@@ -127,6 +127,7 @@ const (
 	readinessPhaseHTTP   = "http_mcp_smoke_test"
 
 	readinessPolicyProfileCI      = "ci"
+	readinessPolicyProfileSlowCI  = "slow-ci"
 	readinessPolicyProfileRelease = "release"
 )
 
@@ -277,7 +278,7 @@ func parsePositiveInt64Flag(name string, raw string) (int64, error) {
 func normalizePolicyProfile(raw string) (string, error) {
 	profile := strings.ToLower(strings.TrimSpace(raw))
 	switch profile {
-	case readinessPolicyProfileCI, readinessPolicyProfileRelease:
+	case readinessPolicyProfileCI, readinessPolicyProfileSlowCI, readinessPolicyProfileRelease:
 		return profile, nil
 	case "":
 		return "", errors.New(`invalid value for "--policy-profile": empty`)
@@ -296,6 +297,14 @@ func applyPolicyProfile(options readinessOptions) (readinessOptions, error) {
 		}
 		if !options.slowPhaseExplicit {
 			options.SlowPhaseThresholdMS = 1000
+		}
+		return options, nil
+	case readinessPolicyProfileSlowCI:
+		if !options.slowRunExplicit {
+			options.SlowRunThresholdMS = 20000
+		}
+		if !options.slowPhaseExplicit {
+			options.SlowPhaseThresholdMS = 4000
 		}
 		return options, nil
 	case readinessPolicyProfileRelease:

@@ -164,6 +164,22 @@ func TestParseOptionsAppliesCIProfileDefaults(t *testing.T) {
 	}
 }
 
+func TestParseOptionsAppliesSlowCIProfileDefaults(t *testing.T) {
+	options, err := parseOptions([]string{"--policy-profile", "slow-ci"})
+	if err != nil {
+		t.Fatalf("parseOptions: %v", err)
+	}
+	if options.PolicyProfile != readinessPolicyProfileSlowCI {
+		t.Fatalf("unexpected policy profile: %q", options.PolicyProfile)
+	}
+	if options.SlowRunThresholdMS != 20000 || options.SlowPhaseThresholdMS != 4000 {
+		t.Fatalf("unexpected profile thresholds: run=%d phase=%d", options.SlowRunThresholdMS, options.SlowPhaseThresholdMS)
+	}
+	if len(options.FailOnWarningCodes) != 0 {
+		t.Fatalf("expected no fail-on-warning codes for slow-ci profile, got %+v", options.FailOnWarningCodes)
+	}
+}
+
 func TestParseOptionsAllowsExplicitOverridesOnProfile(t *testing.T) {
 	options, err := parseOptions([]string{
 		"--policy-profile=release",
@@ -181,6 +197,30 @@ func TestParseOptionsAllowsExplicitOverridesOnProfile(t *testing.T) {
 	}
 	if !slices.Equal(options.FailOnWarningCodes, []string{readinessWarnFollowHealthStale, "WARN_READINESS_RUN_SLOW"}) {
 		t.Fatalf("unexpected merged fail-on-warning codes: %+v", options.FailOnWarningCodes)
+	}
+}
+
+func TestWriteReadinessSummaryIncludesNamedPolicyProfile(t *testing.T) {
+	report := newReadinessReport(readinessOptions{
+		PolicyProfile:        readinessPolicyProfileSlowCI,
+		SlowRunThresholdMS:   20000,
+		SlowPhaseThresholdMS: 4000,
+	})
+
+	var buffer bytes.Buffer
+	if err := writeReadinessSummary(&buffer, report); err != nil {
+		t.Fatalf("writeReadinessSummary: %v", err)
+	}
+
+	output := buffer.String()
+	for _, fragment := range []string{
+		"policy_profile=slow-ci",
+		"slow_run_threshold_ms=20000",
+		"slow_phase_threshold_ms=4000",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("summary missing %q:\n%s", fragment, output)
+		}
 	}
 }
 
