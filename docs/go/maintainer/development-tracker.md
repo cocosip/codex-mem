@@ -151,6 +151,27 @@ Immediate next tasks:
 
 ### 2026-03-17 Session Update
 
+- Completed: Added a fifth follow-import hygiene target preset: `--target-profile artifacts`. It expands to checkpoint-sidecar plus retry-artifact targets without touching follow-health snapshots, which fills the gap between `all` and the narrower `state` / `retry` profiles. Parser and end-to-end CLI tests now verify that `artifacts` selects state plus retry work while leaving follow-health out of both cleanup and audit reports, and the operator docs/README now advertise the new preset.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current target-profile catalog is now complete enough, or whether future operator feedback should drive any further preset additions.
+
+### 2026-03-17 Session Update
+
+- Completed: Added checked-in sample outputs that explicitly exercise the new follow-import hygiene target presets. The repository now includes a `cleanup-follow-imports` text fixture for `--target-profile all` plus an `audit-follow-imports` JSON fixture for `--target-profile retry`, and the example-list tests plus operator docs now advertise those preset-focused fixtures alongside the older age/pattern examples.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the preset catalog is complete enough now, or whether operators would benefit more from another profile such as "artifacts-only" that excludes follow-health.
+
+### 2026-03-17 Session Update
+
+- Completed: Added `--target-profile` presets to `cleanup-follow-imports` and `audit-follow-imports` with initial `all`, `state`, `retry`, and `health` values. The profile layer expands to the existing prune/check booleans instead of introducing a second hygiene engine, so explicit `--prune-*` and `--check-*` flags still work and can be combined with a profile. App and parser coverage now verifies target-profile parsing plus end-to-end cleanup/audit runs, and the import-ingestion/README docs now show the new shorthand for common hygiene slices.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current target-profile catalog is enough, or whether follow/import operators would benefit more from checked-in sample outputs that exercise the new presets explicitly.
+
+### 2026-03-17 Session Update
+
 - Completed: Fixed Linux CI drift in unit tests and pinned the workflow lint toolchain to the same `golangci-lint` version used locally. The follow-import and readiness example-list tests now build expected fixture paths with `filepath.Join(...)` instead of hard-coding Windows separators, the duplicate follow-input test now uses a platform-neutral relative path, and `.github/workflows/build-release.yml` now pins `golangci-lint` to `v2.10.1` with the same `./...` target as the local command.
 - In progress: none.
 - Blockers: none.

@@ -1,0 +1,47 @@
+{
+  "fail_if_matched": true,
+  "match_found": true,
+  "target_profile": "retry",
+  "retention_profile": "daily",
+  "older_than_seconds": 86400,
+  "status": "ok",
+  "state_files": {
+    "requested": 0,
+    "matched": 0,
+    "missing": 0
+  },
+  "failed_outputs": {
+    "bases": 1,
+    "matched": 1,
+    "skipped_by_age": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.jsonl"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.0-42.jsonl"
+    ],
+    "skipped_by_age_paths": [
+      "D:\\Ops\\follow\\failed\\failed.43-84.jsonl"
+    ]
+  },
+  "failed_manifests": {
+    "bases": 1,
+    "matched": 1,
+    "skipped_by_age": 1,
+    "base_paths": [
+      "D:\\Ops\\follow\\failed\\failed.json"
+    ],
+    "matched_paths": [
+      "D:\\Ops\\follow\\failed\\failed.0-42.json"
+    ],
+    "skipped_by_age_paths": [
+      "D:\\Ops\\follow\\failed\\failed.43-84.json"
+    ]
+  },
+  "follow_health": {
+    "file": "D:\\Ops\\follow\\logs\\follow-imports.health.json",
+    "present": false,
+    "continuous": false,
+    "stale": false
+  }
+}

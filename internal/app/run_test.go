@@ -870,6 +870,129 @@ func TestRunCleanupFollowImportsReportsRetentionProfile(t *testing.T) {
 	}
 }
 
+func TestRunCleanupFollowImportsReportsTargetProfile(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--target-profile", "all",
+		"--input", inputPath,
+		"--failed-output", failedOutputBase,
+		"--failed-manifest", failedManifestBase,
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports with target profile: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"target_profile=all",
+		"state_files_removed=1",
+		"failed_output_removed=1",
+		"failed_manifest_removed=1",
+		"follow_health_pruned=true",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup target-profile output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunCleanupFollowImportsArtifactsTargetProfileSkipsFollowHealth(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "ok",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"cleanup-follow-imports",
+		"--target-profile", "artifacts",
+		"--input", inputPath,
+		"--failed-output", failedOutputBase,
+		"--failed-manifest", failedManifestBase,
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run cleanup-follow-imports with artifacts target profile: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"target_profile=artifacts",
+		"state_files_removed=1",
+		"failed_output_removed=1",
+		"failed_manifest_removed=1",
+		"follow_health_pruned=false",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("cleanup artifacts target-profile output missing %q:\n%s", fragment, output)
+		}
+	}
+	if _, err := os.Stat(followImportsHealthPath(cfg.Meta.LogDir)); err != nil {
+		t.Fatalf("expected follow-health snapshot to remain, stat err=%v", err)
+	}
+}
+
 func TestRunCleanupFollowImportsFailIfMatchedReturnsErrorAfterWritingReport(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
@@ -1024,6 +1147,109 @@ func TestRunAuditFollowImportsReportsPendingArtifacts(t *testing.T) {
 	for _, preserved := range []string{statePath, failedOutput, failedManifest, followImportsHealthPath(cfg.Meta.LogDir)} {
 		if _, err := os.Stat(preserved); err != nil {
 			t.Fatalf("expected %s to remain after audit, stat err=%v", preserved, err)
+		}
+	}
+}
+
+func TestRunAuditFollowImportsReportsTargetProfile(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"audit-follow-imports",
+		"--target-profile", "retry",
+		"--failed-output", failedOutputBase,
+		"--failed-manifest", failedManifestBase,
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run audit-follow-imports with target profile: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"target_profile=retry",
+		"failed_output_matched=1",
+		"failed_manifest_matched=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("audit target-profile output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestRunAuditFollowImportsArtifactsTargetProfileSkipsFollowHealth(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		Meta: config.LoadMetadata{
+			LogDir: filepath.Join(root, "logs"),
+		},
+	}
+
+	inputPath := filepath.Join(root, "events.jsonl")
+	statePath := inputPath + ".offset.json"
+	failedOutputBase := filepath.Join(root, "failed", "failed.jsonl")
+	failedManifestBase := filepath.Join(root, "failed", "failed.json")
+	failedOutput := filepath.Join(root, "failed", "failed.0-42.jsonl")
+	failedManifest := filepath.Join(root, "failed", "failed.0-42.json")
+	for _, path := range []string{inputPath, statePath, failedOutput, failedManifest} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	staleSnapshot := followImportsHealthSnapshot{
+		Status:              "partial",
+		UpdatedAt:           time.Now().UTC().Add(-2 * time.Minute),
+		Source:              "watcher_import",
+		InputCount:          1,
+		Continuous:          true,
+		PollIntervalSeconds: 5,
+	}
+	if err := saveFollowImportsHealthSnapshot(cfg.Meta.LogDir, staleSnapshot); err != nil {
+		t.Fatalf("saveFollowImportsHealthSnapshot: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"audit-follow-imports",
+		"--target-profile", "artifacts",
+		"--input", inputPath,
+		"--failed-output", failedOutputBase,
+		"--failed-manifest", failedManifestBase,
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run audit-follow-imports with artifacts target profile: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"target_profile=artifacts",
+		"state_files_matched=1",
+		"failed_output_matched=1",
+		"failed_manifest_matched=1",
+		"follow_health_present=false",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("audit artifacts target-profile output missing %q:\n%s", fragment, output)
 		}
 	}
 }

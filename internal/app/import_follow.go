@@ -62,6 +62,7 @@ type followImportsHygieneOptions struct {
 	FailedManifestPath string
 	IncludePatterns    []string
 	ExcludePatterns    []string
+	TargetProfile      string
 	RetentionProfile   string
 	CWD                string
 	JSON               bool
@@ -220,6 +221,7 @@ type cleanupFollowImportsReport struct {
 	DryRun           bool                                 `json:"dry_run"`
 	FailIfMatched    bool                                 `json:"fail_if_matched"`
 	MatchFound       bool                                 `json:"match_found"`
+	TargetProfile    string                               `json:"target_profile,omitempty"`
 	RetentionProfile string                               `json:"retention_profile,omitempty"`
 	OlderThanSeconds int64                                `json:"older_than_seconds,omitempty"`
 	IncludePatterns  []string                             `json:"include_patterns,omitempty"`
@@ -268,6 +270,7 @@ type cleanupFollowImportsFollowHealthView struct {
 type auditFollowImportsReport struct {
 	FailIfMatched    bool                             `json:"fail_if_matched"`
 	MatchFound       bool                             `json:"match_found"`
+	TargetProfile    string                           `json:"target_profile,omitempty"`
 	RetentionProfile string                           `json:"retention_profile,omitempty"`
 	OlderThanSeconds int64                            `json:"older_than_seconds,omitempty"`
 	IncludePatterns  []string                         `json:"include_patterns,omitempty"`
@@ -333,6 +336,14 @@ const (
 
 const followImportsCheckpointWindow = 256
 const followImportsPollCatchupWarningThreshold = 3
+
+const (
+	followImportsTargetProfileAll       = "all"
+	followImportsTargetProfileArtifacts = "artifacts"
+	followImportsTargetProfileState     = "state"
+	followImportsTargetProfileRetry     = "retry"
+	followImportsTargetProfileHealth    = "health"
+)
 
 const (
 	cleanupFollowImportsRetentionProfileStale = "stale"
@@ -751,6 +762,7 @@ func parseCleanupFollowImportsOptions(args []string) (cleanupFollowImportsOption
 		i = next
 	}
 
+	applyCleanupFollowImportsTargetProfile(&options)
 	applyFollowImportsHygieneRetentionProfile(&options.followImportsHygieneOptions)
 	if err := validateCleanupFollowImportsOptions(options); err != nil {
 		return cleanupFollowImportsOptions{}, err
@@ -824,6 +836,12 @@ func parseFollowImportsHygieneOptionValue(args []string, index int, arg string, 
 		options.IncludePatterns = append(options.IncludePatterns, parseCleanupFollowImportsPatterns(value)...)
 	case "--exclude":
 		options.ExcludePatterns = append(options.ExcludePatterns, parseCleanupFollowImportsPatterns(value)...)
+	case "--target-profile":
+		profile, err := normalizeFollowImportsTargetProfile(value)
+		if err != nil {
+			return index, err
+		}
+		options.TargetProfile = profile
 	case "--retention-profile":
 		profile, err := normalizeCleanupFollowImportsRetentionProfile(value)
 		if err != nil {
@@ -857,6 +875,7 @@ func parseAuditFollowImportsOptions(args []string) (auditFollowImportsOptions, e
 		i = next
 	}
 
+	applyAuditFollowImportsTargetProfile(&options)
 	applyFollowImportsHygieneRetentionProfile(&options.followImportsHygieneOptions)
 	if err := validateAuditFollowImportsOptions(options); err != nil {
 		return auditFollowImportsOptions{}, err
@@ -1007,6 +1026,66 @@ func normalizeCleanupFollowImportsRetentionProfile(raw string) (string, error) {
 		return "", fmt.Errorf(`invalid value for "--retention-profile": empty`)
 	default:
 		return "", fmt.Errorf(`invalid value for "--retention-profile": %q`, raw)
+	}
+}
+
+func normalizeFollowImportsTargetProfile(raw string) (string, error) {
+	profile := strings.ToLower(strings.TrimSpace(raw))
+	switch profile {
+	case followImportsTargetProfileAll, followImportsTargetProfileArtifacts, followImportsTargetProfileState, followImportsTargetProfileRetry, followImportsTargetProfileHealth:
+		return profile, nil
+	case "":
+		return "", fmt.Errorf(`invalid value for "--target-profile": empty`)
+	default:
+		return "", fmt.Errorf(`invalid value for "--target-profile": %q`, raw)
+	}
+}
+
+func applyCleanupFollowImportsTargetProfile(options *cleanupFollowImportsOptions) {
+	if options == nil {
+		return
+	}
+	switch options.TargetProfile {
+	case followImportsTargetProfileAll:
+		options.PruneState = true
+		options.PruneFailedOutput = true
+		options.PruneFailedManifest = true
+		options.PruneStaleFollowHealth = true
+	case followImportsTargetProfileArtifacts:
+		options.PruneState = true
+		options.PruneFailedOutput = true
+		options.PruneFailedManifest = true
+	case followImportsTargetProfileState:
+		options.PruneState = true
+	case followImportsTargetProfileRetry:
+		options.PruneFailedOutput = true
+		options.PruneFailedManifest = true
+	case followImportsTargetProfileHealth:
+		options.PruneStaleFollowHealth = true
+	}
+}
+
+func applyAuditFollowImportsTargetProfile(options *auditFollowImportsOptions) {
+	if options == nil {
+		return
+	}
+	switch options.TargetProfile {
+	case followImportsTargetProfileAll:
+		options.CheckState = true
+		options.CheckFailedOutput = true
+		options.CheckFailedManifest = true
+		options.CheckFollowHealth = true
+	case followImportsTargetProfileArtifacts:
+		options.CheckState = true
+		options.CheckFailedOutput = true
+		options.CheckFailedManifest = true
+	case followImportsTargetProfileState:
+		options.CheckState = true
+	case followImportsTargetProfileRetry:
+		options.CheckFailedOutput = true
+		options.CheckFailedManifest = true
+	case followImportsTargetProfileHealth:
+		options.CheckFollowHealth = true
 	}
 }
 
@@ -1774,6 +1853,7 @@ func cleanupFollowImportsAt(cfg config.Config, options cleanupFollowImportsOptio
 	report := cleanupFollowImportsReport{
 		DryRun:           options.DryRun,
 		FailIfMatched:    options.FailIfMatched,
+		TargetProfile:    options.TargetProfile,
 		RetentionProfile: options.RetentionProfile,
 		OlderThanSeconds: int64(options.OlderThan / time.Second),
 		IncludePatterns:  append([]string(nil), options.IncludePatterns...),
@@ -1841,6 +1921,7 @@ func auditFollowImportsAt(cfg config.Config, options auditFollowImportsOptions, 
 	scanOptions := options.cleanupDryRunOptions()
 	report := auditFollowImportsReport{
 		FailIfMatched:    options.FailIfMatched,
+		TargetProfile:    options.TargetProfile,
 		RetentionProfile: options.RetentionProfile,
 		OlderThanSeconds: int64(options.OlderThan / time.Second),
 		IncludePatterns:  append([]string(nil), options.IncludePatterns...),
@@ -1970,6 +2051,7 @@ func (options auditFollowImportsOptions) cleanupDryRunOptions() cleanupFollowImp
 			FailedManifestPath: options.FailedManifestPath,
 			IncludePatterns:    append([]string(nil), options.IncludePatterns...),
 			ExcludePatterns:    append([]string(nil), options.ExcludePatterns...),
+			TargetProfile:      options.TargetProfile,
 			RetentionProfile:   options.RetentionProfile,
 			CWD:                options.CWD,
 			OlderThan:          options.OlderThan,
@@ -2449,6 +2531,9 @@ func formatCleanupFollowImportsReport(report cleanupFollowImportsReport) string 
 		fmt.Sprintf("follow_health_pruned=%t", report.FollowHealth.Pruned),
 		fmt.Sprintf("follow_health_prune_reason=%s", fallbackString(report.FollowHealth.PruneReason)),
 	}
+	if report.TargetProfile != "" {
+		lines = append(lines, fmt.Sprintf("target_profile=%s", report.TargetProfile))
+	}
 	for i, pattern := range report.IncludePatterns {
 		lines = append(lines, fmt.Sprintf("include_pattern_%d=%s", i+1, pattern))
 	}
@@ -2544,6 +2629,9 @@ func formatAuditFollowImportsReport(report auditFollowImportsReport) string {
 		fmt.Sprintf("follow_health_watch_poll_catchups=%d", report.FollowHealth.WatchPollCatchups),
 		fmt.Sprintf("follow_health_watch_poll_catchup_bytes=%d", report.FollowHealth.WatchPollCatchupBytes),
 		fmt.Sprintf("follow_health_warnings=%d", len(report.FollowHealth.Warnings)),
+	}
+	if report.TargetProfile != "" {
+		lines = append(lines, fmt.Sprintf("target_profile=%s", report.TargetProfile))
 	}
 	for i, pattern := range report.IncludePatterns {
 		lines = append(lines, fmt.Sprintf("include_pattern_%d=%s", i+1, pattern))

@@ -240,6 +240,61 @@ func TestParseCleanupFollowImportsOptionsAppliesRetentionProfileDefaults(t *test
 	}
 }
 
+func TestParseCleanupFollowImportsOptionsAppliesTargetProfileDefaults(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{
+		"--target-profile", "retry",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+		"--dry-run",
+	})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if got, want := options.TargetProfile, followImportsTargetProfileRetry; got != want {
+		t.Fatalf("target profile mismatch: got %q want %q", got, want)
+	}
+	if !options.PruneFailedOutput || !options.PruneFailedManifest {
+		t.Fatalf("expected retry target profile to enable retry cleanup targets, got %+v", options)
+	}
+	if options.PruneState || options.PruneStaleFollowHealth {
+		t.Fatalf("expected retry target profile to leave state/health cleanup disabled, got %+v", options)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsAppliesArtifactsTargetProfileDefaults(t *testing.T) {
+	options, err := parseCleanupFollowImportsOptions([]string{
+		"--target-profile", "artifacts",
+		"--input", "events.jsonl",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+		"--dry-run",
+	})
+	if err != nil {
+		t.Fatalf("parseCleanupFollowImportsOptions: %v", err)
+	}
+	if got, want := options.TargetProfile, followImportsTargetProfileArtifacts; got != want {
+		t.Fatalf("target profile mismatch: got %q want %q", got, want)
+	}
+	if !options.PruneState || !options.PruneFailedOutput || !options.PruneFailedManifest {
+		t.Fatalf("expected artifacts target profile to enable state and retry cleanup targets, got %+v", options)
+	}
+	if options.PruneStaleFollowHealth {
+		t.Fatalf("expected artifacts target profile to leave follow-health cleanup disabled, got %+v", options)
+	}
+}
+
+func TestParseCleanupFollowImportsOptionsRejectsUnknownTargetProfile(t *testing.T) {
+	_, err := parseCleanupFollowImportsOptions([]string{
+		"--target-profile", "everything",
+	})
+	if err == nil {
+		t.Fatal("expected invalid target profile error")
+	}
+	if !strings.Contains(err.Error(), `"--target-profile"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseCleanupFollowImportsOptionsAllowsOlderThanOverrideOnRetentionProfile(t *testing.T) {
 	options, err := parseCleanupFollowImportsOptions([]string{
 		"--failed-output", "failed.jsonl",
@@ -372,6 +427,75 @@ func TestParseAuditFollowImportsOptionsAppliesRetentionProfileDefaults(t *testin
 	}
 }
 
+func TestParseAuditFollowImportsOptionsAppliesTargetProfileDefaults(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--target-profile", "all",
+		"--input", "events.jsonl",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if got, want := options.TargetProfile, followImportsTargetProfileAll; got != want {
+		t.Fatalf("target profile mismatch: got %q want %q", got, want)
+	}
+	if !options.CheckState || !options.CheckFailedOutput || !options.CheckFailedManifest || !options.CheckFollowHealth {
+		t.Fatalf("expected all target profile to enable every audit target, got %+v", options)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsAllowsHealthTargetProfileWithoutPaths(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--target-profile", "health",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if got, want := options.TargetProfile, followImportsTargetProfileHealth; got != want {
+		t.Fatalf("target profile mismatch: got %q want %q", got, want)
+	}
+	if !options.CheckFollowHealth {
+		t.Fatalf("expected health target profile to enable follow-health audit, got %+v", options)
+	}
+	if options.CheckState || options.CheckFailedOutput || options.CheckFailedManifest {
+		t.Fatalf("expected health target profile to leave file-based audit targets disabled, got %+v", options)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsAppliesArtifactsTargetProfileDefaults(t *testing.T) {
+	options, err := parseAuditFollowImportsOptions([]string{
+		"--target-profile", "artifacts",
+		"--input", "events.jsonl",
+		"--failed-output", "failed.jsonl",
+		"--failed-manifest", "failed.json",
+	})
+	if err != nil {
+		t.Fatalf("parseAuditFollowImportsOptions: %v", err)
+	}
+	if got, want := options.TargetProfile, followImportsTargetProfileArtifacts; got != want {
+		t.Fatalf("target profile mismatch: got %q want %q", got, want)
+	}
+	if !options.CheckState || !options.CheckFailedOutput || !options.CheckFailedManifest {
+		t.Fatalf("expected artifacts target profile to enable state and retry audit targets, got %+v", options)
+	}
+	if options.CheckFollowHealth {
+		t.Fatalf("expected artifacts target profile to leave follow-health audit disabled, got %+v", options)
+	}
+}
+
+func TestParseAuditFollowImportsOptionsRejectsUnknownTargetProfile(t *testing.T) {
+	_, err := parseAuditFollowImportsOptions([]string{
+		"--target-profile", "everything",
+	})
+	if err == nil {
+		t.Fatal("expected invalid target profile error")
+	}
+	if !strings.Contains(err.Error(), `"--target-profile"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseAuditFollowImportsOptionsAllowsOlderThanOverrideOnRetentionProfile(t *testing.T) {
 	options, err := parseAuditFollowImportsOptions([]string{
 		"--failed-output", "failed.jsonl",
@@ -473,7 +597,8 @@ func TestListAuditFollowImportsExamples(t *testing.T) {
 	for _, fragment := range []string{
 		"example=daily-audit-text path=" + filepath.Join("testdata", "audit-follow-imports-daily-audit.txt") + " format=text",
 		"example=filtered-audit-json path=" + filepath.Join("testdata", "audit-follow-imports-filtered-audit.json") + " format=json",
-		"example_count=2",
+		"example=target-profile-retry-json path=" + filepath.Join("testdata", "audit-follow-imports-target-profile-retry.json") + " format=json",
+		"example_count=3",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("list output missing %q:\n%s", fragment, output)
@@ -550,7 +675,8 @@ func TestListCleanupFollowImportsExamples(t *testing.T) {
 	for _, fragment := range []string{
 		"example=daily-dry-run-text path=" + filepath.Join("testdata", "cleanup-follow-imports-daily-dry-run.txt") + " format=text",
 		"example=filtered-cleanup-json path=" + filepath.Join("testdata", "cleanup-follow-imports-filtered-cleanup.json") + " format=json",
-		"example_count=2",
+		"example=target-profile-all-text path=" + filepath.Join("testdata", "cleanup-follow-imports-target-profile-all.txt") + " format=text",
+		"example_count=3",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("list output missing %q:\n%s", fragment, output)

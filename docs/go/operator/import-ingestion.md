@@ -105,6 +105,12 @@ Use a named retention preset instead of spelling out an age threshold:
 codex-mem.exe cleanup-follow-imports --failed-output .\failed-events.jsonl --prune-failed-output --retention-profile daily --dry-run
 ```
 
+Use a named target preset when the command should cover a common hygiene slice:
+
+```powershell
+codex-mem.exe cleanup-follow-imports --target-profile all --input .\events.jsonl --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --dry-run
+```
+
 Audit whether cleanup work is pending and fail the command if anything in the selected target set matches:
 
 ```powershell
@@ -115,6 +121,18 @@ Run the same hygiene audit as a dedicated read-only report command:
 
 ```powershell
 codex-mem.exe audit-follow-imports --input .\events.jsonl --check-state --failed-output .\failed-events.jsonl --check-failed-output --failed-manifest .\failed-events.json --check-failed-manifest --check-follow-health --retention-profile daily --fail-if-matched
+```
+
+Focus that audit on retry exports only:
+
+```powershell
+codex-mem.exe audit-follow-imports --target-profile retry --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --retention-profile daily --fail-if-matched
+```
+
+Cover checkpoint plus retry artifacts together while leaving follow-health untouched:
+
+```powershell
+codex-mem.exe cleanup-follow-imports --target-profile artifacts --input .\events.jsonl --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --dry-run
 ```
 
 Useful flags:
@@ -181,6 +199,8 @@ Useful flags:
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that act as a whitelist for checkpoint and retry-artifact candidate paths. Patterns are matched against both the absolute path and the basename.
 - `--exclude <glob>`
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Repeats or accepts comma-separated glob patterns that remove checkpoint and retry-artifact candidates from the matched set after includes are considered. Excludes win over includes.
+- `--target-profile all|artifacts|state|retry|health`
+  `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Expands to a documented default target set instead of making you spell out the target flags every time. `all` enables every target class, `artifacts` enables checkpoint plus retry-artifact targets while leaving follow-health alone, `state` enables only checkpoint sidecars, `retry` enables only failed-output plus failed-manifest artifacts, and `health` enables only follow-health inspection/pruning. Explicit `--prune-*` or `--check-*` flags still add extra targets on top.
 - `--retention-profile stale|daily|reset`
   `cleanup-follow-imports` and `audit-follow-imports` only. Optional. Expands to a documented default age threshold instead of making you spell out `--older-than` every time. `stale` means `1h`, `daily` means `24h`, and `reset` means `0s`. An explicit `--older-than` still overrides the profile.
 
@@ -266,8 +286,10 @@ Checked-in sample outputs for common cleanup flows live under [../../../internal
 
 - [cleanup-follow-imports-daily-dry-run.txt](../../../internal/app/testdata/cleanup-follow-imports-daily-dry-run.txt)
 - [cleanup-follow-imports-filtered-cleanup.json](../../../internal/app/testdata/cleanup-follow-imports-filtered-cleanup.json)
+- [cleanup-follow-imports-target-profile-all.txt](../../../internal/app/testdata/cleanup-follow-imports-target-profile-all.txt)
 - [audit-follow-imports-daily-audit.txt](../../../internal/app/testdata/audit-follow-imports-daily-audit.txt)
 - [audit-follow-imports-filtered-audit.json](../../../internal/app/testdata/audit-follow-imports-filtered-audit.json)
+- [audit-follow-imports-target-profile-retry.json](../../../internal/app/testdata/audit-follow-imports-target-profile-retry.json)
 
 If a deliberate output change makes those fixtures drift, refresh the cleanup fixtures from the repository root through the test-only maintainer helper:
 
@@ -326,6 +348,7 @@ go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayI
 - Add `--older-than <duration>` when you want cleanup or audit to ignore very recent checkpoint or retry files. This age gate applies to checkpoint sidecars plus range-suffixed retry artifacts, not to the stale-health decision, which still uses the existing follow-health staleness policy.
 - Add `--include` when the cleanup or audit target should stay inside one file family, input label, or path prefix. This is especially useful for multi-input runs where you only want to inspect or clean artifacts related to one input at a time.
 - Add `--exclude` for the final guardrail when a broad include or input set still catches more than you want. Exclude patterns override includes, so they are the safer place to carve out known paths or suffixes.
+- Use `--target-profile all` when you want the old "turn on every target flag" behavior without spelling out each flag, `--target-profile artifacts` when the command should cover checkpoint and retry files but intentionally leave follow-health snapshots alone, `--target-profile retry` when scheduled audits should look only at range-suffixed retry exports, `--target-profile state` when checkpoint hygiene is the only concern, and `--target-profile health` when you only need the last-known follow-health snapshot.
 - Use `--retention-profile stale` when you want a quick ad-hoc cleanup or audit pass that ignores artifacts newer than one hour, `--retention-profile daily` for a broader once-per-day sweep, and `--retention-profile reset` when you want the selected target set matched immediately. If one preset is close but not quite right, keep the profile for readability and add an explicit `--older-than` override.
 - `cleanup-follow-imports --prune-state` derives the same default checkpoint path that `follow-imports` would use for each `--input`, so you can clean old sidecars without repeating every `.offset.json` name manually.
 - `cleanup-follow-imports --prune-failed-output` and `--prune-failed-manifest` remove only batch-scoped retry artifacts whose names end in the byte-range suffix that `follow-imports` generates (for example `failed.events-a.0-42.jsonl`). The base path you pass stays untouched, which avoids deleting a placeholder or unrelated manually curated file with the unsuffixed name.
