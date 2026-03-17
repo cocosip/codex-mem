@@ -15,6 +15,7 @@ import (
 
 const (
 	readinessMCPTransportStdio          = "stdio"
+	readinessFollowSourceWatcherImport  = "watcher_import"
 	readinessWarnFollowHealthStale      = "WARN_FOLLOW_IMPORTS_HEALTH_STALE"
 	readinessWarnFollowPollCatchup      = "WARN_FOLLOW_IMPORTS_POLL_CATCHUP"
 	readinessRunnerDoctorJSON           = "run ./cmd/codex-mem doctor --json"
@@ -45,7 +46,7 @@ func successfulReadinessReport(t *testing.T) readinessReport {
 	doctor.Follow.HealthPresent = true
 	doctor.Follow.LastUpdatedAt = &updatedAt
 	doctor.Follow.Status = "partial"
-	doctor.Follow.Source = "watcher_import"
+	doctor.Follow.Source = readinessFollowSourceWatcherImport
 	doctor.Follow.InputCount = 2
 	doctor.Follow.Continuous = true
 	doctor.Follow.PollIntervalSeconds = 5
@@ -707,7 +708,7 @@ func exampleHealthyDoctorReport() *doctorReport {
 	doctor.Follow.HealthPresent = true
 	doctor.Follow.LastUpdatedAt = &updatedAt
 	doctor.Follow.Status = "ok"
-	doctor.Follow.Source = "watcher_import"
+	doctor.Follow.Source = readinessFollowSourceWatcherImport
 	doctor.Follow.InputCount = 1
 	doctor.Follow.Continuous = true
 	doctor.Follow.PollIntervalSeconds = 5
@@ -764,7 +765,7 @@ func assertSuccessfulReadinessJSONMeta(t *testing.T, decoded readinessReport) {
 func assertSuccessfulReadinessJSONDoctor(t *testing.T, decoded readinessReport) {
 	t.Helper()
 
-	if decoded.Doctor == nil || !decoded.Doctor.Follow.HealthPresent || decoded.Doctor.Follow.Status != "partial" || decoded.Doctor.Follow.Source != "watcher_import" {
+	if decoded.Doctor == nil || !decoded.Doctor.Follow.HealthPresent || decoded.Doctor.Follow.Status != "partial" || decoded.Doctor.Follow.Source != readinessFollowSourceWatcherImport {
 		t.Fatalf("unexpected doctor follow report: %+v", decoded.Doctor)
 	}
 	if len(decoded.Doctor.Follow.Warnings) != 2 || decoded.Doctor.Follow.Warnings[0].Code != readinessWarnFollowPollCatchup {

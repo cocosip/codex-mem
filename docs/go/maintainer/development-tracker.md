@@ -484,6 +484,13 @@ Current blockers:
 - Blockers: none.
 - Next step: decide whether to keep promoting remaining service-level coverage into explicit conformance names, or stop once the current v1 matrix entries all have direct named tests in either domain or DB layers.
 
+### 2026-03-17 Session Update
+
+- Completed: Added checked-in `scripts/readiness-check/testdata` sample outputs for common operator workflows and a test that keeps them synchronized with the renderer. The repository now carries a clean `slow-ci` text success example, a `ci` JSON success example, and a `release` warning-policy failure example, and the README plus maintainer/operator docs now point readers at those fixtures instead of describing the output shape only in prose.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to stop here with fixed sample outputs, or extend the readiness helper with a dedicated example-generation/update workflow if fixture churn becomes noticeable.
+
 ## Recommended Next Step
 
 Recommended next implementation slice:

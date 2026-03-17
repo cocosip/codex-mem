@@ -1,0 +1,84 @@
+{
+  "status": "ok",
+  "summary": "all readiness phases passed",
+  "keep_going": false,
+  "policy_profile": "ci",
+  "slow_run_threshold_ms": 8000,
+  "slow_phase_threshold_ms": 1000,
+  "started_at": "2026-03-17T09:00:00Z",
+  "completed_at": "2026-03-17T09:00:03Z",
+  "duration_ms": 3000,
+  "warning_policy_failed": false,
+  "doctor": {
+    "status": "ok",
+    "runtime": {
+      "foreign_keys": true,
+      "required_schema_ok": true,
+      "fts_ready": true
+    },
+    "migrations": {
+      "pending": 0
+    },
+    "audit": {
+      "note_provenance_ready": true,
+      "exclusion_audit_ready": true,
+      "import_audit_ready": true
+    },
+    "follow_imports": {
+      "health_present": true,
+      "last_updated_at": "2026-03-17T08:59:55Z",
+      "status": "ok",
+      "source": "watcher_import",
+      "input_count": 1,
+      "continuous": true,
+      "poll_interval_seconds": 5,
+      "snapshot_age_seconds": 5,
+      "health_stale": false,
+      "requested_watch_mode": "auto",
+      "active_watch_mode": "notify",
+      "watch_fallbacks": 0,
+      "watch_transitions": 0,
+      "watch_poll_catchups": 0,
+      "watch_poll_catchup_bytes": 0,
+      "warnings": null
+    },
+    "mcp": {
+      "transport": "stdio",
+      "tool_count": 11
+    }
+  },
+  "stdio_mcp_smoke_test": {
+    "status": "ok",
+    "summary": "mcp smoke test passed"
+  },
+  "http_mcp_smoke_test": {
+    "status": "ok",
+    "summary": "http mcp smoke test passed"
+  },
+  "phases": [
+    {
+      "name": "doctor",
+      "status": "ok",
+      "summary": "doctor --json passed",
+      "started_at": "2026-03-17T09:00:00Z",
+      "completed_at": "2026-03-17T09:00:00.4Z",
+      "duration_ms": 400
+    },
+    {
+      "name": "stdio_mcp_smoke_test",
+      "status": "ok",
+      "summary": "mcp smoke test passed",
+      "started_at": "2026-03-17T09:00:00.4Z",
+      "completed_at": "2026-03-17T09:00:01Z",
+      "duration_ms": 600
+    },
+    {
+      "name": "http_mcp_smoke_test",
+      "status": "ok",
+      "summary": "http mcp smoke test passed",
+      "started_at": "2026-03-17T09:00:01Z",
+      "completed_at": "2026-03-17T09:00:01.8Z",
+      "duration_ms": 800
+    }
+  ]
+}

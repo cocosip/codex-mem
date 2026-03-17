@@ -208,6 +208,12 @@ go run ./scripts/readiness-check --json --policy-profile release
 go run ./scripts/readiness-check --json --keep-going --policy-profile release
 ```
 
+Checked-in example outputs for those readiness flows live under [../../../scripts/readiness-check/testdata](../../../scripts/readiness-check/testdata/):
+
+- [example-ci-success.json](../../../scripts/readiness-check/testdata/example-ci-success.json)
+- [example-slow-ci-success.txt](../../../scripts/readiness-check/testdata/example-slow-ci-success.txt)
+- [example-release-warning-failure.txt](../../../scripts/readiness-check/testdata/example-release-warning-failure.txt)
+
 That combined check now covers:
 
 1. `doctor --json`

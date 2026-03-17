@@ -160,6 +160,12 @@ go run ./scripts/readiness-check --json --policy-profile slow-ci
 go run ./scripts/readiness-check --json --policy-profile release
 ```
 
+Checked-in sample outputs for those workflows live under [scripts/readiness-check/testdata](scripts/readiness-check/testdata/):
+
+- [example-ci-success.json](scripts/readiness-check/testdata/example-ci-success.json)
+- [example-slow-ci-success.txt](scripts/readiness-check/testdata/example-slow-ci-success.txt)
+- [example-release-warning-failure.txt](scripts/readiness-check/testdata/example-release-warning-failure.txt)
+
 For setup and integration failures, use the Go troubleshooting guide in [troubleshooting.md](docs/go/operator/troubleshooting.md).
 
 ## Release Notes
