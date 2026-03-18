@@ -24,7 +24,7 @@ Use the docs by audience:
 - [Operator docs](docs/go/operator/README.md)
   Client registration, deployment/readiness, packaging, and troubleshooting.
 - [Import ingestion guide](docs/go/operator/import-ingestion.md)
-  JSONL batch and checkpointed follow-mode ingestion for watcher and relay artifacts.
+  JSONL batch and checkpointed follow-mode ingestion for watcher and relay artifacts, including checked-in `ingest-imports` and `follow-imports` sample outputs for richer audit-only reporting.
 - [Maintainer docs](docs/go/maintainer/README.md)
   Source-tree MCP integration, implementation planning, and development tracking.
 
@@ -76,10 +76,10 @@ They are not MCP tools and are not the normal end-user interaction path.
   Prints effective config plus runtime readiness, audit diagnostics, and the last-known `follow-imports` watch-health snapshot when one has been written, including stale-snapshot detection for continuous follow mode.
 - `codex-mem doctor --json`
   Prints the same diagnostics in machine-readable JSON for automation or CI checks.
-- `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--json] [--continue-on-error] [--failed-output failed.jsonl] [--failed-manifest failed.json]`
-  Imports newline-delimited watcher or relay note events into durable imported notes plus audit records, with optional partial-success handling plus retry-oriented failure exports.
-- `codex-mem follow-imports --source watcher_import --input events-a.jsonl [--input events-b.jsonl ...] [--state-file events-a.offset.json --state-file events-b.offset.json ...] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--json]`
-  Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state plus poll-catchup/recovery events and warnings alongside per-input imported-note results.
+- `codex-mem ingest-imports --source watcher_import [--input events.jsonl] [--audit-only] [--json] [--continue-on-error] [--failed-output failed.jsonl] [--failed-manifest failed.json]`
+  Imports newline-delimited watcher or relay note events into durable imported notes plus audit records, or uses `--audit-only` to store only import-audit provenance while still applying the same privacy and explicit-memory precedence rules. Audit-only reports now distinguish new-note candidates from existing-note links and can aggregate suppression reasons.
+- `codex-mem follow-imports --source watcher_import --input events-a.jsonl [--input events-b.jsonl ...] [--state-file events-a.offset.json --state-file events-b.offset.json ...] [--watch-mode auto|notify|poll] [--poll-interval 5s] [--once] [--audit-only] [--json]`
+  Follows one or more watcher or relay JSONL files incrementally, prefers filesystem notifications with polling fallback by default, keeps one checkpoint per input, automatically retries watcher recovery in `auto` mode, and reports command-level watch state plus poll-catchup/recovery events and warnings alongside per-input imported-note results or audit-only import records, including nested audit-only summary counters and suppression-reason counts.
 - `codex-mem cleanup-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`
   Removes selected follow-imports checkpoint, retry-artifact, and stale-health artifacts. `--target-profile` can enable common cleanup target sets before you add path, age, dry-run, or `--summary-only` report filters.
 - `codex-mem audit-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`

@@ -25,6 +25,7 @@ Do not use this for:
 Use `ingest-imports` when you already have a bounded batch to replay.
 Use `follow-imports` when another process keeps appending to the same JSONL file and you want `codex-mem` to checkpoint progress between notification or polling passes.
 `follow-imports` can now fan in multiple files by repeating `--input`.
+Add `--audit-only` to either import command when you want import-audit provenance without creating or reusing durable imported notes.
 Use `audit-follow-imports` when you want a read-only hygiene report for pending checkpoint, retry-artifact, or stale-health cleanup work before deciding whether to run deletion.
 
 Minimal stdin example:
@@ -37,6 +38,12 @@ Read from a file and print JSON:
 
 ```powershell
 codex-mem.exe ingest-imports --source relay_import --input .\relay-events.jsonl --json
+```
+
+Store only import-audit records for the batch while preserving the same privacy and explicit-memory precedence checks:
+
+```powershell
+codex-mem.exe ingest-imports --source watcher_import --input .\events.jsonl --audit-only --json
 ```
 
 Continue past bad lines and keep successful imports:
@@ -61,6 +68,12 @@ Follow a growing JSONL file once and checkpoint the consumed offset:
 
 ```powershell
 codex-mem.exe follow-imports --source watcher_import --input .\events.jsonl --once --json
+```
+
+Follow the same stream in audit-only mode when another system should inspect imported provenance before materializing notes:
+
+```powershell
+codex-mem.exe follow-imports --source watcher_import --input .\events.jsonl --once --audit-only --json
 ```
 
 Run as a long-lived poller with an explicit checkpoint file:
@@ -159,6 +172,8 @@ Useful flags:
   Optional. Overrides the default ingestion session task summary.
 - `--json`
   Optional. Prints a structured report instead of line-oriented text output.
+- `--audit-only`
+  `ingest-imports` and `follow-imports` only. Optional. Evaluates each event against the same imported-note dedupe, privacy, and explicit-memory precedence rules, but writes only the import-audit record instead of materializing or reusing a durable note. The event schema stays the same so the audit-only path can answer whether the artifact would have been suppressed or linked to an existing note.
 - `--continue-on-error`
   `ingest-imports` only. Keeps scanning after per-line decode or import failures and returns a partial-success report when at least one event succeeds.
 - `--failed-output <path>`
@@ -259,6 +274,13 @@ Behavior to expect from this batch:
 - the first event creates an imported durable note plus an import audit record
 - the second event creates only a suppressed import audit record
 
+When `--audit-only` is set for `ingest-imports` or `follow-imports`:
+
+- the same event schema is still required because the command evaluates imported-note precedence rather than dropping to raw `memory_save_import`
+- new non-suppressed artifacts create only import-audit records and leave `materialized=0`
+- imported duplicates can still link the created audit record to an existing imported note
+- stronger explicit memory still suppresses the import audit with `suppression_reason=explicit_memory_exists`
+
 ## Output Semantics
 
 Text mode prints a compact summary such as:
@@ -282,6 +304,7 @@ warnings=1
 ```
 
 JSON mode returns the same summary plus per-line results, including the created or reused `note_id` and `import_id`.
+When `--audit-only` is active, the report also includes `audit_only=true`, `materialized` stays `0`, `would_materialize` counts unsuppressed artifacts that would have created a new imported note, and `linked_existing_note` counts unsuppressed artifacts that only linked an already-imported durable note. Whenever any suppression happens, the JSON report also includes a `suppression_reasons` object keyed by normalized reason (for example `privacy_intent`, `explicit_memory_exists`, or the fallback `import_policy` bucket), and text mode flattens those same counts as `suppression_reason_<reason>=<count>`. Each per-line result can still surface `suppression_reason`, and `note_id` stays omitted for newly audited artifacts that would have taken the new-note path.
 When a line fails in `--continue-on-error` mode, that result entry includes a structured `error` payload instead.
 If `--failed-output` is set, the report also includes the resolved output path and how many failed lines were written there.
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
@@ -291,8 +314,12 @@ Multi-input `follow-imports` returns one aggregate report with command-level wat
 `audit-follow-imports` reports the same target-selection metadata and matched-versus-skipped counts as a read-only hygiene pass, plus whether `--summary-only` was active, whether the follow-health snapshot is present, when it was last updated, whether it is stale, and any warning summaries carried by that snapshot.
 When `--summary-only` is set, the aggregate counts stay the same but the detailed checkpoint and retry-artifact path lists are omitted from both text and JSON output.
 
-Checked-in sample outputs for common cleanup flows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
+Checked-in sample outputs for import and follow workflows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
 
+- [ingest-imports-audit-only-summary.txt](../../../internal/app/testdata/ingest-imports-audit-only-summary.txt)
+- [ingest-imports-audit-only-linked.json](../../../internal/app/testdata/ingest-imports-audit-only-linked.json)
+- [follow-imports-audit-only-single.txt](../../../internal/app/testdata/follow-imports-audit-only-single.txt)
+- [follow-imports-audit-only-multi.json](../../../internal/app/testdata/follow-imports-audit-only-multi.json)
 - [cleanup-follow-imports-daily-dry-run.txt](../../../internal/app/testdata/cleanup-follow-imports-daily-dry-run.txt)
 - [cleanup-follow-imports-filtered-cleanup.json](../../../internal/app/testdata/cleanup-follow-imports-filtered-cleanup.json)
 - [cleanup-follow-imports-target-profile-all.txt](../../../internal/app/testdata/cleanup-follow-imports-target-profile-all.txt)
@@ -300,9 +327,21 @@ Checked-in sample outputs for common cleanup flows live under [../../../internal
 - [audit-follow-imports-filtered-audit.json](../../../internal/app/testdata/audit-follow-imports-filtered-audit.json)
 - [audit-follow-imports-target-profile-retry.json](../../../internal/app/testdata/audit-follow-imports-target-profile-retry.json)
 
-If a deliberate output change makes those fixtures drift, refresh the cleanup fixtures from the repository root through the test-only maintainer helper:
+If a deliberate output change makes those fixtures drift, refresh the ingest fixtures from the repository root through the test-only maintainer helper:
 
 ```powershell
+$env:CODEX_MEM_REFRESH_INGEST_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshIngestImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_INGEST_EXAMPLES
+```
+
+Refresh the cleanup fixtures the same way:
+
+```powershell
+$env:CODEX_MEM_REFRESH_FOLLOW_IMPORT_EXAMPLES = "all"
+go test ./internal/app -run TestRefreshFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_FOLLOW_IMPORT_EXAMPLES
+
 $env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "all"
 go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
 Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
@@ -319,6 +358,14 @@ Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
 If you only need one fixture while iterating on a specific report shape, pass a comma-separated fixture-name subset instead of `all`:
 
 ```powershell
+$env:CODEX_MEM_REFRESH_INGEST_EXAMPLES = "audit-only-linked-json"
+go test ./internal/app -run TestRefreshIngestImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_INGEST_EXAMPLES
+
+$env:CODEX_MEM_REFRESH_FOLLOW_IMPORT_EXAMPLES = "audit-only-single-text"
+go test ./internal/app -run TestRefreshFollowImportsExampleFixtures
+Remove-Item Env:CODEX_MEM_REFRESH_FOLLOW_IMPORT_EXAMPLES
+
 $env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES = "filtered-cleanup-json"
 go test ./internal/app -run TestRefreshCleanupFollowImportsExampleFixtures
 Remove-Item Env:CODEX_MEM_REFRESH_CLEANUP_EXAMPLES
@@ -338,6 +385,7 @@ go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayI
 
 - `ingest-imports` starts one fresh session for the whole batch after resolving scope.
 - `follow-imports` starts one fresh session per consumed polling batch, not one session for the lifetime of the process.
+- `--audit-only` keeps the same session, checkpoint, retry-export, and follow-health behavior as the materializing path so operators can switch between audit-only and imported-note materialization without learning a second ingestion flow.
 - When `follow-imports` fans in multiple files, each input keeps its own checkpoint sidecar and each consumed input still starts its own ingestion session for that batch.
 - In `auto` mode, `follow-imports` prefers filesystem notifications for lower latency and keeps the poll timer as a safety net in case a platform drops an event.
 - In `auto` mode, if watcher setup fails or a running watcher later closes/errors, `follow-imports` falls back to polling and keeps retrying watcher setup on later poll intervals. When watcher setup succeeds again, the process switches back to notify mode instead of staying degraded forever.
@@ -365,6 +413,7 @@ go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayI
 - When multi-input follow mode shares failed-output or failed-manifest bases, pass the same `--input` set to `cleanup-follow-imports` so it derives the same per-input filenames before scanning for range-suffixed artifacts.
 - When multi-input follow mode shares `--failed-output` or `--failed-manifest` base paths, `codex-mem` derives per-input file names before adding the byte-range suffix so retry artifacts from different inputs do not overwrite each other.
 - Each event uses the same imported-note workflow as `memory_save_imported_note`.
+- `--audit-only` intentionally still uses that imported-note workflow instead of the lower-level `memory_save_import` contract, because operators usually want privacy suppression, explicit-memory precedence, and imported-note dedupe to stay aligned between audit-only and materializing runs.
 - Existing explicit memory wins over weaker imported duplicates in the same project.
 - The default implementation is fail-fast: the first invalid line stops the batch and returns an error.
 - `--continue-on-error` preserves successful lines, reports per-line failures, and still exits with an error if nothing in the batch imports successfully.

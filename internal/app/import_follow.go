@@ -33,6 +33,7 @@ type followImportsOptions struct {
 	RepoRemote         string
 	Task               string
 	JSON               bool
+	AuditOnly          bool
 	Once               bool
 	PollInterval       time.Duration
 	WatchMode          followImportsWatchMode
@@ -99,6 +100,7 @@ type FollowImportsInput struct {
 	BranchName         string
 	RepoRemote         string
 	Task               string
+	AuditOnly          bool
 	FailedOutputPath   string
 	FailedManifestPath string
 }
@@ -111,6 +113,7 @@ type followImportsReport struct {
 	Source             string               `json:"source"`
 	Input              string               `json:"input"`
 	StateFile          string               `json:"state_file"`
+	AuditOnly          bool                 `json:"audit_only,omitempty"`
 	RequestedWatchMode string               `json:"requested_watch_mode,omitempty"`
 	ActiveWatchMode    string               `json:"active_watch_mode,omitempty"`
 	WatchFallbacks     int                  `json:"watch_fallbacks,omitempty"`
@@ -135,6 +138,7 @@ type followImportsAggregateReport struct {
 	Status             string                `json:"status"`
 	Source             string                `json:"source"`
 	InputCount         int                   `json:"input_count"`
+	AuditOnly          bool                  `json:"audit_only,omitempty"`
 	ConsumedInputs     int                   `json:"consumed_inputs"`
 	IdleInputs         int                   `json:"idle_inputs"`
 	FailedInputs       int                   `json:"failed_inputs"`
@@ -740,6 +744,8 @@ func parseFollowImportsOptions(args []string) (followImportsOptions, error) {
 			i = next
 		case doctorJSONFlag:
 			options.JSON = true
+		case "--audit-only":
+			options.AuditOnly = true
 		case "--once":
 			options.Once = true
 		default:
@@ -1190,6 +1196,7 @@ func (a *App) FollowImportsOnce(ctx context.Context, input FollowImportsInput) (
 		Source:          string(input.Source),
 		Input:           inputPath,
 		StateFile:       statePath,
+		AuditOnly:       input.AuditOnly,
 		Offset:          chunk.NextOffset,
 		PendingBytes:    chunk.PendingBytes,
 		Truncated:       chunk.Truncated,
@@ -1227,6 +1234,7 @@ func (a *App) FollowImportsOnce(ctx context.Context, input FollowImportsInput) (
 		BranchName:         input.BranchName,
 		RepoRemote:         input.RepoRemote,
 		Task:               strings.TrimSpace(input.Task),
+		AuditOnly:          input.AuditOnly,
 		ContinueOnError:    true,
 		FailedOutputPath:   batchFailedOutput,
 		FailedManifestPath: batchFailedManifest,
@@ -1666,6 +1674,7 @@ func formatFollowImportsAggregateReport(report followImportsAggregateReport) str
 		fmt.Sprintf("status=%s", report.Status),
 		fmt.Sprintf("source=%s", report.Source),
 		fmt.Sprintf("input_count=%d", report.InputCount),
+		fmt.Sprintf("audit_only=%t", report.AuditOnly),
 		fmt.Sprintf("consumed_inputs=%d", report.ConsumedInputs),
 		fmt.Sprintf("idle_inputs=%d", report.IdleInputs),
 		fmt.Sprintf("failed_inputs=%d", report.FailedInputs),
@@ -1718,6 +1727,7 @@ func followImportsReportLines(report followImportsReport) []string {
 		fmt.Sprintf("source=%s", report.Source),
 		fmt.Sprintf("input=%s", report.Input),
 		fmt.Sprintf("state_file=%s", report.StateFile),
+		fmt.Sprintf("audit_only=%t", report.AuditOnly),
 		fmt.Sprintf("requested_watch_mode=%s", fallbackString(report.RequestedWatchMode)),
 		fmt.Sprintf("active_watch_mode=%s", fallbackString(report.ActiveWatchMode)),
 		fmt.Sprintf("watch_fallbacks=%d", report.WatchFallbacks),
@@ -1759,6 +1769,7 @@ func followImportsReportLines(report followImportsReport) []string {
 		lines = append(lines,
 			fmt.Sprintf("batch_status=%s", report.Batch.Status),
 			fmt.Sprintf("session_id=%s", report.Batch.Session.ID),
+			fmt.Sprintf("batch_audit_only=%t", report.Batch.AuditOnly),
 			fmt.Sprintf("attempted=%d", report.Batch.Attempted),
 			fmt.Sprintf("processed=%d", report.Batch.Processed),
 			fmt.Sprintf("failed=%d", report.Batch.Failed),
@@ -1767,6 +1778,15 @@ func followImportsReportLines(report followImportsReport) []string {
 			fmt.Sprintf("failed_output=%s", fallbackString(report.Batch.FailedOutput)),
 			fmt.Sprintf("failed_manifest=%s", fallbackString(report.Batch.FailedManifest)),
 		)
+		if report.Batch.AuditOnly {
+			lines = append(lines,
+				fmt.Sprintf("would_materialize=%d", report.Batch.WouldMaterialize),
+				fmt.Sprintf("linked_existing_note=%d", report.Batch.LinkedExistingNote),
+			)
+		}
+		for _, key := range sortedSuppressionReasonKeys(report.Batch.SuppressionReasons) {
+			lines = append(lines, fmt.Sprintf("suppression_reason_%s=%d", key, report.Batch.SuppressionReasons[key]))
+		}
 	}
 	if report.BatchError != nil {
 		lines = append(lines,
@@ -1838,6 +1858,7 @@ func buildFollowImportsInputs(options followImportsOptions) ([]FollowImportsInpu
 			BranchName:         options.BranchName,
 			RepoRemote:         options.RepoRemote,
 			Task:               options.Task,
+			AuditOnly:          options.AuditOnly,
 			FailedOutputPath:   deriveFollowImportsInputBasePath(options.FailedOutputPath, inputPath, len(options.InputPaths)),
 			FailedManifestPath: deriveFollowImportsInputBasePath(options.FailedManifestPath, inputPath, len(options.InputPaths)),
 		})
@@ -2772,6 +2793,7 @@ func newFollowImportsAggregateReport(source imports.Source, reports []followImpo
 		Inputs:     append([]followImportsReport(nil), reports...),
 	}
 	for _, report := range reports {
+		aggregate.AuditOnly = aggregate.AuditOnly || report.AuditOnly
 		aggregate.TotalConsumedBytes += report.ConsumedBytes
 		aggregate.TotalPendingBytes += report.PendingBytes
 		switch report.Status {

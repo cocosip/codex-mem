@@ -1,0 +1,105 @@
+{
+  "status": "ok",
+  "source": "relay_import",
+  "input_count": 2,
+  "audit_only": true,
+  "consumed_inputs": 1,
+  "idle_inputs": 1,
+  "failed_inputs": 0,
+  "requested_watch_mode": "auto",
+  "active_watch_mode": "notify",
+  "watch_fallbacks": 1,
+  "watch_transitions": 3,
+  "last_fallback_reason": "watcher_unavailable",
+  "watch_event_count": 1,
+  "watch_events": [
+    {
+      "at": "2026-03-18T01:35:00Z",
+      "kind": "watch_fallback",
+      "requested_watch_mode": "auto",
+      "previous_watch_mode": "notify",
+      "active_watch_mode": "poll",
+      "reason": "watcher_unavailable",
+      "fallbacks": 1,
+      "consumed_inputs": 1,
+      "consumed_bytes": 84
+    }
+  ],
+  "watch_poll_catchups": 1,
+  "watch_poll_catchup_bytes": 42,
+  "warnings": [
+    {
+      "code": "WARN_FOLLOW_IMPORTS_POLL_CATCHUP",
+      "message": "notify mode repeatedly relied on poll catchup; treat watcher health as degraded"
+    }
+  ],
+  "total_consumed_bytes": 42,
+  "total_pending_bytes": 7,
+  "inputs": [
+    {
+      "status": "ok",
+      "source": "relay_import",
+      "input": "D:\\Ops\\follow\\events-a.jsonl",
+      "state_file": "D:\\Ops\\follow\\events-a.offset.json",
+      "audit_only": true,
+      "requested_watch_mode": "auto",
+      "active_watch_mode": "notify",
+      "offset": 42,
+      "consumed_bytes": 42,
+      "pending_bytes": 0,
+      "batch": {
+        "status": "ok",
+        "source": "relay_import",
+        "input": "D:\\Ops\\follow\\events-a.jsonl",
+        "scope": {
+          "system_id": "sys_codex_mem",
+          "system_name": "codex-mem",
+          "project_id": "proj_follow",
+          "project_name": "codex-mem",
+          "workspace_id": "ws_follow",
+          "workspace_root": "D:\\Code\\go\\codex-mem",
+          "branch_name": "master",
+          "resolved_by": "repo_remote"
+        },
+        "session": {
+          "session_id": "sess_20260318_013600",
+          "scope": {
+            "system_id": "sys_codex_mem",
+            "project_id": "proj_follow",
+            "workspace_id": "ws_follow"
+          },
+          "status": "active",
+          "task": "audit imported notes (relay_import)",
+          "branch_name": "master",
+          "started_at": "2026-03-18T01:36:00Z"
+        },
+        "audit_only": true,
+        "continue_on_error": false,
+        "attempted": 2,
+        "processed": 2,
+        "failed": 0,
+        "materialized": 0,
+        "suppressed": 1,
+        "suppression_reasons": {
+          "import_policy": 1
+        },
+        "would_materialize": 0,
+        "linked_existing_note": 1,
+        "note_deduplicated": 1,
+        "import_deduplicated": 1
+      }
+    },
+    {
+      "status": "idle",
+      "source": "relay_import",
+      "input": "D:\\Ops\\follow\\events-b.jsonl",
+      "state_file": "D:\\Ops\\follow\\events-b.offset.json",
+      "audit_only": true,
+      "requested_watch_mode": "auto",
+      "active_watch_mode": "notify",
+      "offset": 0,
+      "consumed_bytes": 0,
+      "pending_bytes": 7
+    }
+  ]
+}

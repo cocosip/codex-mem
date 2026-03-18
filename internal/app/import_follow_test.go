@@ -13,6 +13,7 @@ import (
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
 	"codex-mem/internal/domain/common"
+	"codex-mem/internal/domain/session"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -88,6 +89,20 @@ func TestParseFollowImportsOptionsSupportsMultipleInputs(t *testing.T) {
 	}
 	if got, want := len(options.StatePaths), 2; got != want {
 		t.Fatalf("state-file count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestParseFollowImportsOptionsSupportsAuditOnly(t *testing.T) {
+	options, err := parseFollowImportsOptions([]string{
+		"--source", followImportsWatcherSource,
+		"--input", "events.jsonl",
+		"--audit-only",
+	})
+	if err != nil {
+		t.Fatalf("parseFollowImportsOptions: %v", err)
+	}
+	if !options.AuditOnly {
+		t.Fatal("expected audit-only mode")
 	}
 }
 
@@ -1248,6 +1263,7 @@ func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 	})
 
 	for _, fragment := range []string{
+		"audit_only=false",
 		"requested_watch_mode=auto",
 		"active_watch_mode=poll",
 		"watch_fallbacks=1",
@@ -1262,6 +1278,41 @@ func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 		"watch_event_1_previous_watch_mode=notify",
 		"watch_event_1_consumed_inputs=1",
 		"watch_event_1_consumed_bytes=42",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("report output missing %q:\n%s", fragment, output)
+		}
+	}
+}
+
+func TestFormatFollowImportsReportIncludesBatchSuppressionReasonCounts(t *testing.T) {
+	output := formatFollowImportsReport(followImportsReport{
+		Status:    "ok",
+		Source:    "watcher_import",
+		Input:     "events.jsonl",
+		StateFile: "events.offset.json",
+		Batch: &ingestImportsReport{
+			Status:             "ok",
+			Session:            session.Session{ID: "sess_1"},
+			AuditOnly:          true,
+			Attempted:          2,
+			Processed:          2,
+			Failed:             0,
+			Materialized:       0,
+			Suppressed:         2,
+			WouldMaterialize:   0,
+			LinkedExistingNote: 0,
+			SuppressionReasons: map[string]int{
+				"explicit_memory_exists": 1,
+				"privacy_intent":         1,
+			},
+		},
+	})
+
+	for _, fragment := range []string{
+		"batch_audit_only=true",
+		"suppression_reason_explicit_memory_exists=1",
+		"suppression_reason_privacy_intent=1",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("report output missing %q:\n%s", fragment, output)
@@ -1844,6 +1895,63 @@ func TestAppFollowImportsOnceConsumesOnlyCompleteLinesAndPersistsCheckpoint(t *t
 		t.Fatalf("note count mismatch: got %d want %d", got, want)
 	}
 	if got, want := diagnostics.Audit.ImportRecords, 3; got != want {
+		t.Fatalf("import count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestAppFollowImportsOnceSupportsAuditOnlyMode(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	eventsPath := filepath.Join(root, "events.jsonl")
+	statePath := filepath.Join(root, "events.offset.json")
+	if err := os.WriteFile(eventsPath, []byte(followImportsFirstEvent+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile events: %v", err)
+	}
+
+	report, err := instance.FollowImportsOnce(context.Background(), FollowImportsInput{
+		Source:     followImportsWatcherSource,
+		InputPath:  eventsPath,
+		StatePath:  statePath,
+		CWD:        root,
+		RepoRemote: "git@github.com:example/codex-mem.git",
+		AuditOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("FollowImportsOnce audit-only: %v", err)
+	}
+	if !report.AuditOnly {
+		t.Fatalf("expected follow report to advertise audit-only mode, got %+v", report)
+	}
+	if report.Batch == nil || !report.Batch.AuditOnly {
+		t.Fatalf("expected nested batch to advertise audit-only mode, got %+v", report.Batch)
+	}
+	if got, want := report.Batch.Processed, 1; got != want {
+		t.Fatalf("processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Batch.Materialized, 0; got != want {
+		t.Fatalf("materialized mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Batch.WouldMaterialize, 1; got != want {
+		t.Fatalf("would_materialize mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Batch.LinkedExistingNote, 0; got != want {
+		t.Fatalf("linked_existing_note mismatch: got %d want %d", got, want)
+	}
+
+	diagnostics, err := db.InspectRuntime(context.Background(), instance.DB)
+	if err != nil {
+		t.Fatalf("InspectRuntime: %v", err)
+	}
+	if got, want := diagnostics.Audit.NoteRecords, 0; got != want {
+		t.Fatalf("note count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, 1; got != want {
 		t.Fatalf("import count mismatch: got %d want %d", got, want)
 	}
 }

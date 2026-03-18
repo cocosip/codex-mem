@@ -13,17 +13,17 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
-const cleanupFollowImportsExampleDirName = "testdata"
+const commandExampleDirName = "testdata"
 
-type followImportsExampleFixture[T any] struct {
+type commandExampleFixture[T any] struct {
 	Name         string
 	RelativePath string
 	JSON         bool
 	Report       T
 }
 
-type cleanupFollowImportsExampleFixture = followImportsExampleFixture[cleanupFollowImportsReport]
-type auditFollowImportsExampleFixture = followImportsExampleFixture[auditFollowImportsReport]
+type cleanupFollowImportsExampleFixture = commandExampleFixture[cleanupFollowImportsReport]
+type auditFollowImportsExampleFixture = commandExampleFixture[auditFollowImportsReport]
 
 func normalizeFollowImportsExampleName(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
@@ -49,17 +49,17 @@ func parseFollowImportsExampleNames(raw string) ([]string, error) {
 	return names, nil
 }
 
-func selectFollowImportsExampleFixtures[T any](fixtures []followImportsExampleFixture[T], names []string, command string) ([]followImportsExampleFixture[T], error) {
+func selectCommandExampleFixtures[T any](fixtures []commandExampleFixture[T], names []string, command string) ([]commandExampleFixture[T], error) {
 	if len(names) == 0 {
 		return fixtures, nil
 	}
 
-	byName := make(map[string]followImportsExampleFixture[T], len(fixtures))
+	byName := make(map[string]commandExampleFixture[T], len(fixtures))
 	for _, fixture := range fixtures {
 		byName[normalizeFollowImportsExampleName(fixture.Name)] = fixture
 	}
 
-	selected := make([]followImportsExampleFixture[T], 0, len(names))
+	selected := make([]commandExampleFixture[T], 0, len(names))
 	seen := make(map[string]struct{}, len(names))
 	for _, name := range names {
 		normalized := normalizeFollowImportsExampleName(name)
@@ -79,8 +79,8 @@ func selectFollowImportsExampleFixtures[T any](fixtures []followImportsExampleFi
 	return selected, nil
 }
 
-func writeFollowImportsExampleFixtures[T any](baseDir string, names []string, command string, fixtures []followImportsExampleFixture[T], render func(T, bool) ([]byte, error)) ([]string, error) {
-	selected, err := selectFollowImportsExampleFixtures(fixtures, names, command)
+func writeCommandExampleFixtures[T any](baseDir string, names []string, command string, fixtures []commandExampleFixture[T], render func(T, bool) ([]byte, error)) ([]string, error) {
+	selected, err := selectCommandExampleFixtures(fixtures, names, command)
 	if err != nil {
 		return nil, err
 	}
@@ -102,13 +102,13 @@ func writeFollowImportsExampleFixtures[T any](baseDir string, names []string, co
 	return writtenPaths, nil
 }
 
-func listFollowImportsExamples[T any](fixtures []followImportsExampleFixture[T], w io.Writer) error {
+func listCommandExamples[T any](fixtures []commandExampleFixture[T], w io.Writer) error {
 	for _, fixture := range fixtures {
 		format := "text"
 		if fixture.JSON {
 			format = "json"
 		}
-		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s\n", fixture.Name, filepath.Join(cleanupFollowImportsExampleDirName, fixture.RelativePath), format); err != nil {
+		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s\n", fixture.Name, filepath.Join(commandExampleDirName, fixture.RelativePath), format); err != nil {
 			return err
 		}
 	}
@@ -429,11 +429,11 @@ func auditFollowImportsExampleFixtures() []auditFollowImportsExampleFixture {
 }
 
 func selectCleanupFollowImportsExampleFixtures(names []string) ([]cleanupFollowImportsExampleFixture, error) {
-	return selectFollowImportsExampleFixtures(cleanupFollowImportsExampleFixtures(), names, "cleanup-follow-imports")
+	return selectCommandExampleFixtures(cleanupFollowImportsExampleFixtures(), names, "cleanup-follow-imports")
 }
 
 func selectAuditFollowImportsExampleFixtures(names []string) ([]auditFollowImportsExampleFixture, error) {
-	return selectFollowImportsExampleFixtures(auditFollowImportsExampleFixtures(), names, "audit-follow-imports")
+	return selectCommandExampleFixtures(auditFollowImportsExampleFixtures(), names, "audit-follow-imports")
 }
 
 func renderCleanupFollowImportsExample(report cleanupFollowImportsReport, jsonOutput bool) ([]byte, error) {
@@ -459,17 +459,17 @@ func renderAuditFollowImportsExample(report auditFollowImportsReport, jsonOutput
 }
 
 func writeCleanupFollowImportsExampleFixtures(baseDir string, names []string) ([]string, error) {
-	return writeFollowImportsExampleFixtures(baseDir, names, "cleanup-follow-imports", cleanupFollowImportsExampleFixtures(), renderCleanupFollowImportsExample)
+	return writeCommandExampleFixtures(baseDir, names, "cleanup-follow-imports", cleanupFollowImportsExampleFixtures(), renderCleanupFollowImportsExample)
 }
 
 func writeAuditFollowImportsExampleFixtures(baseDir string, names []string) ([]string, error) {
-	return writeFollowImportsExampleFixtures(baseDir, names, "audit-follow-imports", auditFollowImportsExampleFixtures(), renderAuditFollowImportsExample)
+	return writeCommandExampleFixtures(baseDir, names, "audit-follow-imports", auditFollowImportsExampleFixtures(), renderAuditFollowImportsExample)
 }
 
 func listCleanupFollowImportsExamples(w io.Writer) error {
-	return listFollowImportsExamples(cleanupFollowImportsExampleFixtures(), w)
+	return listCommandExamples(cleanupFollowImportsExampleFixtures(), w)
 }
 
 func listAuditFollowImportsExamples(w io.Writer) error {
-	return listFollowImportsExamples(auditFollowImportsExampleFixtures(), w)
+	return listCommandExamples(auditFollowImportsExampleFixtures(), w)
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"codex-mem/internal/config"
@@ -29,6 +30,7 @@ type ingestImportsOptions struct {
 	RepoRemote         string
 	Task               string
 	JSON               bool
+	AuditOnly          bool
 	ContinueOnError    bool
 }
 
@@ -64,6 +66,7 @@ type IngestImportsInput struct {
 	BranchName         string
 	RepoRemote         string
 	Task               string
+	AuditOnly          bool
 	ContinueOnError    bool
 	FailedOutputPath   string
 	FailedManifestPath string
@@ -75,6 +78,7 @@ type ingestImportEventResult struct {
 	ImportID           string               `json:"import_id"`
 	Materialized       bool                 `json:"materialized"`
 	Suppressed         bool                 `json:"suppressed"`
+	SuppressionReason  string               `json:"suppression_reason,omitempty"`
 	NoteDeduplicated   bool                 `json:"note_deduplicated"`
 	ImportDeduplicated bool                 `json:"import_deduplicated"`
 	Error              *common.ErrorPayload `json:"error,omitempty"`
@@ -90,12 +94,16 @@ type ingestImportsReport struct {
 	FailedManifestCount int                       `json:"failed_manifest_count,omitempty"`
 	Scope               scope.Scope               `json:"scope"`
 	Session             session.Session           `json:"session"`
+	AuditOnly           bool                      `json:"audit_only"`
 	ContinueOnError     bool                      `json:"continue_on_error"`
 	Attempted           int                       `json:"attempted"`
 	Processed           int                       `json:"processed"`
 	Failed              int                       `json:"failed"`
 	Materialized        int                       `json:"materialized"`
 	Suppressed          int                       `json:"suppressed"`
+	SuppressionReasons  map[string]int            `json:"suppression_reasons,omitempty"`
+	WouldMaterialize    int                       `json:"would_materialize"`
+	LinkedExistingNote  int                       `json:"linked_existing_note"`
 	NoteDeduplicated    int                       `json:"note_deduplicated"`
 	ImportDeduplicated  int                       `json:"import_deduplicated"`
 	Warnings            []common.Warning          `json:"warnings,omitempty"`
@@ -157,6 +165,7 @@ func runIngestImports(ctx context.Context, cfg config.Config, stdin io.Reader, s
 		BranchName:         options.BranchName,
 		RepoRemote:         options.RepoRemote,
 		Task:               options.Task,
+		AuditOnly:          options.AuditOnly,
 		ContinueOnError:    options.ContinueOnError,
 		FailedOutputPath:   options.FailedOutputPath,
 		FailedManifestPath: options.FailedManifestPath,
@@ -238,6 +247,8 @@ func parseIngestImportsOptions(args []string) (ingestImportsOptions, error) {
 			i = next
 		case doctorJSONFlag:
 			options.JSON = true
+		case "--audit-only":
+			options.AuditOnly = true
 		case ingestImportsContinueOnErrorFlag:
 			options.ContinueOnError = true
 		default:
@@ -294,7 +305,11 @@ func (a *App) IngestImports(ctx context.Context, input IngestImportsInput) (Inge
 
 	task := strings.TrimSpace(input.Task)
 	if task == "" {
-		task = fmt.Sprintf("ingest imported notes (%s)", input.Source)
+		if input.AuditOnly {
+			task = fmt.Sprintf("audit imported notes (%s)", input.Source)
+		} else {
+			task = fmt.Sprintf("ingest imported notes (%s)", input.Source)
+		}
 	}
 	sessionOutput, err := a.SessionService.Start(ctx, session.StartInput{
 		Scope:      scopeOutput.Scope,
@@ -305,7 +320,7 @@ func (a *App) IngestImports(ctx context.Context, input IngestImportsInput) (Inge
 		return ingestImportsReport{}, err
 	}
 
-	report, failures, err := ingestImportEvents(ctx, input.Reader, inputLabel, input.Source, scopeOutput.Scope, sessionOutput.Session, scopeOutput.Warnings, input.ContinueOnError, failedWriter, a.ImportService)
+	report, failures, err := ingestImportEvents(ctx, input.Reader, inputLabel, input.Source, scopeOutput.Scope, sessionOutput.Session, scopeOutput.Warnings, input.AuditOnly, input.ContinueOnError, failedWriter, a.ImportService)
 	report.FailedOutput = failedWriter.Path()
 	report.FailedOutputWritten = failedWriter.Written()
 	report.FailedManifest = failedManifestPath
@@ -383,7 +398,7 @@ func resolveIngestImportsPath(path string, cwd string) (string, error) {
 	return absPath, nil
 }
 
-func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string, source imports.Source, resolvedScope scope.Scope, sess session.Session, scopeWarnings []common.Warning, continueOnError bool, failedWriter *ingestFailedOutputWriter, importService *imports.Service) (ingestImportsReport, []ingestFailureDetail, error) {
+func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string, source imports.Source, resolvedScope scope.Scope, sess session.Session, scopeWarnings []common.Warning, auditOnly bool, continueOnError bool, failedWriter *ingestFailedOutputWriter, importService *imports.Service) (ingestImportsReport, []ingestFailureDetail, error) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
@@ -393,6 +408,7 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 		Input:           inputLabel,
 		Scope:           resolvedScope,
 		Session:         sess,
+		AuditOnly:       auditOnly,
 		ContinueOnError: continueOnError,
 		Warnings:        scopeWarnings,
 	}
@@ -428,7 +444,7 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 			continue
 		}
 
-		result, err := importService.SaveImportedNote(ctx, imports.SaveImportedNoteInput{
+		saveInput := imports.SaveImportedNoteInput{
 			Scope:             resolvedScope.Ref(),
 			SessionID:         sess.ID,
 			Source:            source,
@@ -443,7 +459,16 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 			RelatedProjectIDs: event.RelatedProjectIDs,
 			Status:            memory.Status(event.Status),
 			PrivacyIntent:     event.PrivacyIntent,
-		})
+		}
+		var (
+			result imports.SaveImportedNoteOutput
+			err    error
+		)
+		if auditOnly {
+			result, err = importService.AuditImportedNote(ctx, saveInput)
+		} else {
+			result, err = importService.SaveImportedNote(ctx, saveInput)
+		}
 		if err != nil {
 			if !continueOnError {
 				return report, failures, fmt.Errorf("ingest-imports event on line %d: %w", lineNumber, err)
@@ -469,6 +494,14 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 		}
 		if result.Suppressed {
 			report.Suppressed++
+			report.incrementSuppressionReason(result.Import.SuppressionReason)
+		}
+		if auditOnly && !result.Suppressed {
+			if result.NoteDeduplicated {
+				report.LinkedExistingNote++
+			} else {
+				report.WouldMaterialize++
+			}
 		}
 		if result.NoteDeduplicated {
 			report.NoteDeduplicated++
@@ -483,6 +516,7 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 			ImportID:           result.Import.ID,
 			Materialized:       result.Materialized,
 			Suppressed:         result.Suppressed,
+			SuppressionReason:  result.Import.SuppressionReason,
 			NoteDeduplicated:   result.NoteDeduplicated,
 			ImportDeduplicated: result.ImportDeduplicated,
 		}
@@ -582,6 +616,37 @@ func (r *ingestImportsReport) updateStatus() {
 	}
 }
 
+func (r *ingestImportsReport) incrementSuppressionReason(reason string) {
+	key := suppressionReasonBucket(reason)
+	if key == "" {
+		return
+	}
+	if r.SuppressionReasons == nil {
+		r.SuppressionReasons = make(map[string]int)
+	}
+	r.SuppressionReasons[key]++
+}
+
+func suppressionReasonBucket(reason string) string {
+	normalized := strings.TrimSpace(strings.ToLower(reason))
+	if normalized == "" {
+		return "import_policy"
+	}
+	return normalized
+}
+
+func sortedSuppressionReasonKeys(counts map[string]int) []string {
+	keys := make([]string, 0, len(counts))
+	for key, count := range counts {
+		if count <= 0 {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func formatIngestImportsReport(report ingestImportsReport) string {
 	lines := []string{
 		fmt.Sprintf("ingest imports %s", report.Status),
@@ -594,6 +659,7 @@ func formatIngestImportsReport(report ingestImportsReport) string {
 		fmt.Sprintf("failed_manifest_count=%d", report.FailedManifestCount),
 		fmt.Sprintf("session_id=%s", report.Session.ID),
 		fmt.Sprintf("resolved_by=%s", report.Scope.ResolvedBy),
+		fmt.Sprintf("audit_only=%t", report.AuditOnly),
 		fmt.Sprintf("continue_on_error=%t", report.ContinueOnError),
 		fmt.Sprintf("attempted=%d", report.Attempted),
 		fmt.Sprintf("processed=%d", report.Processed),
@@ -603,6 +669,15 @@ func formatIngestImportsReport(report ingestImportsReport) string {
 		fmt.Sprintf("note_deduplicated=%d", report.NoteDeduplicated),
 		fmt.Sprintf("import_deduplicated=%d", report.ImportDeduplicated),
 		fmt.Sprintf("warnings=%d", len(report.Warnings)),
+	}
+	for _, key := range sortedSuppressionReasonKeys(report.SuppressionReasons) {
+		lines = append(lines, fmt.Sprintf("suppression_reason_%s=%d", key, report.SuppressionReasons[key]))
+	}
+	if report.AuditOnly {
+		lines = append(lines,
+			fmt.Sprintf("would_materialize=%d", report.WouldMaterialize),
+			fmt.Sprintf("linked_existing_note=%d", report.LinkedExistingNote),
+		)
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

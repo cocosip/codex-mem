@@ -1,0 +1,78 @@
+{
+  "status": "ok",
+  "source": "relay_import",
+  "input": "stdin",
+  "scope": {
+    "system_id": "sys_codex_mem",
+    "system_name": "codex-mem",
+    "project_id": "proj_ingest",
+    "project_name": "codex-mem",
+    "workspace_id": "ws_ingest",
+    "workspace_root": "D:\\Code\\go\\codex-mem",
+    "branch_name": "master",
+    "resolved_by": "repo_remote"
+  },
+  "session": {
+    "session_id": "sess_20260318_013000",
+    "scope": {
+      "system_id": "sys_codex_mem",
+      "project_id": "proj_ingest",
+      "workspace_id": "ws_ingest"
+    },
+    "status": "active",
+    "task": "audit imported notes (watcher_import)",
+    "branch_name": "master",
+    "started_at": "2026-03-18T01:30:00Z"
+  },
+  "audit_only": true,
+  "continue_on_error": false,
+  "attempted": 3,
+  "processed": 3,
+  "failed": 0,
+  "materialized": 0,
+  "suppressed": 1,
+  "suppression_reasons": {
+    "import_policy": 1
+  },
+  "would_materialize": 1,
+  "linked_existing_note": 1,
+  "note_deduplicated": 1,
+  "import_deduplicated": 1,
+  "warnings": [
+    {
+      "code": "WARN_DEDUPE_APPLIED",
+      "message": "matched an existing imported note and reused it"
+    },
+    {
+      "code": "WARN_IMPORT_SUPPRESSED",
+      "message": "matched an existing import record and skipped duplicate import"
+    }
+  ],
+  "results": [
+    {
+      "line": 1,
+      "import_id": "import_1",
+      "materialized": false,
+      "suppressed": false,
+      "note_deduplicated": false,
+      "import_deduplicated": false
+    },
+    {
+      "line": 2,
+      "note_id": "note_existing_import",
+      "import_id": "import_2",
+      "materialized": false,
+      "suppressed": false,
+      "note_deduplicated": true,
+      "import_deduplicated": false
+    },
+    {
+      "line": 3,
+      "import_id": "import_existing",
+      "materialized": false,
+      "suppressed": true,
+      "note_deduplicated": false,
+      "import_deduplicated": true
+    }
+  ]
+}

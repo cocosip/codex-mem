@@ -8,6 +8,11 @@ import (
 	"codex-mem/internal/domain/memory"
 )
 
+const (
+	suppressionReasonPrivacyIntent  = "privacy_intent"
+	suppressionReasonExplicitMemory = "explicit_memory_exists"
+)
+
 // Options configures time and id generation for import persistence.
 type Options struct {
 	Clock             common.Clock
@@ -68,7 +73,7 @@ func (s *Service) saveImportWithRepo(ctx context.Context, input SaveInput, repo 
 		record.DurableMemoryID = ""
 	} else if isPrivateIntent(input.PrivacyIntent) {
 		record.Suppressed = true
-		record.SuppressionReason = "privacy_intent"
+		record.SuppressionReason = suppressionReasonPrivacyIntent
 		record.DurableMemoryID = ""
 	}
 	if err := record.Validate(); err != nil {
@@ -122,6 +127,11 @@ func (s *Service) SaveImportedNote(ctx context.Context, input SaveImportedNoteIn
 	return s.saveImportedNoteWithDeps(ctx, input, s.repo, s.noteSaver, s.projectNoteFinder)
 }
 
+// AuditImportedNote evaluates one imported artifact against the imported-note workflow but stores only import audit.
+func (s *Service) AuditImportedNote(ctx context.Context, input SaveImportedNoteInput) (SaveImportedNoteOutput, error) {
+	return s.auditImportedNoteWithDeps(ctx, input, s.repo, s.projectNoteFinder)
+}
+
 func (s *Service) saveImportedNoteWithDeps(ctx context.Context, input SaveImportedNoteInput, repo Repository, noteSaver NoteSaver, projectNoteFinder ProjectNoteFinder) (SaveImportedNoteOutput, error) {
 	if repo == nil || noteSaver == nil || projectNoteFinder == nil {
 		return SaveImportedNoteOutput{}, common.NewError(common.ErrWriteFailed, "imported note materialization is not configured")
@@ -165,7 +175,7 @@ func (s *Service) saveImportedNoteWithDeps(ctx context.Context, input SaveImport
 			ExternalID:        input.ExternalID,
 			PayloadHash:       input.PayloadHash,
 			PrivacyIntent:     input.PrivacyIntent,
-			SuppressionReason: "explicit_memory_exists",
+			SuppressionReason: suppressionReasonExplicitMemory,
 		}, repo)
 		if err != nil {
 			return SaveImportedNoteOutput{}, err
@@ -241,6 +251,106 @@ func (s *Service) saveImportedNoteWithDeps(ctx context.Context, input SaveImport
 	}, nil
 }
 
+func (s *Service) auditImportedNoteWithDeps(ctx context.Context, input SaveImportedNoteInput, repo Repository, projectNoteFinder ProjectNoteFinder) (SaveImportedNoteOutput, error) {
+	if repo == nil || projectNoteFinder == nil {
+		return SaveImportedNoteOutput{}, common.NewError(common.ErrWriteFailed, "imported note audit is not configured")
+	}
+	if err := input.Source.Validate(); err != nil {
+		return SaveImportedNoteOutput{}, err
+	}
+	if isPrivateIntent(input.PrivacyIntent) {
+		importOutput, err := s.saveImportWithRepo(ctx, SaveInput{
+			Scope:         input.Scope,
+			SessionID:     input.SessionID,
+			Source:        input.Source,
+			ExternalID:    input.ExternalID,
+			PayloadHash:   input.PayloadHash,
+			PrivacyIntent: input.PrivacyIntent,
+		}, repo)
+		if err != nil {
+			return SaveImportedNoteOutput{}, err
+		}
+		return SaveImportedNoteOutput{
+			Import:             importOutput.Record,
+			Materialized:       false,
+			ImportDeduplicated: importOutput.Deduplicated,
+			Suppressed:         true,
+			Warnings:           importOutput.Warnings,
+		}, nil
+	}
+
+	title := strings.TrimSpace(input.Title)
+	content := strings.TrimSpace(input.Content)
+	existing, err := projectNoteFinder.FindProjectDuplicate(input.Scope, input.Type, title, content)
+	if err != nil {
+		return SaveImportedNoteOutput{}, common.EnsureCoded(err, common.ErrReadFailed, "find project duplicate note")
+	}
+
+	if existing != nil && existing.Source == memory.SourceCodexExplicit {
+		importOutput, err := s.saveImportWithRepo(ctx, SaveInput{
+			Scope:             input.Scope,
+			SessionID:         input.SessionID,
+			Source:            input.Source,
+			ExternalID:        input.ExternalID,
+			PayloadHash:       input.PayloadHash,
+			PrivacyIntent:     input.PrivacyIntent,
+			SuppressionReason: suppressionReasonExplicitMemory,
+		}, repo)
+		if err != nil {
+			return SaveImportedNoteOutput{}, err
+		}
+		return SaveImportedNoteOutput{
+			Note:               existing,
+			Import:             importOutput.Record,
+			Materialized:       false,
+			NoteDeduplicated:   true,
+			ImportDeduplicated: importOutput.Deduplicated,
+			Suppressed:         true,
+			Warnings:           importOutput.Warnings,
+		}, nil
+	}
+
+	var (
+		note             *memory.Note
+		noteDeduplicated bool
+		warnings         []common.Warning
+		durableMemoryID  string
+	)
+	if existing != nil {
+		note = existing
+		noteDeduplicated = true
+		durableMemoryID = existing.ID
+		warnings = common.MergeWarnings(warnings, []common.Warning{{
+			Code:    common.WarnDedupeApplied,
+			Message: "matched an existing imported note and reused it",
+		}})
+	}
+
+	importOutput, err := s.saveImportWithRepo(ctx, SaveInput{
+		Scope:           input.Scope,
+		SessionID:       input.SessionID,
+		Source:          input.Source,
+		ExternalID:      input.ExternalID,
+		PayloadHash:     input.PayloadHash,
+		DurableMemoryID: durableMemoryID,
+		PrivacyIntent:   input.PrivacyIntent,
+	}, repo)
+	if err != nil {
+		return SaveImportedNoteOutput{}, err
+	}
+
+	warnings = common.MergeWarnings(warnings, importOutput.Warnings)
+	return SaveImportedNoteOutput{
+		Note:               note,
+		Import:             importOutput.Record,
+		Materialized:       false,
+		NoteDeduplicated:   noteDeduplicated,
+		ImportDeduplicated: importOutput.Deduplicated,
+		Suppressed:         importOutput.Suppressed,
+		Warnings:           warnings,
+	}, nil
+}
+
 func isPrivateIntent(privacyIntent string) bool {
 	switch strings.TrimSpace(strings.ToLower(privacyIntent)) {
 	case "private", "do_not_store", "ephemeral_only":
@@ -260,9 +370,9 @@ func normalizeSuppressionReason(value string) string {
 
 func suppressionWarningMessage(reason string) string {
 	switch normalizeSuppressionReason(reason) {
-	case "privacy_intent":
+	case suppressionReasonPrivacyIntent:
 		return "import was suppressed by privacy policy"
-	case "explicit_memory_exists":
+	case suppressionReasonExplicitMemory:
 		return "import was suppressed because stronger explicit memory already exists"
 	default:
 		return "import was suppressed by import policy"

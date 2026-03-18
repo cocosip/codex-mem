@@ -12,6 +12,9 @@ import (
 
 	"codex-mem/internal/config"
 	"codex-mem/internal/db"
+	"codex-mem/internal/domain/memory"
+	"codex-mem/internal/domain/scope"
+	"codex-mem/internal/domain/session"
 )
 
 const (
@@ -96,6 +99,19 @@ func TestParseIngestImportsOptionsRejectsFailedManifestWithoutContinueOnError(t 
 	}
 }
 
+func TestParseIngestImportsOptionsSupportsAuditOnly(t *testing.T) {
+	options, err := parseIngestImportsOptions([]string{
+		"--source", ingestImportsWatcherSource,
+		"--audit-only",
+	})
+	if err != nil {
+		t.Fatalf("parseIngestImportsOptions: %v", err)
+	}
+	if !options.AuditOnly {
+		t.Fatal("expected audit-only mode")
+	}
+}
+
 func TestRunIngestImportsPersistsImportedNotesFromJSONL(t *testing.T) {
 	root := t.TempDir()
 	cfg := ingestTestConfig(root)
@@ -125,6 +141,7 @@ func TestRunIngestImportsPersistsImportedNotesFromJSONL(t *testing.T) {
 		"failed=0",
 		"materialized=1",
 		"suppressed=1",
+		"suppression_reason_privacy_intent=1",
 		"warnings=1",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -189,6 +206,9 @@ func TestRunIngestImportsPrintsJSONReport(t *testing.T) {
 	if got, want := report.Status, "ok"; got != want {
 		t.Fatalf("status mismatch: got %q want %q", got, want)
 	}
+	if report.AuditOnly {
+		t.Fatalf("did not expect audit-only mode in materializing report: %+v", report)
+	}
 	if got, want := report.Materialized, 1; got != want {
 		t.Fatalf("materialized mismatch: got %d want %d", got, want)
 	}
@@ -203,6 +223,208 @@ func TestRunIngestImportsPrintsJSONReport(t *testing.T) {
 	}
 	if report.Results[0].Error != nil {
 		t.Fatalf("did not expect line error in result: %+v", report.Results[0].Error)
+	}
+}
+
+func TestRunIngestImportsAuditOnlyPersistsOnlyImportAudit(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	input := `{"external_id":"relay:1","type":"bugfix","title":"Relay bugfix","content":"Imported from relay.","importance":4}`
+
+	var stdout bytes.Buffer
+	err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", "relay_import",
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--audit-only",
+		"--json",
+	}, strings.NewReader(input), &stdout)
+	if err != nil {
+		t.Fatalf("Run ingest-imports --audit-only --json: %v", err)
+	}
+
+	var report ingestImportsReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal ingest audit-only report: %v\n%s", err, stdout.String())
+	}
+	if !report.AuditOnly {
+		t.Fatalf("expected audit_only=true, got %+v", report)
+	}
+	if got, want := report.Processed, 1; got != want {
+		t.Fatalf("processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Materialized, 0; got != want {
+		t.Fatalf("materialized mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Suppressed, 0; got != want {
+		t.Fatalf("suppressed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.WouldMaterialize, 1; got != want {
+		t.Fatalf("would_materialize mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.LinkedExistingNote, 0; got != want {
+		t.Fatalf("linked_existing_note mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Results), 1; got != want {
+		t.Fatalf("result count mismatch: got %d want %d", got, want)
+	}
+	if report.Results[0].NoteID != "" {
+		t.Fatalf("expected audit-only result to skip note ids, got %+v", report.Results[0])
+	}
+
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	diagnostics, err := db.InspectRuntime(context.Background(), instance.DB)
+	if err != nil {
+		t.Fatalf("InspectRuntime: %v", err)
+	}
+	if got, want := diagnostics.Audit.NoteRecords, 0; got != want {
+		t.Fatalf("note count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, 1; got != want {
+		t.Fatalf("import count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestRunIngestImportsAuditOnlyReportsLinkedExistingNote(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	seedInput := `{"external_id":"watcher:seed","type":"bugfix","title":"Imported bugfix","content":"Imported from watcher.","importance":4}`
+
+	var seedStdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", ingestImportsWatcherSource,
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--json",
+	}, strings.NewReader(seedInput), &seedStdout); err != nil {
+		t.Fatalf("Run ingest-imports seed batch: %v", err)
+	}
+
+	auditInput := `{"external_id":"watcher:audit","type":"bugfix","title":"Imported bugfix","content":"Imported from watcher.","importance":4}`
+	var auditStdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", ingestImportsWatcherSource,
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--audit-only",
+		"--json",
+	}, strings.NewReader(auditInput), &auditStdout); err != nil {
+		t.Fatalf("Run ingest-imports audit-only duplicate batch: %v", err)
+	}
+
+	var report ingestImportsReport
+	if err := json.Unmarshal(auditStdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal audit-only duplicate report: %v\n%s", err, auditStdout.String())
+	}
+	if !report.AuditOnly {
+		t.Fatalf("expected audit_only=true, got %+v", report)
+	}
+	if got, want := report.WouldMaterialize, 0; got != want {
+		t.Fatalf("would_materialize mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.LinkedExistingNote, 1; got != want {
+		t.Fatalf("linked_existing_note mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Results), 1; got != want {
+		t.Fatalf("result count mismatch: got %d want %d", got, want)
+	}
+	if !report.Results[0].NoteDeduplicated {
+		t.Fatalf("expected note deduplication in audit-only duplicate path, got %+v", report.Results[0])
+	}
+	if report.Results[0].NoteID == "" {
+		t.Fatalf("expected reused note id in audit-only duplicate path, got %+v", report.Results[0])
+	}
+
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	diagnostics, err := db.InspectRuntime(context.Background(), instance.DB)
+	if err != nil {
+		t.Fatalf("InspectRuntime: %v", err)
+	}
+	if got, want := diagnostics.Audit.NoteRecords, 1; got != want {
+		t.Fatalf("note count mismatch: got %d want %d", got, want)
+	}
+	if got, want := diagnostics.Audit.ImportRecords, 2; got != want {
+		t.Fatalf("import count mismatch: got %d want %d", got, want)
+	}
+}
+
+func TestRunIngestImportsAuditOnlyJSONIncludesSuppressionReasonCounts(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	scopeOutput, err := instance.ScopeService.Resolve(context.Background(), scope.ResolveInput{
+		CWD:        root,
+		RepoRemote: "git@github.com:example/codex-mem.git",
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	sessionOutput, err := instance.SessionService.Start(context.Background(), session.StartInput{
+		Scope: scopeOutput.Scope,
+		Task:  "seed explicit note",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, err := instance.MemoryService.SaveNote(context.Background(), memory.SaveInput{
+		Scope:      scopeOutput.Scope.Ref(),
+		SessionID:  sessionOutput.Session.ID,
+		Type:       memory.NoteTypeDecision,
+		Title:      "Keep explicit decision",
+		Content:    "Explicit decision already exists.",
+		Importance: 5,
+		Source:     memory.SourceCodexExplicit,
+	}); err != nil {
+		t.Fatalf("SaveNote explicit seed: %v", err)
+	}
+
+	input := strings.Join([]string{
+		`{"external_id":"watcher:private","type":"todo","title":"Private follow-up","content":"Should stay audit-only.","importance":3,"privacy_intent":"private"}`,
+		`{"external_id":"watcher:explicit","type":"decision","title":"Keep explicit decision","content":"Explicit decision already exists.","importance":5}`,
+	}, "\n")
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", ingestImportsWatcherSource,
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--audit-only",
+		"--json",
+	}, strings.NewReader(input), &stdout); err != nil {
+		t.Fatalf("Run ingest-imports audit-only suppression batch: %v", err)
+	}
+
+	var report ingestImportsReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal audit-only suppression report: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.Suppressed, 2; got != want {
+		t.Fatalf("suppressed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.SuppressionReasons["privacy_intent"], 1; got != want {
+		t.Fatalf("privacy_intent suppression count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.SuppressionReasons["explicit_memory_exists"], 1; got != want {
+		t.Fatalf("explicit_memory_exists suppression count mismatch: got %d want %d", got, want)
 	}
 }
 

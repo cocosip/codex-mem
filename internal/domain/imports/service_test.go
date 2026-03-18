@@ -10,11 +10,6 @@ import (
 	"codex-mem/internal/domain/scope"
 )
 
-const (
-	suppressionReasonPrivacyIntent  = "privacy_intent"
-	suppressionReasonExplicitMemory = "explicit_memory_exists"
-)
-
 type fakeRepository struct {
 	duplicate *Record
 	created   Record
@@ -381,6 +376,143 @@ func TestSaveImportedNotePrivacyIntentSkipsMaterialization(t *testing.T) {
 		t.Fatalf("expected note saver to be skipped, got %d calls", noteSaver.calls)
 	}
 	if got, want := repo.created.SuppressionReason, suppressionReasonPrivacyIntent; got != want {
+		t.Fatalf("suppression reason mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestAuditImportedNoteStoresOnlyImportAuditWhenNoDuplicateExists(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo, Options{
+		Clock:             fixedClock{now: time.Date(2026, 3, 16, 4, 0, 0, 0, time.UTC)},
+		IDFactory:         fixedIDFactory{value: "import_audit_only"},
+		ProjectNoteFinder: fakeProjectNoteFinder{},
+	})
+
+	result, err := service.AuditImportedNote(context.Background(), SaveImportedNoteInput{
+		Scope:      scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:  "sess_1",
+		Source:     SourceWatcherImport,
+		ExternalID: "watcher:audit-1",
+		Type:       memory.NoteTypeDiscovery,
+		Title:      "Audit-only import",
+		Content:    "Should create only import audit.",
+		Importance: 4,
+	})
+	if err != nil {
+		t.Fatalf("AuditImportedNote: %v", err)
+	}
+
+	if result.Materialized {
+		t.Fatalf("expected audit-only path to skip materialization, got %+v", result)
+	}
+	if result.Note != nil {
+		t.Fatalf("expected no durable note in audit-only path, got %+v", result.Note)
+	}
+	if result.Suppressed {
+		t.Fatalf("did not expect suppression for new audit-only import, got %+v", result)
+	}
+	if got, want := repo.created.DurableMemoryID, ""; got != want {
+		t.Fatalf("expected audit-only import audit to remain unlinked, got %q", got)
+	}
+}
+
+func TestAuditImportedNoteReusesExistingImportedNoteLink(t *testing.T) {
+	repo := &fakeRepository{}
+	existing := &memory.Note{
+		ID:         "note_existing_import",
+		Scope:      scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:  "sess_existing",
+		Type:       memory.NoteTypeBugfix,
+		Title:      "Imported bugfix",
+		Content:    "Imported bugfix already stored.",
+		Importance: 4,
+		Status:     memory.StatusActive,
+		Source:     memory.SourceWatcherImport,
+		CreatedAt:  time.Date(2026, 3, 16, 4, 5, 0, 0, time.UTC),
+		UpdatedAt:  time.Date(2026, 3, 16, 4, 5, 0, 0, time.UTC),
+	}
+	service := NewService(repo, Options{
+		Clock:             fixedClock{now: time.Date(2026, 3, 16, 4, 6, 0, 0, time.UTC)},
+		IDFactory:         fixedIDFactory{value: "import_audit_reuse"},
+		ProjectNoteFinder: fakeProjectNoteFinder{note: existing},
+	})
+
+	result, err := service.AuditImportedNote(context.Background(), SaveImportedNoteInput{
+		Scope:      existing.Scope,
+		SessionID:  "sess_1",
+		Source:     SourceWatcherImport,
+		ExternalID: "watcher:bugfix-audit",
+		Type:       existing.Type,
+		Title:      existing.Title,
+		Content:    existing.Content,
+		Importance: existing.Importance,
+	})
+	if err != nil {
+		t.Fatalf("AuditImportedNote: %v", err)
+	}
+
+	if result.Materialized {
+		t.Fatalf("expected audit-only path to skip materialization, got %+v", result)
+	}
+	if !result.NoteDeduplicated {
+		t.Fatal("expected existing imported note reuse to report note deduplication")
+	}
+	if result.Note == nil || result.Note.ID != existing.ID {
+		t.Fatalf("expected reused imported note in audit-only path, got %+v", result.Note)
+	}
+	if got, want := repo.created.DurableMemoryID, existing.ID; got != want {
+		t.Fatalf("expected audit-only import audit to link reused note %q, got %q", want, got)
+	}
+	if got, want := result.Warnings[0].Code, common.WarnDedupeApplied; got != want {
+		t.Fatalf("warning code mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestAuditImportedNoteSuppressesWhenExplicitMemoryExists(t *testing.T) {
+	repo := &fakeRepository{}
+	explicit := &memory.Note{
+		ID:         "note_explicit",
+		Scope:      scope.Ref{SystemID: "sys_1", ProjectID: "proj_1", WorkspaceID: "ws_1"},
+		SessionID:  "sess_existing",
+		Type:       memory.NoteTypeDecision,
+		Title:      "Keep explicit decision",
+		Content:    "Explicit decision already exists.",
+		Importance: 5,
+		Status:     memory.StatusActive,
+		Source:     memory.SourceCodexExplicit,
+		CreatedAt:  time.Date(2026, 3, 16, 4, 10, 0, 0, time.UTC),
+		UpdatedAt:  time.Date(2026, 3, 16, 4, 10, 0, 0, time.UTC),
+	}
+	service := NewService(repo, Options{
+		Clock:             fixedClock{now: time.Date(2026, 3, 16, 4, 11, 0, 0, time.UTC)},
+		IDFactory:         fixedIDFactory{value: "import_audit_suppressed"},
+		ProjectNoteFinder: fakeProjectNoteFinder{note: explicit},
+	})
+
+	result, err := service.AuditImportedNote(context.Background(), SaveImportedNoteInput{
+		Scope:      explicit.Scope,
+		SessionID:  "sess_1",
+		Source:     SourceRelayImport,
+		ExternalID: "relay:decision-audit",
+		Type:       explicit.Type,
+		Title:      explicit.Title,
+		Content:    explicit.Content,
+		Importance: explicit.Importance,
+	})
+	if err != nil {
+		t.Fatalf("AuditImportedNote: %v", err)
+	}
+
+	if result.Materialized {
+		t.Fatalf("expected audit-only explicit duplicate to stay unmaterialized, got %+v", result)
+	}
+	if !result.Suppressed {
+		t.Fatal("expected explicit duplicate to be suppressed")
+	}
+	if result.Note == nil || result.Note.ID != explicit.ID {
+		t.Fatalf("expected explicit note to be returned, got %+v", result.Note)
+	}
+	if got, want := repo.created.SuppressionReason, suppressionReasonExplicitMemory; got != want {
 		t.Fatalf("suppression reason mismatch: got %q want %q", got, want)
 	}
 }

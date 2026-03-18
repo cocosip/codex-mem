@@ -410,6 +410,50 @@ func TestRunDefaultsToDoctorWhenNoCommandIsProvided(t *testing.T) {
 	}
 }
 
+func TestRunIngestImportsAuditOnlyPrintsJSONWithoutMaterializingNotes(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	input := `{"external_id":"watcher:1","type":"discovery","title":"Imported discovery","content":"Useful watcher discovery.","importance":4}`
+
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", "watcher_import",
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--audit-only",
+		"--json",
+	}, strings.NewReader(input), &stdout); err != nil {
+		t.Fatalf("Run ingest-imports --audit-only --json: %v", err)
+	}
+
+	var report ingestImportsReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal ingest-imports audit-only JSON: %v\n%s", err, stdout.String())
+	}
+	if !report.AuditOnly {
+		t.Fatalf("expected audit_only=true, got %+v", report)
+	}
+	if got, want := report.Materialized, 0; got != want {
+		t.Fatalf("materialized mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Processed, 1; got != want {
+		t.Fatalf("processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.WouldMaterialize, 1; got != want {
+		t.Fatalf("would_materialize mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.LinkedExistingNote, 0; got != want {
+		t.Fatalf("linked_existing_note mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Results), 1; got != want {
+		t.Fatalf("result count mismatch: got %d want %d", got, want)
+	}
+	if report.Results[0].NoteID != "" {
+		t.Fatalf("expected audit-only result to skip note ids, got %+v", report.Results[0])
+	}
+}
+
 func TestRunDoctorPrintsJSONDiagnostics(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
@@ -1439,6 +1483,24 @@ func TestCleanupFollowImportsExampleOutputsStayInSync(t *testing.T) {
 	}
 }
 
+func TestIngestImportsExampleOutputsStayInSync(t *testing.T) {
+	for _, fixture := range ingestImportsExampleFixtures() {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			assertIngestImportsExampleOutput(t, filepath.Join("testdata", fixture.RelativePath), fixture.JSON, fixture.Report)
+		})
+	}
+}
+
+func TestFollowImportsExampleOutputsStayInSync(t *testing.T) {
+	for _, fixture := range followImportsCommandExampleFixtures() {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			assertFollowImportsExampleOutput(t, filepath.Join("testdata", fixture.RelativePath), fixture.JSON, fixture.Report)
+		})
+	}
+}
+
 func TestRefreshCleanupFollowImportsExampleFixtures(t *testing.T) {
 	names := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_CLEANUP_EXAMPLES")
 	writtenPaths, err := writeCleanupFollowImportsExampleFixtures("testdata", names)
@@ -1458,6 +1520,28 @@ func TestRefreshAuditFollowImportsExampleFixtures(t *testing.T) {
 	}
 	if len(writtenPaths) == 0 {
 		t.Fatal("expected at least one audit fixture to be written")
+	}
+}
+
+func TestRefreshIngestImportsExampleFixtures(t *testing.T) {
+	names := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_INGEST_EXAMPLES")
+	writtenPaths, err := writeIngestImportsExampleFixtures("testdata", names)
+	if err != nil {
+		t.Fatalf("writeIngestImportsExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) == 0 {
+		t.Fatal("expected at least one ingest fixture to be written")
+	}
+}
+
+func TestRefreshFollowImportsExampleFixtures(t *testing.T) {
+	names := followImportsExampleRefreshSelection(t, "CODEX_MEM_REFRESH_FOLLOW_IMPORT_EXAMPLES")
+	writtenPaths, err := writeFollowImportsCommandExampleFixtures("testdata", names)
+	if err != nil {
+		t.Fatalf("writeFollowImportsCommandExampleFixtures: %v", err)
+	}
+	if len(writtenPaths) == 0 {
+		t.Fatal("expected at least one follow-import fixture to be written")
 	}
 }
 

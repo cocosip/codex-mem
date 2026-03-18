@@ -1,0 +1,24 @@
+ingest imports ok
+status=ok
+source=watcher_import
+input=D:\Ops\imports\events.jsonl
+failed_output=none
+failed_output_written=0
+failed_manifest=none
+failed_manifest_count=0
+session_id=sess_20260318_013000
+resolved_by=repo_remote
+audit_only=true
+continue_on_error=false
+attempted=3
+processed=3
+failed=0
+materialized=0
+suppressed=2
+note_deduplicated=1
+import_deduplicated=0
+warnings=2
+suppression_reason_explicit_memory_exists=1
+suppression_reason_privacy_intent=1
+would_materialize=1
+linked_existing_note=0
