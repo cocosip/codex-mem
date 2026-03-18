@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This appendix provides language-neutral example request and response shapes for key `codex-mem` tools.
+This appendix provides language-neutral example request and response shapes for the current `codex-mem` v1 MCP tools.
 
 These examples illustrate intent and semantics. They are not tied to one implementation language.
 
@@ -127,6 +127,86 @@ These examples illustrate intent and semantics. They are not tied to one impleme
       "related_context": [
         "Backend API removed support for legacy payment aliases."
       ]
+    }
+  },
+  "warnings": []
+}
+```
+
+## `memory_resolve_scope`
+
+### Example request
+
+```json
+{
+  "cwd": "D:/Code/go/order-web",
+  "branch_name": "fix/order-validation",
+  "repo_remote": "git@github.com:example/order-web.git",
+  "project_name_hint": "order-web",
+  "system_name_hint": "order-platform"
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "scope": {
+      "system_id": "sys_order_platform",
+      "system_name": "order-platform",
+      "project_id": "proj_order_web",
+      "project_name": "order-web",
+      "workspace_id": "ws_order_web_main",
+      "workspace_root": "D:/Code/go/order-web",
+      "branch_name": "fix/order-validation",
+      "resolved_by": "repo_remote"
+    },
+    "resolved_by": "repo_remote"
+  },
+  "warnings": []
+}
+```
+
+## `memory_start_session`
+
+### Example request
+
+```json
+{
+  "scope": {
+    "system_id": "sys_order_platform",
+    "system_name": "order-platform",
+    "project_id": "proj_order_web",
+    "project_name": "order-web",
+    "workspace_id": "ws_order_web_main",
+    "workspace_root": "D:/Code/go/order-web",
+    "branch_name": "fix/order-validation",
+    "resolved_by": "repo_remote"
+  },
+  "task": "Continue fixing order submission validation",
+  "branch_name": "fix/order-validation"
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "session": {
+      "session_id": "sess_20260313_001",
+      "scope": {
+        "system_id": "sys_order_platform",
+        "project_id": "proj_order_web",
+        "workspace_id": "ws_order_web_main"
+      },
+      "status": "active",
+      "task": "Continue fixing order submission validation",
+      "branch_name": "fix/order-validation",
+      "started_at": "2026-03-13T10:30:00Z"
     }
   },
   "warnings": []
@@ -299,6 +379,8 @@ These examples illustrate intent and semantics. They are not tied to one impleme
 }
 ```
 
+Replay of the same imported artifact or a privacy-blocked import still returns `ok: true`, but the payload flips to `suppressed: true` and includes warning visibility instead of silently writing another durable record.
+
 ## `memory_save_imported_note`
 
 ### Example request
@@ -370,6 +452,8 @@ These examples illustrate intent and semantics. They are not tied to one impleme
 }
 ```
 
+When explicit project memory already covers the same artifact, or privacy rules exclude durable storage, the response still preserves the import audit while `materialized` becomes `false` and `suppressed` becomes `true`.
+
 ## `memory_search`
 
 ### Example request
@@ -427,6 +511,170 @@ These examples illustrate intent and semantics. They are not tied to one impleme
         "created_at": "2026-03-13T11:10:00Z"
       }
     ]
+  },
+  "warnings": []
+}
+```
+
+## `memory_get_recent`
+
+### Example request
+
+```json
+{
+  "scope": {
+    "system_id": "sys_order_platform",
+    "project_id": "proj_order_web",
+    "workspace_id": "ws_order_web_main"
+  },
+  "limit": 3,
+  "include_handoffs": true,
+  "include_notes": true,
+  "include_related_projects": false
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "handoffs": [
+      {
+        "handoff_id": "handoff_115",
+        "scope": {
+          "system_id": "sys_order_platform",
+          "project_id": "proj_order_web",
+          "workspace_id": "ws_order_web_main"
+        },
+        "session_id": "sess_20260313_001",
+        "kind": "final",
+        "task": "Fix order validation mismatch",
+        "summary": "Validation logic has been aligned, but draft checkout regression still needs confirmation.",
+        "next_steps": [
+          "Run regression test on saved draft checkout flow",
+          "Confirm no legacy alias references remain"
+        ],
+        "status": "open",
+        "created_at": "2026-03-13T11:10:00Z"
+      }
+    ],
+    "notes": [
+      {
+        "note_id": "note_488",
+        "scope": {
+          "system_id": "sys_order_platform",
+          "project_id": "proj_order_web",
+          "workspace_id": "ws_order_web_main"
+        },
+        "session_id": "sess_20260313_001",
+        "type": "discovery",
+        "title": "Watcher captured checkout retry regression",
+        "content": "A local watcher run showed the checkout retry button still posts a legacy payment alias after draft restore.",
+        "importance": 4,
+        "status": "active",
+        "source": "watcher_import",
+        "created_at": "2026-03-13T11:24:00Z"
+      },
+      {
+        "note_id": "note_402",
+        "scope": {
+          "system_id": "sys_order_platform",
+          "project_id": "proj_order_web",
+          "workspace_id": "ws_order_web_main"
+        },
+        "session_id": "sess_20260313_001",
+        "type": "bugfix",
+        "title": "Order validation now uses generated backend enum list",
+        "content": "Client-side validation now reads generated enum metadata instead of maintaining a stale manual list.",
+        "importance": 4,
+        "status": "active",
+        "source": "codex_explicit",
+        "created_at": "2026-03-13T10:52:00Z"
+      }
+    ]
+  },
+  "warnings": []
+}
+```
+
+## `memory_get_note`
+
+### Example request
+
+```json
+{
+  "id": "note_488",
+  "kind": "note"
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "record": {
+      "note_id": "note_488",
+      "scope": {
+        "system_id": "sys_order_platform",
+        "project_id": "proj_order_web",
+        "workspace_id": "ws_order_web_main"
+      },
+      "session_id": "sess_20260313_001",
+      "type": "discovery",
+      "title": "Watcher captured checkout retry regression",
+      "content": "A local watcher run showed the checkout retry button still posts a legacy payment alias after draft restore.",
+      "importance": 4,
+      "status": "active",
+      "source": "watcher_import",
+      "created_at": "2026-03-13T11:24:00Z"
+    }
+  },
+  "warnings": []
+}
+```
+
+## `memory_install_agents`
+
+### Example request
+
+```json
+{
+  "target": "project",
+  "mode": "safe",
+  "cwd": "D:/Code/go/order-web",
+  "project_name": "order-web",
+  "system_name": "order-platform",
+  "related_repositories": [
+    "order-api",
+    "order-worker"
+  ],
+  "preferred_tags": [
+    "spec",
+    "api",
+    "go"
+  ],
+  "allow_related_project_memory": true
+}
+```
+
+### Example response
+
+```json
+{
+  "ok": true,
+  "data": {
+    "written_files": [
+      {
+        "path": "D:/Code/go/order-web/AGENTS.md",
+        "target": "project",
+        "mode": "safe"
+      }
+    ],
+    "skipped_files": []
   },
   "warnings": []
 }

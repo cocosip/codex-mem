@@ -14,6 +14,8 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
+const runTestCommandIngestImports = "ingest-imports"
+
 func TestRunDoctorPrintsEffectiveConfigSummary(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{
@@ -422,6 +424,62 @@ func TestRunListCommandExamplesPrintsEmbeddedManifest(t *testing.T) {
 	}
 }
 
+func TestRunListCommandExamplesFiltersTextByCommand(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--command", "follow-imports"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --command follow-imports: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"command=follow-imports example=audit-only-single-text format=text path=testdata/follow-imports-audit-only-single.txt",
+		"command=follow-imports example=audit-only-multi-json format=json path=testdata/follow-imports-audit-only-multi.json",
+		"example_count=2",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("filtered manifest missing %q:\n%s", fragment, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"command=ingest-imports",
+		"command=cleanup-follow-imports",
+		"command=audit-follow-imports",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("filtered manifest unexpectedly included %q:\n%s", forbidden, output)
+		}
+	}
+}
+
+func TestRunListCommandExamplesFiltersTextByFormat(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--format", "text"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --format text: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"command=ingest-imports example=audit-only-summary-text format=text path=testdata/ingest-imports-audit-only-summary.txt",
+		"command=follow-imports example=audit-only-single-text format=text path=testdata/follow-imports-audit-only-single.txt",
+		"command=cleanup-follow-imports example=target-profile-all-text format=text path=testdata/cleanup-follow-imports-target-profile-all.txt",
+		"command=audit-follow-imports example=daily-audit-text format=text path=testdata/audit-follow-imports-daily-audit.txt",
+		"example_count=5",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("text-filtered manifest missing %q:\n%s", fragment, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"format=json",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("text-filtered manifest unexpectedly included %q:\n%s", forbidden, output)
+		}
+	}
+}
+
 func TestRunListCommandExamplesPrintsJSON(t *testing.T) {
 	var stdout bytes.Buffer
 
@@ -443,7 +501,7 @@ func TestRunListCommandExamplesPrintsJSON(t *testing.T) {
 		t.Fatalf("examples len mismatch: got %d want %d", got, want)
 	}
 	first := report.Examples[0]
-	if got, want := first.Command, "ingest-imports"; got != want {
+	if got, want := first.Command, runTestCommandIngestImports; got != want {
 		t.Fatalf("first command mismatch: got %q want %q", got, want)
 	}
 	if got, want := first.Name, "audit-only-summary-text"; got != want {
@@ -454,6 +512,113 @@ func TestRunListCommandExamplesPrintsJSON(t *testing.T) {
 	}
 	if got, want := first.RelativePath, "testdata/ingest-imports-audit-only-summary.txt"; got != want {
 		t.Fatalf("first path mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestRunListCommandExamplesFiltersJSONByMultipleCommands(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{
+		"list-command-examples",
+		"--json",
+		"--command", runTestCommandIngestImports + ",follow-imports",
+		"--command", "cleanup-follow-imports",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples filtered --json: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal filtered list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.ExampleCount, 7; got != want {
+		t.Fatalf("example_count mismatch: got %d want %d", got, want)
+	}
+	for _, entry := range report.Examples {
+		switch entry.Command {
+		case runTestCommandIngestImports, "follow-imports", "cleanup-follow-imports":
+		default:
+			t.Fatalf("unexpected filtered command %q in %+v", entry.Command, entry)
+		}
+	}
+}
+
+func TestRunListCommandExamplesFiltersJSONByCommandAndFormat(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{
+		"list-command-examples",
+		"--json",
+		"--command", runTestCommandIngestImports + ",follow-imports",
+		"--format", "json",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples filtered by command and format: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal command+format filtered list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.ExampleCount, 2; got != want {
+		t.Fatalf("example_count mismatch: got %d want %d", got, want)
+	}
+	for _, entry := range report.Examples {
+		if entry.Format != "json" {
+			t.Fatalf("unexpected format %q in %+v", entry.Format, entry)
+		}
+		switch entry.Command {
+		case runTestCommandIngestImports, "follow-imports":
+		default:
+			t.Fatalf("unexpected command %q in %+v", entry.Command, entry)
+		}
+	}
+}
+
+func TestRunListCommandExamplesRejectsUnknownCommandFilter(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--command", "unknown-command"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected unknown command filter error")
+	}
+	if !strings.Contains(err.Error(), "unknown list-command-examples command filter") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsUnknownFormatFilter(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--format", "yaml"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected unknown format filter error")
+	}
+	if !strings.Contains(err.Error(), "unknown list-command-examples format filter") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsMissingCommandValue(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--command"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected missing command value error")
+	}
+	if !strings.Contains(err.Error(), "--command requires a value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsMissingFormatValue(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--format"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected missing format value error")
+	}
+	if !strings.Contains(err.Error(), "--format requires a value") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1612,7 +1777,7 @@ func TestWriteCommandExampleManifest(t *testing.T) {
 		t.Fatalf("writeCommandExampleManifest: %v", err)
 	}
 
-	expected := renderCommandExampleManifest(commandExampleManifestEntries())
+	expected := []byte(formatCommandExampleManifest(buildCommandExampleManifestReport(commandExampleManifestEntriesForReport(commandExampleManifestEntries()))))
 	body, err := os.ReadFile(writtenPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%q): %v", writtenPath, err)
@@ -1696,7 +1861,7 @@ func assertAuditFollowImportsExampleOutput(t *testing.T, path string, jsonOutput
 func assertCommandExampleManifestOutput(t *testing.T, path string) {
 	t.Helper()
 
-	body := renderCommandExampleManifest(commandExampleManifestEntries())
+	body := []byte(formatCommandExampleManifest(buildCommandExampleManifestReport(commandExampleManifestEntriesForReport(commandExampleManifestEntries()))))
 	expected, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%q): %v", path, err)

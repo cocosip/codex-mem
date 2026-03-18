@@ -330,6 +330,18 @@ If automation needs a stable machine-readable catalog, use:
 codex-mem.exe list-command-examples --json
 ```
 
+If you only want one command family while browsing the catalog, filter it in place:
+
+```powershell
+codex-mem.exe list-command-examples --command follow-imports
+```
+
+If you only want one output format while browsing the catalog, filter it the same way:
+
+```powershell
+codex-mem.exe list-command-examples --format json
+```
+
 If a deliberate output change makes those fixtures drift, refresh the ingest fixtures from the repository root through the test-only maintainer helper:
 
 ```powershell

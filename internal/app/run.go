@@ -14,6 +14,15 @@ import (
 	"codex-mem/internal/mcp"
 )
 
+const (
+	commandDoctor              = "doctor"
+	commandListCommandExamples = "list-command-examples"
+	commandIngestImports       = "ingest-imports"
+	commandFollowImports       = "follow-imports"
+	commandAuditFollowImports  = "audit-follow-imports"
+	commandCleanupFollowImport = "cleanup-follow-imports"
+)
+
 // Run executes the selected CLI subcommand with the configured application wiring.
 func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader, stdout io.Writer) error {
 	logger := slog.Default().With(
@@ -22,7 +31,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		"config_file", cfg.Meta.ConfigFilePath,
 		"config_file_used", cfg.Meta.ConfigFileUsed,
 	)
-	command := "doctor"
+	command := commandDoctor
 	commandArgs := []string{}
 	if len(args) > 0 {
 		command = args[0]
@@ -34,17 +43,21 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 	case "version":
 		_, err := fmt.Fprintf(stdout, "codex-mem %s\ncommit=%s\ndate=%s\n", buildinfo.Summary(), buildinfo.Commit, buildinfo.Date)
 		return err
-	case "list-command-examples":
+	case commandListCommandExamples:
 		options, err := parseListCommandExamplesOptions(commandArgs)
 		if err != nil {
 			return err
 		}
-		if !options.JSON {
-			_, err = io.WriteString(stdout, EmbeddedCommandExampleManifest)
-			return err
-		}
 		report, err := commandExampleManifestReportFromEmbedded()
 		if err != nil {
+			return err
+		}
+		report, err = filterCommandExampleManifestReport(report, options.Commands, options.Formats)
+		if err != nil {
+			return err
+		}
+		if !options.JSON {
+			_, err = io.WriteString(stdout, formatCommandExampleManifest(report))
 			return err
 		}
 		output, err := formatCommandExampleManifestJSON(report)
@@ -64,7 +77,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		logger.Info("migrations applied", "database", cfg.File.DatabasePath)
 		_, err = fmt.Fprintf(stdout, "migrations applied successfully to %s\n", cfg.File.DatabasePath)
 		return err
-	case "doctor":
+	case commandDoctor:
 		options, err := parseDoctorOptions(commandArgs)
 		if err != nil {
 			return err
@@ -108,13 +121,13 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		}
 		_, err = io.WriteString(stdout, output)
 		return err
-	case "ingest-imports":
+	case commandIngestImports:
 		return runIngestImports(ctx, cfg, stdin, stdout, commandArgs)
-	case "follow-imports":
+	case commandFollowImports:
 		return runFollowImports(ctx, cfg, stdout, commandArgs)
-	case "audit-follow-imports":
+	case commandAuditFollowImports:
 		return runAuditFollowImports(cfg, stdout, commandArgs)
-	case "cleanup-follow-imports":
+	case commandCleanupFollowImport:
 		return runCleanupFollowImports(cfg, stdout, commandArgs)
 	case "serve":
 		instance, err := New(ctx, cfg)

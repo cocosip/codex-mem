@@ -24,12 +24,14 @@ If you are deploying or operating the MCP server:
 
 - [Client Examples](./operator/client-examples.md)
 - [Import Ingestion](./operator/import-ingestion.md)
+  Batch import, long-lived follow mode, cleanup/audit hygiene commands, and packaged example-catalog lookup.
 - [Release Readiness](./operator/release-readiness.md)
 - [Troubleshooting](./operator/troubleshooting.md)
 
 If you are maintaining or testing the Go implementation:
 
 - [MCP Integration](./maintainer/mcp-integration.md)
+  Stdio/HTTP transport behavior, current 11-tool MCP surface, and source-tree smoke tests.
 - [Development Tracker](./maintainer/development-tracker.md)
 - [Development Kickoff](./maintainer/dev-kickoff.md)
 - [Implementation Plan](./maintainer/implementation-plan.md)

@@ -85,6 +85,29 @@ Use this document when you need one of these:
 
 If you only want to register the packaged binary with Codex CLI, use [client-examples.md](../operator/client-examples.md).
 
+## Current Tool Surface
+
+`tools/list` should currently expose these 11 MCP tools:
+
+- `memory_bootstrap_session`
+- `memory_resolve_scope`
+- `memory_start_session`
+- `memory_save_note`
+- `memory_save_handoff`
+- `memory_save_import`
+- `memory_save_imported_note`
+- `memory_search`
+- `memory_get_recent`
+- `memory_get_note`
+- `memory_install_agents`
+
+For maintainers, the most important v1 extension additions beyond the continuity baseline are the import-audit and imported-note tools:
+
+- `memory_save_import` records durable provenance for imported watcher or relay artifacts, even when note materialization is suppressed.
+- `memory_save_imported_note` keeps imported-note materialization aligned with the same scope, privacy, and explicit-memory precedence rules as the operator-facing import commands.
+
+If a client caches tool metadata, refresh that cache after upgrades instead of assuming the older baseline surface.
+
 ## Fastest Source-Tree Smoke Test
 
 Run the checked-in smoke test:

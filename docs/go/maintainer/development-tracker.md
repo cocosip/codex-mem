@@ -151,6 +151,20 @@ Immediate next tasks:
 
 ### 2026-03-18 Session Update
 
+- Completed: Added `--format` filtering to `list-command-examples`, including repeated and comma-separated format selectors. Text and JSON output now share the same embedded-manifest filtering path across command and format filters, runtime coverage verifies mixed command+format filtering plus argument rejection, and operator docs now show how to browse only text or JSON fixtures.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether operators now need richer catalog metadata such as fixture purpose/category tags, or whether command plus format filtering is enough.
+
+### 2026-03-18 Session Update
+
+- Completed: Added `--command` filtering to `list-command-examples`, including repeated and comma-separated command selectors. Text and JSON output now share the same parsed embedded manifest path, so filtered operator lookup stays consistent across both formats without introducing another source of truth.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether list-command-examples now has enough discovery power, or whether operators also need format-level filtering such as `--format json`.
+
+### 2026-03-18 Session Update
+
 - Completed: Extended `list-command-examples` with a `--json` mode that parses the embedded text manifest into a stable structured report. Runtime coverage now verifies both text and JSON output, so the packaged-binary example catalog can serve human lookup and simple automation without introducing a second checked-in source of truth.
 - In progress: none.
 - Blockers: none.

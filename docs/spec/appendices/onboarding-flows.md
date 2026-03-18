@@ -49,6 +49,28 @@ Enable `codex-mem` for a group of related repositories under one system.
 - Controlled cross-project retrieval becomes possible when explicitly requested.
 - Shared system identity does not collapse project boundaries.
 
+## Imported Artifact Onboarding
+
+### Goal
+
+Enable watcher or relay artifacts to enter the same scoped memory workflow without bypassing privacy, provenance, or explicit-memory precedence rules.
+
+### Recommended flow
+
+1. Start with ordinary repository onboarding and bootstrap first, so the destination scope is already stable.
+2. Decide whether the upstream feed is best represented as `watcher_import` or `relay_import`.
+3. Ensure each imported artifact carries at least one durable dedupe key such as `external_id` or `payload_hash`.
+4. Use `memory_save_import` when you only need durable import-audit provenance for one artifact.
+5. Use `memory_save_imported_note` when the imported artifact should also materialize into searchable durable note memory.
+6. For operator-managed JSONL feeds, begin with `ingest-imports --audit-only` before enabling materialization or long-lived `follow-imports`.
+7. Keep cleanup and audit of follow-mode sidecars explicit through `cleanup-follow-imports`, `audit-follow-imports`, and `doctor` rather than deleting artifacts implicitly.
+
+### Expected outcome
+
+- Imported artifacts are deduplicated and traceable.
+- Privacy-blocked imports remain visible in audit history without re-entering durable searchable memory.
+- Stronger explicit memory still wins over weaker imported duplicates in the same project.
+
 ## Safe Defaults
 
 Recommended onboarding defaults:

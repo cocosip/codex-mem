@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,8 +13,10 @@ import (
 	"codex-mem/internal/domain/common"
 )
 
-const commandExampleDirName = "testdata"
-const commandExampleManifestName = "command-example-manifest.txt"
+const (
+	commandExampleFormatText = "text"
+	commandExampleFormatJSON = "json"
+)
 
 type commandExampleFixture[T any] struct {
 	Name         string
@@ -106,9 +107,9 @@ func writeCommandExampleFixtures[T any](baseDir string, names []string, command 
 
 func listCommandExamples[T any](fixtures []commandExampleFixture[T], w io.Writer) error {
 	for _, fixture := range fixtures {
-		format := "text"
+		format := commandExampleFormatText
 		if fixture.JSON {
-			format = "json"
+			format = commandExampleFormatJSON
 		}
 		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s\n", fixture.Name, filepath.Join(commandExampleDirName, fixture.RelativePath), format); err != nil {
 			return err
@@ -121,9 +122,9 @@ func listCommandExamples[T any](fixtures []commandExampleFixture[T], w io.Writer
 func commandExampleManifestEntriesFor[T any](command string, fixtures []commandExampleFixture[T]) []commandExampleManifestEntry {
 	entries := make([]commandExampleManifestEntry, 0, len(fixtures))
 	for _, fixture := range fixtures {
-		format := "text"
+		format := commandExampleFormatText
 		if fixture.JSON {
-			format = "json"
+			format = commandExampleFormatJSON
 		}
 		entries = append(entries, commandExampleManifestEntry{
 			Command:      command,
@@ -148,24 +149,8 @@ func commandExampleManifestEntries() []commandExampleManifestEntry {
 	return entries
 }
 
-func renderCommandExampleManifest(entries []commandExampleManifestEntry) []byte {
-	lines := make([]string, 0, len(entries)+2)
-	lines = append(lines, "command example manifest v1")
-	for _, entry := range entries {
-		lines = append(lines, fmt.Sprintf(
-			"command=%s example=%s format=%s path=%s",
-			entry.Command,
-			entry.Name,
-			entry.Format,
-			path.Join(commandExampleDirName, entry.RelativePath),
-		))
-	}
-	lines = append(lines, fmt.Sprintf("example_count=%d", len(entries)))
-	return []byte(strings.Join(lines, "\n") + "\n")
-}
-
 func writeCommandExampleManifest(baseDir string) (string, error) {
-	body := renderCommandExampleManifest(commandExampleManifestEntries())
+	body := []byte(formatCommandExampleManifest(buildCommandExampleManifestReport(commandExampleManifestEntriesForReport(commandExampleManifestEntries()))))
 	path := filepath.Join(baseDir, commandExampleManifestName)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
