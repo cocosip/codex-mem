@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -433,8 +434,8 @@ func TestRunListCommandExamplesFiltersTextByCommand(t *testing.T) {
 
 	output := stdout.String()
 	for _, fragment := range []string{
-		"command=follow-imports example=audit-only-single-text format=text path=testdata/follow-imports-audit-only-single.txt",
-		"command=follow-imports example=audit-only-multi-json format=json path=testdata/follow-imports-audit-only-multi.json",
+		`command=follow-imports example=audit-only-single-text format=text tags=audit-only,single-input summary="Audit-only follow report for one input in text format." path=testdata/follow-imports-audit-only-single.txt`,
+		`command=follow-imports example=audit-only-multi-json format=json tags=audit-only,multi-input summary="Audit-only follow aggregate report for multiple inputs in JSON format." path=testdata/follow-imports-audit-only-multi.json`,
 		"example_count=2",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -461,10 +462,10 @@ func TestRunListCommandExamplesFiltersTextByFormat(t *testing.T) {
 
 	output := stdout.String()
 	for _, fragment := range []string{
-		"command=ingest-imports example=audit-only-summary-text format=text path=testdata/ingest-imports-audit-only-summary.txt",
-		"command=follow-imports example=audit-only-single-text format=text path=testdata/follow-imports-audit-only-single.txt",
-		"command=cleanup-follow-imports example=target-profile-all-text format=text path=testdata/cleanup-follow-imports-target-profile-all.txt",
-		"command=audit-follow-imports example=daily-audit-text format=text path=testdata/audit-follow-imports-daily-audit.txt",
+		`command=ingest-imports example=audit-only-summary-text format=text tags=audit-only,summary summary="Audit-only ingest summary in text format." path=testdata/ingest-imports-audit-only-summary.txt`,
+		`command=follow-imports example=audit-only-single-text format=text tags=audit-only,single-input summary="Audit-only follow report for one input in text format." path=testdata/follow-imports-audit-only-single.txt`,
+		`command=cleanup-follow-imports example=target-profile-all-text format=text tags=cleanup,target-profile summary="Cleanup report using the all target profile." path=testdata/cleanup-follow-imports-target-profile-all.txt`,
+		`command=audit-follow-imports example=daily-audit-text format=text tags=audit,retention-profile summary="Audit report using the daily retention profile." path=testdata/audit-follow-imports-daily-audit.txt`,
 		"example_count=5",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -476,6 +477,35 @@ func TestRunListCommandExamplesFiltersTextByFormat(t *testing.T) {
 	} {
 		if strings.Contains(output, forbidden) {
 			t.Fatalf("text-filtered manifest unexpectedly included %q:\n%s", forbidden, output)
+		}
+	}
+}
+
+func TestRunListCommandExamplesFiltersTextByTag(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--tag", "audit-only"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --tag audit-only: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		`command=ingest-imports example=audit-only-summary-text format=text tags=audit-only,summary summary="Audit-only ingest summary in text format." path=testdata/ingest-imports-audit-only-summary.txt`,
+		`command=ingest-imports example=audit-only-linked-json format=json tags=audit-only,linked-existing summary="Audit-only ingest example showing linked existing notes." path=testdata/ingest-imports-audit-only-linked.json`,
+		`command=follow-imports example=audit-only-single-text format=text tags=audit-only,single-input summary="Audit-only follow report for one input in text format." path=testdata/follow-imports-audit-only-single.txt`,
+		`command=follow-imports example=audit-only-multi-json format=json tags=audit-only,multi-input summary="Audit-only follow aggregate report for multiple inputs in JSON format." path=testdata/follow-imports-audit-only-multi.json`,
+		"example_count=4",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("tag-filtered manifest missing %q:\n%s", fragment, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"command=cleanup-follow-imports",
+		"command=audit-follow-imports",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("tag-filtered manifest unexpectedly included %q:\n%s", forbidden, output)
 		}
 	}
 }
@@ -513,6 +543,34 @@ func TestRunListCommandExamplesPrintsJSON(t *testing.T) {
 	if got, want := first.RelativePath, "testdata/ingest-imports-audit-only-summary.txt"; got != want {
 		t.Fatalf("first path mismatch: got %q want %q", got, want)
 	}
+	if got, want := strings.Join(first.Tags, ","), "audit-only,summary"; got != want {
+		t.Fatalf("first tags mismatch: got %q want %q", got, want)
+	}
+	if got, want := first.Summary, "Audit-only ingest summary in text format."; got != want {
+		t.Fatalf("first summary mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestRunListCommandExamplesJSONIncludesTagsAndSummaryForEveryExample(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--json"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --json: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+
+	for _, entry := range report.Examples {
+		if len(entry.Tags) == 0 {
+			t.Fatalf("expected non-empty tags for %+v", entry)
+		}
+		if strings.TrimSpace(entry.Summary) == "" {
+			t.Fatalf("expected non-empty summary for %+v", entry)
+		}
+	}
 }
 
 func TestRunListCommandExamplesFiltersJSONByMultipleCommands(t *testing.T) {
@@ -536,7 +594,7 @@ func TestRunListCommandExamplesFiltersJSONByMultipleCommands(t *testing.T) {
 	}
 	for _, entry := range report.Examples {
 		switch entry.Command {
-		case runTestCommandIngestImports, "follow-imports", "cleanup-follow-imports":
+		case runTestCommandIngestImports, commandFollowImports, commandCleanupFollowImport:
 		default:
 			t.Fatalf("unexpected filtered command %q in %+v", entry.Command, entry)
 		}
@@ -567,7 +625,38 @@ func TestRunListCommandExamplesFiltersJSONByCommandAndFormat(t *testing.T) {
 			t.Fatalf("unexpected format %q in %+v", entry.Format, entry)
 		}
 		switch entry.Command {
-		case runTestCommandIngestImports, "follow-imports":
+		case runTestCommandIngestImports, commandFollowImports:
+		default:
+			t.Fatalf("unexpected command %q in %+v", entry.Command, entry)
+		}
+	}
+}
+
+func TestRunListCommandExamplesFiltersJSONByCommandAndTag(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{
+		"list-command-examples",
+		"--json",
+		"--command", "audit-follow-imports,cleanup-follow-imports",
+		"--tag", "target-profile",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples filtered by command and tag: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal command+tag filtered list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.ExampleCount, 2; got != want {
+		t.Fatalf("example_count mismatch: got %d want %d", got, want)
+	}
+	for _, entry := range report.Examples {
+		if !slices.Contains(entry.Tags, "target-profile") {
+			t.Fatalf("expected target-profile tag in %+v", entry)
+		}
+		switch entry.Command {
+		case commandAuditFollowImports, commandCleanupFollowImport:
 		default:
 			t.Fatalf("unexpected command %q in %+v", entry.Command, entry)
 		}
@@ -598,6 +687,18 @@ func TestRunListCommandExamplesRejectsUnknownFormatFilter(t *testing.T) {
 	}
 }
 
+func TestRunListCommandExamplesRejectsUnknownTagFilter(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--tag", "unknown-tag"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected unknown tag filter error")
+	}
+	if !strings.Contains(err.Error(), "unknown list-command-examples tag filter") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunListCommandExamplesRejectsMissingCommandValue(t *testing.T) {
 	var stdout bytes.Buffer
 
@@ -606,6 +707,18 @@ func TestRunListCommandExamplesRejectsMissingCommandValue(t *testing.T) {
 		t.Fatal("expected missing command value error")
 	}
 	if !strings.Contains(err.Error(), "--command requires a value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsMissingTagValue(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--tag"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected missing tag value error")
+	}
+	if !strings.Contains(err.Error(), "--tag requires a value") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

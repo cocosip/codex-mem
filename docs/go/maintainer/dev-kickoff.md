@@ -58,6 +58,7 @@ Current standing decisions worth preserving:
 - configuration loading uses `viper`
 - SQLite uses `modernc.org/sqlite`
 - `modelcontextprotocol/go-sdk` is the only MCP runtime path
+- do not point `GOCACHE` into the repository workspace; if a cache override is needed for local verification, use a temp directory outside the project tree
 
 ## Recommended Next Coding Slice
 

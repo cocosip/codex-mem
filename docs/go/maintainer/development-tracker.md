@@ -151,6 +151,34 @@ Immediate next tasks:
 
 ### 2026-03-18 Session Update
 
+- Completed: Tightened command-example manifest parsing so each entry must now carry non-empty `tags` and `summary` metadata, not just the required command/name/format/path fields. Parser coverage now explicitly rejects missing metadata alongside malformed or empty tag lists, so the embedded example catalog contract is enforced at parse time instead of only by higher-level tests.
+- In progress: none.
+- Blockers: none.
+- Next step: keep this operator-catalog line focused on correctness and low-maintenance guarantees unless a clearly necessary usability gap shows up.
+
+### 2026-03-18 Session Update
+
+- Completed: Hardened the embedded command-example catalog tests so every JSON-visible example entry must carry non-empty `tags` and `summary` metadata, and tightened manifest tag parsing to trim whitespace, dedupe repeated tags, and reject empty tag slots in hand-edited `tags=` values.
+- In progress: none.
+- Blockers: none.
+- Next step: keep future operator-catalog changes focused on data quality and maintenance safety unless a clearly useful discovery feature is needed.
+
+### 2026-03-18 Session Update
+
+- Completed: Added `--tag` filtering plus embedded `tags` and `summary` metadata to `list-command-examples`. The manifest now classifies fixtures with stable labels such as `audit-only`, `target-profile`, `filtered`, `dry-run`, and input-shape tags, while also carrying a short human-readable purpose string for each example. Text and JSON output share the same command/format/tag filter pipeline, and sync/runtime coverage verifies the richer manifest format plus tag-based filtering.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the current tags-plus-summary catalog is enough, or whether operators would benefit from one more discovery aid such as sorting or another filter dimension.
+
+### 2026-03-18 Session Update
+
+- Completed: Recorded a maintainer workflow constraint that `GOCACHE` must not point into the repository workspace. If a local cache override is needed for Go verification on this machine, it should use a temporary directory outside the project tree so the working tree does not accumulate cache artifacts.
+- In progress: none.
+- Blockers: none.
+- Next step: continue the current operator-facing extension work without reintroducing repo-local Go cache state.
+
+### 2026-03-18 Session Update
+
 - Completed: Added `--format` filtering to `list-command-examples`, including repeated and comma-separated format selectors. Text and JSON output now share the same embedded-manifest filtering path across command and format filters, runtime coverage verifies mixed command+format filtering plus argument rejection, and operator docs now show how to browse only text or JSON fixtures.
 - In progress: none.
 - Blockers: none.

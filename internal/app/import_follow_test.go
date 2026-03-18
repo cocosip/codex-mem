@@ -618,9 +618,9 @@ func TestListAuditFollowImportsExamples(t *testing.T) {
 	}
 	output := buffer.String()
 	for _, fragment := range []string{
-		"example=daily-audit-text path=" + filepath.Join("testdata", "audit-follow-imports-daily-audit.txt") + " format=text",
-		"example=filtered-audit-json path=" + filepath.Join("testdata", "audit-follow-imports-filtered-audit.json") + " format=json",
-		"example=target-profile-retry-json path=" + filepath.Join("testdata", "audit-follow-imports-target-profile-retry.json") + " format=json",
+		`example=daily-audit-text path=` + filepath.Join("testdata", "audit-follow-imports-daily-audit.txt") + ` format=text tags=audit,retention-profile summary="Audit report using the daily retention profile."`,
+		`example=filtered-audit-json path=` + filepath.Join("testdata", "audit-follow-imports-filtered-audit.json") + ` format=json tags=audit,filtered summary="Audit report demonstrating include and exclude filtering."`,
+		`example=target-profile-retry-json path=` + filepath.Join("testdata", "audit-follow-imports-target-profile-retry.json") + ` format=json tags=audit,target-profile,retry summary="Audit report using the retry target profile."`,
 		"example_count=3",
 	} {
 		if !strings.Contains(output, fragment) {
@@ -696,9 +696,9 @@ func TestListCleanupFollowImportsExamples(t *testing.T) {
 	}
 	output := buffer.String()
 	for _, fragment := range []string{
-		"example=daily-dry-run-text path=" + filepath.Join("testdata", "cleanup-follow-imports-daily-dry-run.txt") + " format=text",
-		"example=filtered-cleanup-json path=" + filepath.Join("testdata", "cleanup-follow-imports-filtered-cleanup.json") + " format=json",
-		"example=target-profile-all-text path=" + filepath.Join("testdata", "cleanup-follow-imports-target-profile-all.txt") + " format=text",
+		`example=daily-dry-run-text path=` + filepath.Join("testdata", "cleanup-follow-imports-daily-dry-run.txt") + ` format=text tags=cleanup,dry-run,retention-profile summary="Cleanup dry-run using the daily retention profile."`,
+		`example=filtered-cleanup-json path=` + filepath.Join("testdata", "cleanup-follow-imports-filtered-cleanup.json") + ` format=json tags=cleanup,filtered summary="Cleanup report demonstrating include and exclude filtering."`,
+		`example=target-profile-all-text path=` + filepath.Join("testdata", "cleanup-follow-imports-target-profile-all.txt") + ` format=text tags=cleanup,target-profile summary="Cleanup report using the all target profile."`,
 		"example_count=3",
 	} {
 		if !strings.Contains(output, fragment) {

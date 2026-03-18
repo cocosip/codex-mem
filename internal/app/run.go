@@ -52,7 +52,7 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 		if err != nil {
 			return err
 		}
-		report, err = filterCommandExampleManifestReport(report, options.Commands, options.Formats)
+		report, err = filterCommandExampleManifestReport(report, options.Commands, options.Formats, options.Tags)
 		if err != nil {
 			return err
 		}

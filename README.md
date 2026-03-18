@@ -85,7 +85,7 @@ They are not MCP tools and are not the normal end-user interaction path.
 - `codex-mem audit-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`
   Reports the same hygiene targets without deleting them. `--target-profile` can enable common audit target sets before you add path, age, fail-if-matched, or `--summary-only` controls.
 - `codex-mem list-command-examples`
-  Prints the embedded import/follow example-manifest catalog shipped with the binary so operators and maintainers can discover the checked-in sample outputs without browsing the source tree. Add `--json` for a machine-readable catalog, `--command <name>` to filter to one command family, or `--format text|json` to keep only one example-output format.
+  Prints the embedded import/follow example-manifest catalog shipped with the binary so operators and maintainers can discover the checked-in sample outputs without browsing the source tree. Catalog entries now carry stable `tags` plus a short summary. Add `--json` for a machine-readable catalog, `--command <name>` to filter to one command family, `--format text|json` to keep only one example-output format, or `--tag <name>` to browse one fixture category such as `audit-only` or `target-profile`.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`

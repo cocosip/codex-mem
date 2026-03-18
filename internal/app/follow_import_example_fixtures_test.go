@@ -16,6 +16,18 @@ import (
 const (
 	commandExampleFormatText = "text"
 	commandExampleFormatJSON = "json"
+	commandExampleTagAuditOnly = "audit-only"
+	commandExampleTagSummary = "summary"
+	commandExampleTagLinkedExisting = "linked-existing"
+	commandExampleTagSingleInput = "single-input"
+	commandExampleTagMultiInput = "multi-input"
+	commandExampleTagCleanup = "cleanup"
+	commandExampleTagDryRun = "dry-run"
+	commandExampleTagRetentionProfile = "retention-profile"
+	commandExampleTagFiltered = "filtered"
+	commandExampleTagTargetProfile = "target-profile"
+	commandExampleTagAudit = "audit"
+	commandExampleTagRetry = "retry"
 )
 
 type commandExampleFixture[T any] struct {
@@ -105,13 +117,15 @@ func writeCommandExampleFixtures[T any](baseDir string, names []string, command 
 	return writtenPaths, nil
 }
 
-func listCommandExamples[T any](fixtures []commandExampleFixture[T], w io.Writer) error {
+func listCommandExamples[T any](command string, fixtures []commandExampleFixture[T], w io.Writer) error {
 	for _, fixture := range fixtures {
 		format := commandExampleFormatText
 		if fixture.JSON {
 			format = commandExampleFormatJSON
 		}
-		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s\n", fixture.Name, filepath.Join(commandExampleDirName, fixture.RelativePath), format); err != nil {
+		tags := strings.Join(inferCommandExampleTags(command, fixture.Name), ",")
+		summary := inferCommandExampleSummary(command, fixture.Name)
+		if _, err := fmt.Fprintf(w, "example=%s path=%s format=%s tags=%s summary=%q\n", fixture.Name, filepath.Join(commandExampleDirName, fixture.RelativePath), format, tags, summary); err != nil {
 			return err
 		}
 	}
@@ -131,9 +145,87 @@ func commandExampleManifestEntriesFor[T any](command string, fixtures []commandE
 			Name:         fixture.Name,
 			RelativePath: fixture.RelativePath,
 			Format:       format,
+			Tags:         inferCommandExampleTags(command, fixture.Name),
+			Summary:      inferCommandExampleSummary(command, fixture.Name),
 		})
 	}
 	return entries
+}
+
+func inferCommandExampleTags(command string, name string) []string {
+	tags := make([]string, 0, 3)
+	switch command {
+	case "ingest-imports", "follow-imports":
+		tags = append(tags, commandExampleTagAuditOnly)
+	case "cleanup-follow-imports":
+		tags = append(tags, commandExampleTagCleanup)
+	case "audit-follow-imports":
+		tags = append(tags, commandExampleTagAudit)
+	}
+
+	switch {
+	case strings.Contains(name, "summary"):
+		tags = append(tags, commandExampleTagSummary)
+	case strings.Contains(name, "linked"):
+		tags = append(tags, commandExampleTagLinkedExisting)
+	case strings.Contains(name, "single"):
+		tags = append(tags, commandExampleTagSingleInput)
+	case strings.Contains(name, "multi"):
+		tags = append(tags, commandExampleTagMultiInput)
+	case strings.Contains(name, "dry-run"):
+		tags = append(tags, commandExampleTagDryRun)
+	case strings.Contains(name, "filtered"):
+		tags = append(tags, commandExampleTagFiltered)
+	case strings.Contains(name, "target-profile"):
+		tags = append(tags, commandExampleTagTargetProfile)
+	}
+
+	if strings.Contains(name, "daily") {
+		tags = append(tags, commandExampleTagRetentionProfile)
+	}
+	if strings.Contains(name, "retry") {
+		tags = append(tags, commandExampleTagRetry)
+	}
+
+	return tags
+}
+
+func inferCommandExampleSummary(command string, name string) string {
+	switch command {
+	case "ingest-imports":
+		switch name {
+		case "audit-only-summary-text":
+			return "Audit-only ingest summary in text format."
+		case "audit-only-linked-json":
+			return "Audit-only ingest example showing linked existing notes."
+		}
+	case "follow-imports":
+		switch name {
+		case "audit-only-single-text":
+			return "Audit-only follow report for one input in text format."
+		case "audit-only-multi-json":
+			return "Audit-only follow aggregate report for multiple inputs in JSON format."
+		}
+	case "cleanup-follow-imports":
+		switch name {
+		case "daily-dry-run-text":
+			return "Cleanup dry-run using the daily retention profile."
+		case "filtered-cleanup-json":
+			return "Cleanup report demonstrating include and exclude filtering."
+		case "target-profile-all-text":
+			return "Cleanup report using the all target profile."
+		}
+	case "audit-follow-imports":
+		switch name {
+		case "daily-audit-text":
+			return "Audit report using the daily retention profile."
+		case "filtered-audit-json":
+			return "Audit report demonstrating include and exclude filtering."
+		case "target-profile-retry-json":
+			return "Audit report using the retry target profile."
+		}
+	}
+	return ""
 }
 
 func commandExampleManifestEntries() []commandExampleManifestEntry {
@@ -512,9 +604,9 @@ func writeAuditFollowImportsExampleFixtures(baseDir string, names []string) ([]s
 }
 
 func listCleanupFollowImportsExamples(w io.Writer) error {
-	return listCommandExamples(cleanupFollowImportsExampleFixtures(), w)
+	return listCommandExamples(commandCleanupFollowImport, cleanupFollowImportsExampleFixtures(), w)
 }
 
 func listAuditFollowImportsExamples(w io.Writer) error {
-	return listCommandExamples(auditFollowImportsExampleFixtures(), w)
+	return listCommandExamples(commandAuditFollowImports, auditFollowImportsExampleFixtures(), w)
 }

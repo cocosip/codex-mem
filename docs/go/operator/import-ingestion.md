@@ -342,6 +342,15 @@ If you only want one output format while browsing the catalog, filter it the sam
 codex-mem.exe list-command-examples --format json
 ```
 
+Each catalog row now also includes stable tags plus a short summary so you can tell similar fixtures apart without opening the files first.
+
+If you only want one fixture category, use tags from the embedded catalog metadata:
+
+```powershell
+codex-mem.exe list-command-examples --tag audit-only
+codex-mem.exe list-command-examples --tag target-profile --format json
+```
+
 If a deliberate output change makes those fixtures drift, refresh the ingest fixtures from the repository root through the test-only maintainer helper:
 
 ```powershell

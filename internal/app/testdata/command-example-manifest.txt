@@ -1,12 +1,12 @@
 command example manifest v1
-command=ingest-imports example=audit-only-summary-text format=text path=testdata/ingest-imports-audit-only-summary.txt
-command=ingest-imports example=audit-only-linked-json format=json path=testdata/ingest-imports-audit-only-linked.json
-command=follow-imports example=audit-only-single-text format=text path=testdata/follow-imports-audit-only-single.txt
-command=follow-imports example=audit-only-multi-json format=json path=testdata/follow-imports-audit-only-multi.json
-command=cleanup-follow-imports example=daily-dry-run-text format=text path=testdata/cleanup-follow-imports-daily-dry-run.txt
-command=cleanup-follow-imports example=filtered-cleanup-json format=json path=testdata/cleanup-follow-imports-filtered-cleanup.json
-command=cleanup-follow-imports example=target-profile-all-text format=text path=testdata/cleanup-follow-imports-target-profile-all.txt
-command=audit-follow-imports example=daily-audit-text format=text path=testdata/audit-follow-imports-daily-audit.txt
-command=audit-follow-imports example=filtered-audit-json format=json path=testdata/audit-follow-imports-filtered-audit.json
-command=audit-follow-imports example=target-profile-retry-json format=json path=testdata/audit-follow-imports-target-profile-retry.json
+command=ingest-imports example=audit-only-summary-text format=text tags=audit-only,summary summary="Audit-only ingest summary in text format." path=testdata/ingest-imports-audit-only-summary.txt
+command=ingest-imports example=audit-only-linked-json format=json tags=audit-only,linked-existing summary="Audit-only ingest example showing linked existing notes." path=testdata/ingest-imports-audit-only-linked.json
+command=follow-imports example=audit-only-single-text format=text tags=audit-only,single-input summary="Audit-only follow report for one input in text format." path=testdata/follow-imports-audit-only-single.txt
+command=follow-imports example=audit-only-multi-json format=json tags=audit-only,multi-input summary="Audit-only follow aggregate report for multiple inputs in JSON format." path=testdata/follow-imports-audit-only-multi.json
+command=cleanup-follow-imports example=daily-dry-run-text format=text tags=cleanup,dry-run,retention-profile summary="Cleanup dry-run using the daily retention profile." path=testdata/cleanup-follow-imports-daily-dry-run.txt
+command=cleanup-follow-imports example=filtered-cleanup-json format=json tags=cleanup,filtered summary="Cleanup report demonstrating include and exclude filtering." path=testdata/cleanup-follow-imports-filtered-cleanup.json
+command=cleanup-follow-imports example=target-profile-all-text format=text tags=cleanup,target-profile summary="Cleanup report using the all target profile." path=testdata/cleanup-follow-imports-target-profile-all.txt
+command=audit-follow-imports example=daily-audit-text format=text tags=audit,retention-profile summary="Audit report using the daily retention profile." path=testdata/audit-follow-imports-daily-audit.txt
+command=audit-follow-imports example=filtered-audit-json format=json tags=audit,filtered summary="Audit report demonstrating include and exclude filtering." path=testdata/audit-follow-imports-filtered-audit.json
+command=audit-follow-imports example=target-profile-retry-json format=json tags=audit,target-profile,retry summary="Audit report using the retry target profile." path=testdata/audit-follow-imports-target-profile-retry.json
 example_count=10

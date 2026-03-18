@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	_ "embed"
@@ -21,6 +22,7 @@ type listCommandExamplesOptions struct {
 	JSON     bool
 	Commands []string
 	Formats  []string
+	Tags     []string
 }
 
 type commandExampleManifestEntry struct {
@@ -28,6 +30,8 @@ type commandExampleManifestEntry struct {
 	Name         string `json:"name"`
 	RelativePath string `json:"path"`
 	Format       string `json:"format"`
+	Tags         []string `json:"tags,omitempty"`
+	Summary      string   `json:"summary,omitempty"`
 }
 
 type commandExampleManifestReport struct {
@@ -65,6 +69,16 @@ func parseListCommandExamplesOptions(args []string) (listCommandExamplesOptions,
 				return listCommandExamplesOptions{}, err
 			}
 			options.Formats = appendUniqueStrings(options.Formats, values...)
+		case "--tag":
+			index++
+			if index >= len(args) {
+				return listCommandExamplesOptions{}, fmt.Errorf("list-command-examples --tag requires a value")
+			}
+			values, err := parseListCommandExampleTags(args[index])
+			if err != nil {
+				return listCommandExamplesOptions{}, err
+			}
+			options.Tags = appendUniqueStrings(options.Tags, values...)
 		default:
 			return listCommandExamplesOptions{}, fmt.Errorf("unknown list-command-examples flag %q", arg)
 		}
@@ -82,6 +96,10 @@ func parseListCommandExampleCommands(raw string) ([]string, error) {
 
 func parseListCommandExampleFormats(raw string) ([]string, error) {
 	return parseListCommandExamplesCSVFlag(raw, "--format", "format")
+}
+
+func parseListCommandExampleTags(raw string) ([]string, error) {
+	return parseListCommandExamplesCSVFlag(raw, "--tag", "tag")
 }
 
 func parseListCommandExamplesCSVFlag(raw string, flag string, label string) ([]string, error) {
@@ -144,12 +162,22 @@ func parseCommandExampleManifest(raw string) (commandExampleManifestReport, erro
 }
 
 func parseCommandExampleManifestEntry(line string) (commandExampleManifestEntry, error) {
-	fields := strings.Fields(line)
+	fields, err := splitCommandExampleManifestFields(line)
+	if err != nil {
+		return commandExampleManifestEntry{}, err
+	}
 	entry := commandExampleManifestEntry{}
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
 		if !ok {
 			return commandExampleManifestEntry{}, fmt.Errorf("invalid command example manifest field %q", field)
+		}
+		if strings.HasPrefix(value, `"`) {
+			unquoted, err := strconv.Unquote(value)
+			if err != nil {
+				return commandExampleManifestEntry{}, fmt.Errorf("invalid quoted command example manifest value %q: %w", value, err)
+			}
+			value = unquoted
 		}
 		switch key {
 		case "command":
@@ -158,6 +186,16 @@ func parseCommandExampleManifestEntry(line string) (commandExampleManifestEntry,
 			entry.Name = value
 		case "format":
 			entry.Format = value
+		case "tags":
+			if value != "" {
+				tags, err := parseCommandExampleManifestTags(value)
+				if err != nil {
+					return commandExampleManifestEntry{}, err
+				}
+				entry.Tags = appendUniqueStrings(entry.Tags, tags...)
+			}
+		case "summary":
+			entry.Summary = value
 		case "path":
 			entry.RelativePath = value
 		default:
@@ -167,7 +205,65 @@ func parseCommandExampleManifestEntry(line string) (commandExampleManifestEntry,
 	if entry.Command == "" || entry.Name == "" || entry.Format == "" || entry.RelativePath == "" {
 		return commandExampleManifestEntry{}, fmt.Errorf("incomplete command example manifest entry %q", line)
 	}
+	if len(entry.Tags) == 0 {
+		return commandExampleManifestEntry{}, fmt.Errorf("command example manifest entry %q is missing tags", line)
+	}
+	if strings.TrimSpace(entry.Summary) == "" {
+		return commandExampleManifestEntry{}, fmt.Errorf("command example manifest entry %q is missing summary", line)
+	}
 	return entry, nil
+}
+
+func parseCommandExampleManifestTags(raw string) ([]string, error) {
+	parts := strings.Split(raw, ",")
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag == "" {
+			return nil, fmt.Errorf("invalid command example manifest tags value %q", raw)
+		}
+		tags = appendUniqueStrings(tags, tag)
+	}
+	return tags, nil
+}
+
+func splitCommandExampleManifestFields(line string) ([]string, error) {
+	fields := make([]string, 0, 8)
+	var current strings.Builder
+	inQuotes := false
+	escaped := false
+	for _, r := range line {
+		switch {
+		case inQuotes:
+			current.WriteRune(r)
+			switch {
+			case escaped:
+				escaped = false
+			case r == '\\':
+				escaped = true
+			case r == '"':
+				inQuotes = false
+			}
+		case r == '"':
+			inQuotes = true
+			current.WriteRune(r)
+		case r == ' ' || r == '\t':
+			if current.Len() == 0 {
+				continue
+			}
+			fields = append(fields, current.String())
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if inQuotes {
+		return nil, fmt.Errorf("unterminated quoted command example manifest field in %q", line)
+	}
+	if current.Len() > 0 {
+		fields = append(fields, current.String())
+	}
+	return fields, nil
 }
 
 func formatCommandExampleManifestJSON(report commandExampleManifestReport) (string, error) {
@@ -179,10 +275,12 @@ func formatCommandExampleManifest(report commandExampleManifestReport) string {
 	lines = append(lines, "command example manifest "+report.Version)
 	for _, entry := range report.Examples {
 		lines = append(lines, fmt.Sprintf(
-			"command=%s example=%s format=%s path=%s",
+			"command=%s example=%s format=%s tags=%s summary=%s path=%s",
 			entry.Command,
 			entry.Name,
 			entry.Format,
+			strings.Join(entry.Tags, ","),
+			strconv.Quote(entry.Summary),
 			entry.RelativePath,
 		))
 	}
@@ -206,13 +304,15 @@ func commandExampleManifestEntriesForReport(entries []commandExampleManifestEntr
 			Name:         entry.Name,
 			RelativePath: path.Join(commandExampleDirName, entry.RelativePath),
 			Format:       entry.Format,
+			Tags:         slices.Clone(entry.Tags),
+			Summary:      entry.Summary,
 		})
 	}
 	return reportEntries
 }
 
-func filterCommandExampleManifestReport(report commandExampleManifestReport, commands []string, formats []string) (commandExampleManifestReport, error) {
-	if len(commands) == 0 && len(formats) == 0 {
+func filterCommandExampleManifestReport(report commandExampleManifestReport, commands []string, formats []string, tags []string) (commandExampleManifestReport, error) {
+	if len(commands) == 0 && len(formats) == 0 && len(tags) == 0 {
 		return report, nil
 	}
 
@@ -224,13 +324,21 @@ func filterCommandExampleManifestReport(report commandExampleManifestReport, com
 	for _, format := range formats {
 		allowedFormats[strings.TrimSpace(format)] = struct{}{}
 	}
+	allowedTags := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		allowedTags[strings.TrimSpace(tag)] = struct{}{}
+	}
 
 	seenCommands := make(map[string]struct{}, len(report.Examples))
 	seenFormats := make(map[string]struct{}, len(report.Examples))
+	seenTags := make(map[string]struct{}, len(report.Examples))
 	filtered := make([]commandExampleManifestEntry, 0, len(report.Examples))
 	for _, entry := range report.Examples {
 		seenCommands[entry.Command] = struct{}{}
 		seenFormats[entry.Format] = struct{}{}
+		for _, tag := range entry.Tags {
+			seenTags[tag] = struct{}{}
+		}
 		if len(allowedCommands) > 0 {
 			if _, ok := allowedCommands[entry.Command]; !ok {
 				continue
@@ -238,6 +346,18 @@ func filterCommandExampleManifestReport(report commandExampleManifestReport, com
 		}
 		if len(allowedFormats) > 0 {
 			if _, ok := allowedFormats[entry.Format]; !ok {
+				continue
+			}
+		}
+		if len(allowedTags) > 0 {
+			matchedTag := false
+			for _, tag := range entry.Tags {
+				if _, ok := allowedTags[tag]; ok {
+					matchedTag = true
+					break
+				}
+			}
+			if !matchedTag {
 				continue
 			}
 		}
@@ -262,6 +382,16 @@ func filterCommandExampleManifestReport(report commandExampleManifestReport, com
 	}
 	if len(unknownFormats) > 0 {
 		return commandExampleManifestReport{}, fmt.Errorf("unknown list-command-examples format filter %q", strings.Join(unknownFormats, ","))
+	}
+
+	unknownTags := make([]string, 0)
+	for _, tag := range tags {
+		if _, ok := seenTags[tag]; !ok && !slices.Contains(unknownTags, tag) {
+			unknownTags = append(unknownTags, tag)
+		}
+	}
+	if len(unknownTags) > 0 {
+		return commandExampleManifestReport{}, fmt.Errorf("unknown list-command-examples tag filter %q", strings.Join(unknownTags, ","))
 	}
 
 	return commandExampleManifestReport{
