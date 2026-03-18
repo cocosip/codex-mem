@@ -58,6 +58,20 @@ func TestParseCommandExampleManifestEntryRejectsEmptyTag(t *testing.T) {
 	}
 }
 
+func TestParseCommandExampleManifestEntryRejectsDuplicateField(t *testing.T) {
+	line := `command=follow-imports example=audit-only-single-text format=text tags="audit-only,single-input" summary="First summary." summary="Second summary." path=testdata/follow-imports-audit-only-single.txt`
+
+	_, err := parseCommandExampleManifestEntry(line)
+	if err == nil {
+		t.Fatal("expected duplicate field error")
+	}
+	for _, fragment := range []string{`duplicate command example manifest field "summary"`, "audit-only-single-text"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error %q missing fragment %q", err.Error(), fragment)
+		}
+	}
+}
+
 func TestParseCommandExampleManifestEntryRejectsMissingTags(t *testing.T) {
 	line := `command=follow-imports example=audit-only-single-text format=text summary="Audit-only follow report." path=testdata/follow-imports-audit-only-single.txt`
 

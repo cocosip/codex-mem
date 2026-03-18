@@ -167,11 +167,16 @@ func parseCommandExampleManifestEntry(line string) (commandExampleManifestEntry,
 		return commandExampleManifestEntry{}, err
 	}
 	entry := commandExampleManifestEntry{}
+	seenKeys := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
 		if !ok {
 			return commandExampleManifestEntry{}, fmt.Errorf("invalid command example manifest field %q", field)
 		}
+		if _, exists := seenKeys[key]; exists {
+			return commandExampleManifestEntry{}, fmt.Errorf("duplicate command example manifest field %q in %q", key, line)
+		}
+		seenKeys[key] = struct{}{}
 		if strings.HasPrefix(value, `"`) {
 			unquoted, err := strconv.Unquote(value)
 			if err != nil {

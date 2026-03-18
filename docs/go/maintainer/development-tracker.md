@@ -151,6 +151,13 @@ Immediate next tasks:
 
 ### 2026-03-18 Session Update
 
+- Completed: Tightened command-example manifest parsing to reject duplicate fields inside one entry instead of silently letting a later value overwrite an earlier one. Parser tests now cover duplicate-key rejection alongside missing metadata and malformed tag lists, which makes hand-edited catalog drift easier to catch before it reaches the embedded binary.
+- In progress: none.
+- Blockers: none.
+- Next step: keep chipping away at ambiguous or silent-fallback cases in the operator catalog path rather than adding more surface area.
+
+### 2026-03-18 Session Update
+
 - Completed: Tightened command-example manifest parsing so each entry must now carry non-empty `tags` and `summary` metadata, not just the required command/name/format/path fields. Parser coverage now explicitly rejects missing metadata alongside malformed or empty tag lists, so the embedded example catalog contract is enforced at parse time instead of only by higher-level tests.
 - In progress: none.
 - Blockers: none.
