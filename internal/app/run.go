@@ -34,6 +34,25 @@ func Run(ctx context.Context, cfg config.Config, args []string, stdin io.Reader,
 	case "version":
 		_, err := fmt.Fprintf(stdout, "codex-mem %s\ncommit=%s\ndate=%s\n", buildinfo.Summary(), buildinfo.Commit, buildinfo.Date)
 		return err
+	case "list-command-examples":
+		options, err := parseListCommandExamplesOptions(commandArgs)
+		if err != nil {
+			return err
+		}
+		if !options.JSON {
+			_, err = io.WriteString(stdout, EmbeddedCommandExampleManifest)
+			return err
+		}
+		report, err := commandExampleManifestReportFromEmbedded()
+		if err != nil {
+			return err
+		}
+		output, err := formatCommandExampleManifestJSON(report)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(stdout, output)
+		return err
 	case "migrate":
 		instance, err := New(ctx, cfg)
 		if err != nil {

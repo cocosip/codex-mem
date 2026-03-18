@@ -84,6 +84,8 @@ They are not MCP tools and are not the normal end-user interaction path.
   Removes selected follow-imports checkpoint, retry-artifact, and stale-health artifacts. `--target-profile` can enable common cleanup target sets before you add path, age, dry-run, or `--summary-only` report filters.
 - `codex-mem audit-follow-imports [--target-profile all|artifacts|state|retry|health] [...]`
   Reports the same hygiene targets without deleting them. `--target-profile` can enable common audit target sets before you add path, age, fail-if-matched, or `--summary-only` controls.
+- `codex-mem list-command-examples`
+  Prints the embedded import/follow example-manifest catalog shipped with the binary so operators and maintainers can discover the checked-in sample outputs without browsing the source tree. Add `--json` for a machine-readable catalog.
 - `codex-mem migrate`
   Opens the configured SQLite database and applies embedded migrations.
 - `codex-mem serve`

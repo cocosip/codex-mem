@@ -410,6 +410,65 @@ func TestRunDefaultsToDoctorWhenNoCommandIsProvided(t *testing.T) {
 	}
 }
 
+func TestRunListCommandExamplesPrintsEmbeddedManifest(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples: %v", err)
+	}
+
+	if got, want := stdout.String(), EmbeddedCommandExampleManifest; got != want {
+		t.Fatalf("embedded manifest mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+func TestRunListCommandExamplesPrintsJSON(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--json"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --json: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.Version, "v1"; got != want {
+		t.Fatalf("version mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.ExampleCount, 10; got != want {
+		t.Fatalf("example_count mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.Examples), report.ExampleCount; got != want {
+		t.Fatalf("examples len mismatch: got %d want %d", got, want)
+	}
+	first := report.Examples[0]
+	if got, want := first.Command, "ingest-imports"; got != want {
+		t.Fatalf("first command mismatch: got %q want %q", got, want)
+	}
+	if got, want := first.Name, "audit-only-summary-text"; got != want {
+		t.Fatalf("first example mismatch: got %q want %q", got, want)
+	}
+	if got, want := first.Format, "text"; got != want {
+		t.Fatalf("first format mismatch: got %q want %q", got, want)
+	}
+	if got, want := first.RelativePath, "testdata/ingest-imports-audit-only-summary.txt"; got != want {
+		t.Fatalf("first path mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestRunListCommandExamplesRejectsUnknownArguments(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--yaml"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected argument validation error")
+	}
+	if !strings.Contains(err.Error(), "unknown list-command-examples flag") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunIngestImportsAuditOnlyPrintsJSONWithoutMaterializingNotes(t *testing.T) {
 	root := t.TempDir()
 	cfg := ingestTestConfig(root)
@@ -1545,6 +1604,42 @@ func TestRefreshFollowImportsExampleFixtures(t *testing.T) {
 	}
 }
 
+func TestWriteCommandExampleManifest(t *testing.T) {
+	tempDir := t.TempDir()
+
+	writtenPath, err := writeCommandExampleManifest(tempDir)
+	if err != nil {
+		t.Fatalf("writeCommandExampleManifest: %v", err)
+	}
+
+	expected := renderCommandExampleManifest(commandExampleManifestEntries())
+	body, err := os.ReadFile(writtenPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", writtenPath, err)
+	}
+	if !bytes.Equal(body, expected) {
+		t.Fatalf("command example manifest mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", writtenPath, string(body), string(expected))
+	}
+}
+
+func TestCommandExampleManifestStaysInSync(t *testing.T) {
+	assertCommandExampleManifestOutput(t, filepath.Join("testdata", commandExampleManifestName))
+}
+
+func TestRefreshCommandExampleManifest(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("CODEX_MEM_REFRESH_EXAMPLE_MANIFEST")) == "" {
+		t.Skip("CODEX_MEM_REFRESH_EXAMPLE_MANIFEST is not set")
+	}
+
+	writtenPath, err := writeCommandExampleManifest("testdata")
+	if err != nil {
+		t.Fatalf("writeCommandExampleManifest: %v", err)
+	}
+	if writtenPath == "" {
+		t.Fatal("expected manifest path to be returned")
+	}
+}
+
 func followImportsExampleRefreshSelection(t *testing.T, envKey string) []string {
 	t.Helper()
 
@@ -1595,5 +1690,18 @@ func assertAuditFollowImportsExampleOutput(t *testing.T, path string, jsonOutput
 	}
 	if !bytes.Equal(body, expected) {
 		t.Fatalf("audit example mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", path, string(body), string(expected))
+	}
+}
+
+func assertCommandExampleManifestOutput(t *testing.T, path string) {
+	t.Helper()
+
+	body := renderCommandExampleManifest(commandExampleManifestEntries())
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	if !bytes.Equal(body, expected) {
+		t.Fatalf("command example manifest mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", path, string(body), string(expected))
 	}
 }

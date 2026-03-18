@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 )
 
 const commandExampleDirName = "testdata"
+const commandExampleManifestName = "command-example-manifest.txt"
 
 type commandExampleFixture[T any] struct {
 	Name         string
@@ -114,6 +116,64 @@ func listCommandExamples[T any](fixtures []commandExampleFixture[T], w io.Writer
 	}
 	_, err := fmt.Fprintf(w, "example_count=%d\n", len(fixtures))
 	return err
+}
+
+func commandExampleManifestEntriesFor[T any](command string, fixtures []commandExampleFixture[T]) []commandExampleManifestEntry {
+	entries := make([]commandExampleManifestEntry, 0, len(fixtures))
+	for _, fixture := range fixtures {
+		format := "text"
+		if fixture.JSON {
+			format = "json"
+		}
+		entries = append(entries, commandExampleManifestEntry{
+			Command:      command,
+			Name:         fixture.Name,
+			RelativePath: fixture.RelativePath,
+			Format:       format,
+		})
+	}
+	return entries
+}
+
+func commandExampleManifestEntries() []commandExampleManifestEntry {
+	entries := make([]commandExampleManifestEntry, 0,
+		len(ingestImportsExampleFixtures())+
+			len(followImportsCommandExampleFixtures())+
+			len(cleanupFollowImportsExampleFixtures())+
+			len(auditFollowImportsExampleFixtures()))
+	entries = append(entries, commandExampleManifestEntriesFor("ingest-imports", ingestImportsExampleFixtures())...)
+	entries = append(entries, commandExampleManifestEntriesFor("follow-imports", followImportsCommandExampleFixtures())...)
+	entries = append(entries, commandExampleManifestEntriesFor("cleanup-follow-imports", cleanupFollowImportsExampleFixtures())...)
+	entries = append(entries, commandExampleManifestEntriesFor("audit-follow-imports", auditFollowImportsExampleFixtures())...)
+	return entries
+}
+
+func renderCommandExampleManifest(entries []commandExampleManifestEntry) []byte {
+	lines := make([]string, 0, len(entries)+2)
+	lines = append(lines, "command example manifest v1")
+	for _, entry := range entries {
+		lines = append(lines, fmt.Sprintf(
+			"command=%s example=%s format=%s path=%s",
+			entry.Command,
+			entry.Name,
+			entry.Format,
+			path.Join(commandExampleDirName, entry.RelativePath),
+		))
+	}
+	lines = append(lines, fmt.Sprintf("example_count=%d", len(entries)))
+	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+func writeCommandExampleManifest(baseDir string) (string, error) {
+	body := renderCommandExampleManifest(commandExampleManifestEntries())
+	path := filepath.Join(baseDir, commandExampleManifestName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func cleanupFollowImportsExampleFixtures() []cleanupFollowImportsExampleFixture {

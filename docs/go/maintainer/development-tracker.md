@@ -151,6 +151,27 @@ Immediate next tasks:
 
 ### 2026-03-18 Session Update
 
+- Completed: Extended `list-command-examples` with a `--json` mode that parses the embedded text manifest into a stable structured report. Runtime coverage now verifies both text and JSON output, so the packaged-binary example catalog can serve human lookup and simple automation without introducing a second checked-in source of truth.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether operators need filtering options such as `--command follow-imports`, or whether keeping the catalog intentionally small and whole is the better interface.
+
+### 2026-03-18 Session Update
+
+- Completed: Added a packaged-binary `list-command-examples` command that prints the embedded import/follow example manifest. The manifest remains checked in under `internal/app/testdata`, runtime code now embeds it for operator discovery, and CLI coverage verifies both the happy path and argument rejection.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether this manifest should eventually gain a machine-readable JSON form, or whether the current text format is the better stable operator-facing surface.
+
+### 2026-03-18 Session Update
+
+- Completed: Added a checked-in import/follow command example manifest under `internal/app/testdata` together with generator/sync tests and an env-gated refresh helper. The operator import-ingestion guide now points maintainers at one catalog file instead of repeating every sample-output path inline, which should reduce doc drift as the fixture set grows.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the example catalog should stay testdata-backed only, or whether operators would benefit from a small packaged-binary command that prints the same manifest on demand.
+
+### 2026-03-18 Session Update
+
 - Completed: Added checked-in `follow-imports` audit-only sample outputs under `internal/app/testdata` together with sync and env-gated refresh tests. The new fixtures cover both single-input text output and multi-input aggregate JSON output, so nested batch counters plus suppression-reason summaries now have checked-in examples beyond ordinary assertions. The operator import-ingestion guide and README now point at those follow-mode examples and document the refresh helper.
 - In progress: none.
 - Blockers: none.

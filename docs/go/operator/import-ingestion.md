@@ -316,16 +316,19 @@ When `--summary-only` is set, the aggregate counts stay the same but the detaile
 
 Checked-in sample outputs for import and follow workflows live under [../../../internal/app/testdata](../../../internal/app/testdata/):
 
-- [ingest-imports-audit-only-summary.txt](../../../internal/app/testdata/ingest-imports-audit-only-summary.txt)
-- [ingest-imports-audit-only-linked.json](../../../internal/app/testdata/ingest-imports-audit-only-linked.json)
-- [follow-imports-audit-only-single.txt](../../../internal/app/testdata/follow-imports-audit-only-single.txt)
-- [follow-imports-audit-only-multi.json](../../../internal/app/testdata/follow-imports-audit-only-multi.json)
-- [cleanup-follow-imports-daily-dry-run.txt](../../../internal/app/testdata/cleanup-follow-imports-daily-dry-run.txt)
-- [cleanup-follow-imports-filtered-cleanup.json](../../../internal/app/testdata/cleanup-follow-imports-filtered-cleanup.json)
-- [cleanup-follow-imports-target-profile-all.txt](../../../internal/app/testdata/cleanup-follow-imports-target-profile-all.txt)
-- [audit-follow-imports-daily-audit.txt](../../../internal/app/testdata/audit-follow-imports-daily-audit.txt)
-- [audit-follow-imports-filtered-audit.json](../../../internal/app/testdata/audit-follow-imports-filtered-audit.json)
-- [audit-follow-imports-target-profile-retry.json](../../../internal/app/testdata/audit-follow-imports-target-profile-retry.json)
+The full checked-in catalog is indexed in [command-example-manifest.txt](../../../internal/app/testdata/command-example-manifest.txt), which records each example's command, fixture name, output format, and relative path.
+
+Packaged binaries can print that same embedded catalog on demand:
+
+```powershell
+codex-mem.exe list-command-examples
+```
+
+If automation needs a stable machine-readable catalog, use:
+
+```powershell
+codex-mem.exe list-command-examples --json
+```
 
 If a deliberate output change makes those fixtures drift, refresh the ingest fixtures from the repository root through the test-only maintainer helper:
 
@@ -353,6 +356,14 @@ Refresh the audit fixtures the same way:
 $env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES = "all"
 go test ./internal/app -run TestRefreshAuditFollowImportsExampleFixtures
 Remove-Item Env:CODEX_MEM_REFRESH_AUDIT_EXAMPLES
+```
+
+Refresh the checked-in catalog after adding, removing, or renaming any example fixture:
+
+```powershell
+$env:CODEX_MEM_REFRESH_EXAMPLE_MANIFEST = "1"
+go test ./internal/app -run TestRefreshCommandExampleManifest
+Remove-Item Env:CODEX_MEM_REFRESH_EXAMPLE_MANIFEST
 ```
 
 If you only need one fixture while iterating on a specific report shape, pass a comma-separated fixture-name subset instead of `all`:
