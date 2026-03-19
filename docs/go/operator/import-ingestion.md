@@ -52,6 +52,12 @@ Continue past bad lines and keep successful imports:
 codex-mem.exe ingest-imports --source watcher_import --input .\events.jsonl --continue-on-error --json
 ```
 
+Continue past bad lines, still write the partial report, but fail the batch for automation:
+
+```powershell
+codex-mem.exe ingest-imports --source watcher_import --input .\events.jsonl --continue-on-error --fail-on-partial --failed-output .\failed-events.jsonl --failed-manifest .\failed-events.json --json
+```
+
 Export failed lines for retry after the batch finishes:
 
 ```powershell
@@ -176,6 +182,8 @@ Useful flags:
   `ingest-imports` and `follow-imports` only. Optional. Evaluates each event against the same imported-note dedupe, privacy, and explicit-memory precedence rules, but writes only the import-audit record instead of materializing or reusing a durable note. The event schema stays the same so the audit-only path can answer whether the artifact would have been suppressed or linked to an existing note.
 - `--continue-on-error`
   `ingest-imports` only. Keeps scanning after per-line decode or import failures and returns a partial-success report when at least one event succeeds.
+- `--fail-on-partial`
+  `ingest-imports` only. Optional. Leaves `--continue-on-error` behavior intact, but returns a non-zero exit after writing the report when the batch finished with `status=partial`. Use it when automation should keep successful imports plus retry exports while still treating any failed line as a failed run.
 - `--failed-output <path>`
   Optional. For `ingest-imports`, requires `--continue-on-error` and writes the original failed input lines to a JSONL file for manual fix-up or replay.
   For `follow-imports`, each polling batch derives a range-suffixed file from the provided base path so earlier failures are not overwritten.
@@ -306,6 +314,7 @@ warnings=1
 JSON mode returns the same summary plus per-line results, including the created or reused `note_id` and `import_id`.
 When `--audit-only` is active, the report also includes `audit_only=true`, `materialized` stays `0`, `would_materialize` counts unsuppressed artifacts that would have created a new imported note, and `linked_existing_note` counts unsuppressed artifacts that only linked an already-imported durable note. Whenever any suppression happens, the JSON report also includes a `suppression_reasons` object keyed by normalized reason (for example `privacy_intent`, `explicit_memory_exists`, or the fallback `import_policy` bucket), and text mode flattens those same counts as `suppression_reason_<reason>=<count>`. Each per-line result can still surface `suppression_reason`, and `note_id` stays omitted for newly audited artifacts that would have taken the new-note path.
 When a line fails in `--continue-on-error` mode, that result entry includes a structured `error` payload instead.
+When `--fail-on-partial` is active, the report also includes `fail_on_partial=true`, and the command exits non-zero after writing that partial report whenever at least one line failed but at least one other line still imported successfully.
 If `--failed-output` is set, the report also includes the resolved output path and how many failed lines were written there.
 If `--failed-manifest` is set, the report also includes the manifest path and how many failures were captured there.
 Single-input `follow-imports` reports the input path, checkpoint file, requested watch mode, active watch mode, fallback count, transition count, cumulative poll-catchup count and bytes, any warning summaries, any structured watch events since the previous emitted report, consumed offset, pending trailing bytes, whether the checkpoint was reset, the reset reason, truncation detection, and the nested batch report for whatever newly appended complete lines were imported during that poll.
@@ -349,6 +358,13 @@ If you only want one fixture category, use tags from the embedded catalog metada
 ```powershell
 codex-mem.exe list-command-examples --tag audit-only
 codex-mem.exe list-command-examples --tag target-profile --format json
+```
+
+If you already know the fixture name, filter directly to that example:
+
+```powershell
+codex-mem.exe list-command-examples --example audit-only-linked-json
+codex-mem.exe list-command-examples --example audit-only-linked-json,target-profile-retry-json --json
 ```
 
 If a deliberate output change makes those fixtures drift, refresh the ingest fixtures from the repository root through the test-only maintainer helper:
@@ -449,6 +465,7 @@ go test ./internal/app -run "Test(Audit|Cleanup)FollowImportsExampleOutputsStayI
 - Existing explicit memory wins over weaker imported duplicates in the same project.
 - The default implementation is fail-fast: the first invalid line stops the batch and returns an error.
 - `--continue-on-error` preserves successful lines, reports per-line failures, and still exits with an error if nothing in the batch imports successfully.
+- Add `--fail-on-partial` when scheduled automation or CI should keep the partial-success report and retry artifacts but still fail the job if any line in the batch was rejected.
 - `--failed-output` writes the original failed JSONL lines without wrapping them, so operators can edit that file and replay it through the same command later.
 - `--failed-manifest` writes a structured JSON sidecar with line numbers, error codes, error messages, raw failed lines, and failed-output line numbers when available.
 - `follow-imports` only consumes complete newline-terminated lines. A partially written trailing line is left in place until a later poll sees its terminating newline.

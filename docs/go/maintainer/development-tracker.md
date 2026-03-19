@@ -151,6 +151,16 @@ Immediate next tasks:
 
 ### 2026-03-19 Session Update
 
+- Completed: Added `--fail-on-partial` to `ingest-imports` so operators can keep `--continue-on-error` partial-success behavior, failed-output exports, and failed-manifest exports while still receiving a non-zero exit when any line in the batch failed. The ingest report now surfaces `fail_on_partial`, CLI coverage verifies that the partial report is still written before the command exits with an error, and the reusable `App.IngestImports` path now honors the same flag so embedded callers can receive the same report-plus-error behavior instead of only the CLI getting that control. Operator docs plus the README describe the automation-oriented workflow.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next import/follow ergonomics slice should extend similar automation-gating controls into more import workflows, or move to another bounded operator-facing improvement.
+
+- Completed: Added `--example` filtering to `list-command-examples`, including repeated and comma-separated example-name selectors. Text and JSON output now share the same embedded-manifest filter pipeline across command, example, format, and tag filters, runtime coverage rejects unknown example names and missing values, and operator-facing docs now show how to jump straight to one or more named fixtures.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the example catalog now has enough discovery power, or whether the next bounded operator-facing slice should move back to import/follow workflow ergonomics instead of further catalog expansion.
+
 - Completed: Extended multi-input `follow-imports` aggregate reports with a top-level `batch_summary` rollup so operators can see aggregate attempted, processed, failed, materialized, suppressed, dedupe, suppression-reason, and warning-by-code counts without manually summing each nested input batch. Added a companion `retry_summary` block that totals failed-output and failed-manifest activity across the consumed inputs in the same pass and now also surfaces aggregate retry artifact paths, added a compact `batch_error_summary` block so the aggregate report also shows how many inputs surfaced follow-level `batch_error` payloads and which error codes appeared, added a `state_summary` block that rolls up truncation and checkpoint-reset visibility plus reset-reason counts across inputs, added a `pending_summary` block that counts inputs with trailing pending bytes and highlights the largest pending backlog, and then added a compact `watch_summary` block that rolls up watch-event kind counts plus mode-transition pairs for the current emitted watch event batch. Idle aggregate reports with pending-summary-only or state-summary-only changes now still emit so backlog and reset/truncation events are not silently hidden. JSON fixtures, format coverage, and operator docs now describe all six summary blocks alongside the existing per-input reports.
 - In progress: none.
 - Blockers: none.

@@ -21,15 +21,16 @@ var EmbeddedCommandExampleManifest string
 type listCommandExamplesOptions struct {
 	JSON     bool
 	Commands []string
+	Examples []string
 	Formats  []string
 	Tags     []string
 }
 
 type commandExampleManifestEntry struct {
-	Command      string `json:"command"`
-	Name         string `json:"name"`
-	RelativePath string `json:"path"`
-	Format       string `json:"format"`
+	Command      string   `json:"command"`
+	Name         string   `json:"name"`
+	RelativePath string   `json:"path"`
+	Format       string   `json:"format"`
 	Tags         []string `json:"tags,omitempty"`
 	Summary      string   `json:"summary,omitempty"`
 }
@@ -59,6 +60,16 @@ func parseListCommandExamplesOptions(args []string) (listCommandExamplesOptions,
 				return listCommandExamplesOptions{}, err
 			}
 			options.Commands = appendUniqueStrings(options.Commands, values...)
+		case "--example":
+			index++
+			if index >= len(args) {
+				return listCommandExamplesOptions{}, fmt.Errorf("list-command-examples --example requires a value")
+			}
+			values, err := parseListCommandExampleNames(args[index])
+			if err != nil {
+				return listCommandExamplesOptions{}, err
+			}
+			options.Examples = appendUniqueStrings(options.Examples, values...)
 		case "--format":
 			index++
 			if index >= len(args) {
@@ -92,6 +103,10 @@ func commandExampleManifestReportFromEmbedded() (commandExampleManifestReport, e
 
 func parseListCommandExampleCommands(raw string) ([]string, error) {
 	return parseListCommandExamplesCSVFlag(raw, "--command", "command")
+}
+
+func parseListCommandExampleNames(raw string) ([]string, error) {
+	return parseListCommandExamplesCSVFlag(raw, "--example", "example")
 }
 
 func parseListCommandExampleFormats(raw string) ([]string, error) {
@@ -316,87 +331,47 @@ func commandExampleManifestEntriesForReport(entries []commandExampleManifestEntr
 	return reportEntries
 }
 
-func filterCommandExampleManifestReport(report commandExampleManifestReport, commands []string, formats []string, tags []string) (commandExampleManifestReport, error) {
-	if len(commands) == 0 && len(formats) == 0 && len(tags) == 0 {
+type commandExampleFilterSet struct {
+	commands map[string]struct{}
+	examples map[string]struct{}
+	formats  map[string]struct{}
+	tags     map[string]struct{}
+}
+
+type commandExampleSeenValues struct {
+	commands map[string]struct{}
+	examples map[string]struct{}
+	formats  map[string]struct{}
+	tags     map[string]struct{}
+}
+
+func filterCommandExampleManifestReport(report commandExampleManifestReport, commands []string, examples []string, formats []string, tags []string) (commandExampleManifestReport, error) {
+	if len(commands) == 0 && len(examples) == 0 && len(formats) == 0 && len(tags) == 0 {
 		return report, nil
 	}
 
-	allowedCommands := make(map[string]struct{}, len(commands))
-	for _, command := range commands {
-		allowedCommands[strings.TrimSpace(command)] = struct{}{}
-	}
-	allowedFormats := make(map[string]struct{}, len(formats))
-	for _, format := range formats {
-		allowedFormats[strings.TrimSpace(format)] = struct{}{}
-	}
-	allowedTags := make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		allowedTags[strings.TrimSpace(tag)] = struct{}{}
-	}
-
-	seenCommands := make(map[string]struct{}, len(report.Examples))
-	seenFormats := make(map[string]struct{}, len(report.Examples))
-	seenTags := make(map[string]struct{}, len(report.Examples))
+	filters := newCommandExampleFilterSet(commands, examples, formats, tags)
+	seen := newCommandExampleSeenValues(len(report.Examples))
 	filtered := make([]commandExampleManifestEntry, 0, len(report.Examples))
 	for _, entry := range report.Examples {
-		seenCommands[entry.Command] = struct{}{}
-		seenFormats[entry.Format] = struct{}{}
-		for _, tag := range entry.Tags {
-			seenTags[tag] = struct{}{}
-		}
-		if len(allowedCommands) > 0 {
-			if _, ok := allowedCommands[entry.Command]; !ok {
-				continue
-			}
-		}
-		if len(allowedFormats) > 0 {
-			if _, ok := allowedFormats[entry.Format]; !ok {
-				continue
-			}
-		}
-		if len(allowedTags) > 0 {
-			matchedTag := false
-			for _, tag := range entry.Tags {
-				if _, ok := allowedTags[tag]; ok {
-					matchedTag = true
-					break
-				}
-			}
-			if !matchedTag {
-				continue
-			}
+		seen.record(entry)
+		if !filters.matches(entry) {
+			continue
 		}
 		filtered = append(filtered, entry)
 	}
 
-	unknownCommands := make([]string, 0)
-	for _, command := range commands {
-		if _, ok := seenCommands[command]; !ok && !slices.Contains(unknownCommands, command) {
-			unknownCommands = append(unknownCommands, command)
-		}
+	if err := seen.validateRequested("command", commands, seen.commands); err != nil {
+		return commandExampleManifestReport{}, err
 	}
-	if len(unknownCommands) > 0 {
-		return commandExampleManifestReport{}, fmt.Errorf("unknown list-command-examples command filter %q", strings.Join(unknownCommands, ","))
+	if err := seen.validateRequested("example", examples, seen.examples); err != nil {
+		return commandExampleManifestReport{}, err
 	}
-
-	unknownFormats := make([]string, 0)
-	for _, format := range formats {
-		if _, ok := seenFormats[format]; !ok && !slices.Contains(unknownFormats, format) {
-			unknownFormats = append(unknownFormats, format)
-		}
+	if err := seen.validateRequested("format", formats, seen.formats); err != nil {
+		return commandExampleManifestReport{}, err
 	}
-	if len(unknownFormats) > 0 {
-		return commandExampleManifestReport{}, fmt.Errorf("unknown list-command-examples format filter %q", strings.Join(unknownFormats, ","))
-	}
-
-	unknownTags := make([]string, 0)
-	for _, tag := range tags {
-		if _, ok := seenTags[tag]; !ok && !slices.Contains(unknownTags, tag) {
-			unknownTags = append(unknownTags, tag)
-		}
-	}
-	if len(unknownTags) > 0 {
-		return commandExampleManifestReport{}, fmt.Errorf("unknown list-command-examples tag filter %q", strings.Join(unknownTags, ","))
+	if err := seen.validateRequested("tag", tags, seen.tags); err != nil {
+		return commandExampleManifestReport{}, err
 	}
 
 	return commandExampleManifestReport{
@@ -404,6 +379,87 @@ func filterCommandExampleManifestReport(report commandExampleManifestReport, com
 		ExampleCount: len(filtered),
 		Examples:     filtered,
 	}, nil
+}
+
+func newCommandExampleFilterSet(commands []string, examples []string, formats []string, tags []string) commandExampleFilterSet {
+	return commandExampleFilterSet{
+		commands: buildCommandExampleAllowedSet(commands),
+		examples: buildCommandExampleAllowedSet(examples),
+		formats:  buildCommandExampleAllowedSet(formats),
+		tags:     buildCommandExampleAllowedSet(tags),
+	}
+}
+
+func buildCommandExampleAllowedSet(values []string) map[string]struct{} {
+	allowed := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		allowed[strings.TrimSpace(value)] = struct{}{}
+	}
+	return allowed
+}
+
+func newCommandExampleSeenValues(capacity int) commandExampleSeenValues {
+	return commandExampleSeenValues{
+		commands: make(map[string]struct{}, capacity),
+		examples: make(map[string]struct{}, capacity),
+		formats:  make(map[string]struct{}, capacity),
+		tags:     make(map[string]struct{}, capacity),
+	}
+}
+
+func (f commandExampleFilterSet) matches(entry commandExampleManifestEntry) bool {
+	return matchesAllowedValue(f.commands, entry.Command) &&
+		matchesAllowedValue(f.examples, entry.Name) &&
+		matchesAllowedValue(f.formats, entry.Format) &&
+		matchesAllowedTag(f.tags, entry.Tags)
+}
+
+func matchesAllowedValue(allowed map[string]struct{}, value string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	_, ok := allowed[value]
+	return ok
+}
+
+func matchesAllowedTag(allowed map[string]struct{}, tags []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, tag := range tags {
+		if _, ok := allowed[tag]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (s commandExampleSeenValues) record(entry commandExampleManifestEntry) {
+	s.commands[entry.Command] = struct{}{}
+	s.examples[entry.Name] = struct{}{}
+	s.formats[entry.Format] = struct{}{}
+	for _, tag := range entry.Tags {
+		s.tags[tag] = struct{}{}
+	}
+}
+
+func (s commandExampleSeenValues) validateRequested(label string, requested []string, seen map[string]struct{}) error {
+	unknown := unknownRequestedCommandExampleValues(requested, seen)
+	if len(unknown) == 0 {
+		return nil
+	}
+	return fmt.Errorf("unknown list-command-examples %s filter %q", label, strings.Join(unknown, ","))
+}
+
+func unknownRequestedCommandExampleValues(requested []string, seen map[string]struct{}) []string {
+	unknown := make([]string, 0)
+	for _, value := range requested {
+		if _, ok := seen[value]; ok || slices.Contains(unknown, value) {
+			continue
+		}
+		unknown = append(unknown, value)
+	}
+	return unknown
 }
 
 func appendUniqueStrings(existing []string, values ...string) []string {

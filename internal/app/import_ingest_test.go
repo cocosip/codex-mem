@@ -19,7 +19,6 @@ import (
 
 const (
 	ingestImportsWatcherSource = "watcher_import"
-	ingestImportsStatusPartial = "partial"
 	ingestImportsErrInvalid    = "ERR_INVALID_INPUT"
 	ingestImportsBrokenLine    = `{"external_id":"watcher:bad","type":"discovery","title":"Broken"`
 )
@@ -35,6 +34,7 @@ func TestParseIngestImportsOptions(t *testing.T) {
 		"--repo-remote", "git@github.com:example/codex-mem.git",
 		"--task", "batch import",
 		"--continue-on-error",
+		"--fail-on-partial",
 		"--json",
 	})
 	if err != nil {
@@ -60,6 +60,9 @@ func TestParseIngestImportsOptions(t *testing.T) {
 	}
 	if !options.ContinueOnError {
 		t.Fatal("expected continue-on-error mode")
+	}
+	if !options.FailOnPartial {
+		t.Fatal("expected fail-on-partial mode")
 	}
 }
 
@@ -109,6 +112,19 @@ func TestParseIngestImportsOptionsSupportsAuditOnly(t *testing.T) {
 	}
 	if !options.AuditOnly {
 		t.Fatal("expected audit-only mode")
+	}
+}
+
+func TestParseIngestImportsOptionsSupportsFailOnPartial(t *testing.T) {
+	options, err := parseIngestImportsOptions([]string{
+		"--source", ingestImportsWatcherSource,
+		"--fail-on-partial",
+	})
+	if err != nil {
+		t.Fatalf("parseIngestImportsOptions: %v", err)
+	}
+	if !options.FailOnPartial {
+		t.Fatal("expected fail-on-partial mode")
 	}
 }
 
@@ -480,6 +496,58 @@ func TestRunIngestImportsContinueOnErrorSkipsInvalidLines(t *testing.T) {
 	assertImportAuditCounts(t, diagnostics, 1, 1)
 }
 
+func TestRunIngestImportsFailOnPartialReturnsErrorAfterWritingReport(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	failedOutputPath := filepath.Join(root, "tmp", "failed.jsonl")
+	failedManifestPath := filepath.Join(root, "tmp", "failed-manifest.json")
+	input := strings.Join([]string{
+		`{"external_id":"watcher:1","type":"discovery","title":"Imported discovery","content":"Useful watcher discovery.","importance":4}`,
+		ingestImportsBrokenLine,
+	}, "\n")
+
+	var stdout bytes.Buffer
+	err := Run(context.Background(), cfg, []string{
+		"ingest-imports",
+		"--source", ingestImportsWatcherSource,
+		"--cwd", root,
+		"--repo-remote", "git@github.com:example/codex-mem.git",
+		"--continue-on-error",
+		"--fail-on-partial",
+		"--failed-output", failedOutputPath,
+		"--failed-manifest", failedManifestPath,
+	}, strings.NewReader(input), &stdout)
+	if err == nil {
+		t.Fatal("expected fail-on-partial error")
+	}
+	if !strings.Contains(err.Error(), "completed partially") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		"ingest imports partial",
+		"status=partial",
+		"continue_on_error=true",
+		"fail_on_partial=true",
+		"failed_output=" + failedOutputPath,
+		"failed_manifest=" + failedManifestPath,
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("ingest fail-on-partial output missing %q:\n%s", fragment, output)
+		}
+	}
+
+	failedOutputBody, readErr := os.ReadFile(failedOutputPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile failed output: %v", readErr)
+	}
+	if got, want := strings.TrimSpace(string(failedOutputBody)), ingestImportsBrokenLine; got != want {
+		t.Fatalf("failed output mismatch: got %q want %q", got, want)
+	}
+	assertContinueOnErrorManifest(t, failedManifestPath, failedOutputPath)
+}
+
 func TestRunIngestImportsContinueOnErrorStillFailsWhenNothingSucceeds(t *testing.T) {
 	root := t.TempDir()
 	cfg := ingestTestConfig(root)
@@ -635,6 +703,67 @@ func TestAppIngestImportsSupportsEmbeddedIntegration(t *testing.T) {
 	if got, want := manifest.FailureCount, 1; got != want {
 		t.Fatalf("manifest failure count mismatch: got %d want %d", got, want)
 	}
+}
+
+func TestAppIngestImportsFailOnPartialReturnsReportAndError(t *testing.T) {
+	root := t.TempDir()
+	cfg := ingestTestConfig(root)
+	instance, err := New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = instance.Close() }()
+
+	failedOutputPath := filepath.Join(root, "embedded", "failed.jsonl")
+	failedManifestPath := filepath.Join(root, "embedded", "failed.json")
+	report, err := instance.IngestImports(context.Background(), IngestImportsInput{
+		Source:             ingestImportsWatcherSource,
+		Reader:             strings.NewReader(strings.Join([]string{`{"external_id":"watcher:ok","type":"discovery","title":"Embedded path","content":"Embedded ingestion path works.","importance":4}`, ingestImportsBrokenLine}, "\n")),
+		InputLabel:         "embedded-fail-on-partial",
+		CWD:                root,
+		RepoRemote:         "git@github.com:example/codex-mem.git",
+		Task:               "embedded partial import test",
+		ContinueOnError:    true,
+		FailOnPartial:      true,
+		FailedOutputPath:   failedOutputPath,
+		FailedManifestPath: failedManifestPath,
+	})
+	if err == nil {
+		t.Fatal("expected fail-on-partial error")
+	}
+	if !strings.Contains(err.Error(), "completed partially") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := report.Status, ingestImportsStatusPartial; got != want {
+		t.Fatalf("status mismatch: got %q want %q", got, want)
+	}
+	if !report.FailOnPartial {
+		t.Fatalf("expected report to advertise fail-on-partial, got %+v", report)
+	}
+	if got, want := report.Input, "embedded-fail-on-partial"; got != want {
+		t.Fatalf("input label mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.Processed, 1; got != want {
+		t.Fatalf("processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.Failed, 1; got != want {
+		t.Fatalf("failed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.FailedOutput, failedOutputPath; got != want {
+		t.Fatalf("failed output mismatch: got %q want %q", got, want)
+	}
+	if got, want := report.FailedManifest, failedManifestPath; got != want {
+		t.Fatalf("failed manifest mismatch: got %q want %q", got, want)
+	}
+
+	failedOutputBody, readErr := os.ReadFile(failedOutputPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile failed output: %v", readErr)
+	}
+	if got, want := strings.TrimSpace(string(failedOutputBody)), ingestImportsBrokenLine; got != want {
+		t.Fatalf("failed output mismatch: got %q want %q", got, want)
+	}
+	assertContinueOnErrorManifest(t, failedManifestPath, failedOutputPath)
 }
 
 type ingestFailureManifestForTest struct {

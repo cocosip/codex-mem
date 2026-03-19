@@ -26,6 +26,7 @@
   },
   "audit_only": true,
   "continue_on_error": false,
+  "fail_on_partial": false,
   "attempted": 3,
   "processed": 3,
   "failed": 0,

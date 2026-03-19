@@ -453,6 +453,33 @@ func TestRunListCommandExamplesFiltersTextByCommand(t *testing.T) {
 	}
 }
 
+func TestRunListCommandExamplesFiltersTextByExample(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--example", "target-profile-all-text"}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples --example target-profile-all-text: %v", err)
+	}
+
+	output := stdout.String()
+	for _, fragment := range []string{
+		`command=cleanup-follow-imports example=target-profile-all-text format=text tags=cleanup,target-profile summary="Cleanup report using the all target profile." path=testdata/cleanup-follow-imports-target-profile-all.txt`,
+		"example_count=1",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("example-filtered manifest missing %q:\n%s", fragment, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"command=ingest-imports",
+		"command=follow-imports",
+		"command=audit-follow-imports",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("example-filtered manifest unexpectedly included %q:\n%s", forbidden, output)
+		}
+	}
+}
+
 func TestRunListCommandExamplesFiltersTextByFormat(t *testing.T) {
 	var stdout bytes.Buffer
 
@@ -663,6 +690,35 @@ func TestRunListCommandExamplesFiltersJSONByCommandAndTag(t *testing.T) {
 	}
 }
 
+func TestRunListCommandExamplesFiltersJSONByExampleAndFormat(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := Run(context.Background(), config.Config{}, []string{
+		"list-command-examples",
+		"--json",
+		"--example", "audit-only-linked-json,target-profile-retry-json",
+		"--format", "json",
+	}, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("Run list-command-examples filtered by example and format: %v", err)
+	}
+
+	var report commandExampleManifestReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal example+format filtered list-command-examples JSON: %v\n%s", err, stdout.String())
+	}
+	if got, want := report.ExampleCount, 2; got != want {
+		t.Fatalf("example_count mismatch: got %d want %d", got, want)
+	}
+	for _, entry := range report.Examples {
+		if entry.Format != "json" {
+			t.Fatalf("unexpected format %q in %+v", entry.Format, entry)
+		}
+		if !slices.Contains([]string{"audit-only-linked-json", "target-profile-retry-json"}, entry.Name) {
+			t.Fatalf("unexpected example %q in %+v", entry.Name, entry)
+		}
+	}
+}
+
 func TestRunListCommandExamplesRejectsUnknownCommandFilter(t *testing.T) {
 	var stdout bytes.Buffer
 
@@ -671,6 +727,18 @@ func TestRunListCommandExamplesRejectsUnknownCommandFilter(t *testing.T) {
 		t.Fatal("expected unknown command filter error")
 	}
 	if !strings.Contains(err.Error(), "unknown list-command-examples command filter") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsUnknownExampleFilter(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--example", "unknown-example"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected unknown example filter error")
+	}
+	if !strings.Contains(err.Error(), "unknown list-command-examples example filter") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -707,6 +775,18 @@ func TestRunListCommandExamplesRejectsMissingCommandValue(t *testing.T) {
 		t.Fatal("expected missing command value error")
 	}
 	if !strings.Contains(err.Error(), "--command requires a value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunListCommandExamplesRejectsMissingExampleValue(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := Run(context.Background(), config.Config{}, []string{"list-command-examples", "--example"}, strings.NewReader(""), &stdout)
+	if err == nil {
+		t.Fatal("expected missing example value error")
+	}
+	if !strings.Contains(err.Error(), "--example requires a value") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

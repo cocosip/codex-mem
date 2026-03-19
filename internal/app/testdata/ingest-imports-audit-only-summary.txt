@@ -10,6 +10,7 @@ session_id=sess_20260318_013000
 resolved_by=repo_remote
 audit_only=true
 continue_on_error=false
+fail_on_partial=false
 attempted=3
 processed=3
 failed=0

@@ -10,6 +10,7 @@ func TestParseListCommandExamplesOptionsSupportsRepeatedAndCSVTags(t *testing.T)
 	options, err := parseListCommandExamplesOptions([]string{
 		"--tag", "audit-only,target-profile",
 		"--tag", "audit-only",
+		"--example", "audit-only-single-text,target-profile-all-text",
 		"--format", "json",
 	})
 	if err != nil {
@@ -21,6 +22,9 @@ func TestParseListCommandExamplesOptionsSupportsRepeatedAndCSVTags(t *testing.T)
 	}
 	if !slices.Equal(options.Tags, []string{"audit-only", "target-profile"}) {
 		t.Fatalf("unexpected tags: %+v", options.Tags)
+	}
+	if !slices.Equal(options.Examples, []string{"audit-only-single-text", "target-profile-all-text"}) {
+		t.Fatalf("unexpected examples: %+v", options.Examples)
 	}
 	if !slices.Equal(options.Formats, []string{"json"}) {
 		t.Fatalf("unexpected formats: %+v", options.Formats)

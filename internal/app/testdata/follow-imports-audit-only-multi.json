@@ -137,6 +137,7 @@
         },
         "audit_only": true,
         "continue_on_error": true,
+        "fail_on_partial": false,
         "attempted": 3,
         "processed": 2,
         "failed": 1,

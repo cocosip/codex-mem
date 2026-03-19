@@ -32,6 +32,7 @@ type ingestImportsOptions struct {
 	JSON               bool
 	AuditOnly          bool
 	ContinueOnError    bool
+	FailOnPartial      bool
 }
 
 type ingestImportEvent struct {
@@ -68,6 +69,7 @@ type IngestImportsInput struct {
 	Task               string
 	AuditOnly          bool
 	ContinueOnError    bool
+	FailOnPartial      bool
 	FailedOutputPath   string
 	FailedManifestPath string
 }
@@ -96,6 +98,7 @@ type ingestImportsReport struct {
 	Session             session.Session           `json:"session"`
 	AuditOnly           bool                      `json:"audit_only"`
 	ContinueOnError     bool                      `json:"continue_on_error"`
+	FailOnPartial       bool                      `json:"fail_on_partial"`
 	Attempted           int                       `json:"attempted"`
 	Processed           int                       `json:"processed"`
 	Failed              int                       `json:"failed"`
@@ -133,6 +136,10 @@ const (
 	ingestImportsFailedManifestFlag  = "--failed-manifest"
 	ingestImportsCWDFlag             = "--cwd"
 	ingestImportsContinueOnErrorFlag = "--continue-on-error"
+	ingestImportsFailOnPartialFlag   = "--fail-on-partial"
+	ingestImportsStatusOK            = "ok"
+	ingestImportsStatusFailed        = "failed"
+	ingestImportsStatusPartial       = "partial"
 )
 
 func runIngestImports(ctx context.Context, cfg config.Config, stdin io.Reader, stdout io.Writer, args []string) error {
@@ -167,6 +174,7 @@ func runIngestImports(ctx context.Context, cfg config.Config, stdin io.Reader, s
 		Task:               options.Task,
 		AuditOnly:          options.AuditOnly,
 		ContinueOnError:    options.ContinueOnError,
+		FailOnPartial:      options.FailOnPartial,
 		FailedOutputPath:   options.FailedOutputPath,
 		FailedManifestPath: options.FailedManifestPath,
 	})
@@ -251,6 +259,8 @@ func parseIngestImportsOptions(args []string) (ingestImportsOptions, error) {
 			options.AuditOnly = true
 		case ingestImportsContinueOnErrorFlag:
 			options.ContinueOnError = true
+		case ingestImportsFailOnPartialFlag:
+			options.FailOnPartial = true
 		default:
 			return ingestImportsOptions{}, fmt.Errorf("unknown ingest-imports flag %q", arg)
 		}
@@ -325,6 +335,7 @@ func (a *App) IngestImports(ctx context.Context, input IngestImportsInput) (Inge
 	report.FailedOutputWritten = failedWriter.Written()
 	report.FailedManifest = failedManifestPath
 	report.FailedManifestCount = len(failures)
+	report.FailOnPartial = input.FailOnPartial
 
 	closeErr := failedWriter.Close()
 	if closeErr == nil {
@@ -332,6 +343,9 @@ func (a *App) IngestImports(ctx context.Context, input IngestImportsInput) (Inge
 	}
 	if closeErr != nil {
 		return report, closeErr
+	}
+	if err == nil && shouldFailIngestImportsOnPartial(report) {
+		return report, fmt.Errorf("ingest-imports completed partially; see report output")
 	}
 	return report, err
 }
@@ -403,7 +417,7 @@ func ingestImportEvents(ctx context.Context, reader io.Reader, inputLabel string
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	report := ingestImportsReport{
-		Status:          "ok",
+		Status:          ingestImportsStatusOK,
 		Source:          string(source),
 		Input:           inputLabel,
 		Scope:           resolvedScope,
@@ -608,11 +622,11 @@ func (r *ingestImportsReport) appendFailure(line int, payload common.ErrorPayloa
 func (r *ingestImportsReport) updateStatus() {
 	switch {
 	case r.Failed == 0:
-		r.Status = "ok"
+		r.Status = ingestImportsStatusOK
 	case r.Processed == 0:
-		r.Status = "failed"
+		r.Status = ingestImportsStatusFailed
 	default:
-		r.Status = "partial"
+		r.Status = ingestImportsStatusPartial
 	}
 }
 
@@ -665,6 +679,7 @@ func formatIngestImportsReport(report ingestImportsReport) string {
 		fmt.Sprintf("resolved_by=%s", report.Scope.ResolvedBy),
 		fmt.Sprintf("audit_only=%t", report.AuditOnly),
 		fmt.Sprintf("continue_on_error=%t", report.ContinueOnError),
+		fmt.Sprintf("fail_on_partial=%t", report.FailOnPartial),
 		fmt.Sprintf("attempted=%d", report.Attempted),
 		fmt.Sprintf("processed=%d", report.Processed),
 		fmt.Sprintf("failed=%d", report.Failed),
@@ -743,6 +758,10 @@ func writeIngestImportsReport(stdout io.Writer, report ingestImportsReport, json
 
 	_, err := io.WriteString(stdout, formatIngestImportsReport(report))
 	return err
+}
+
+func shouldFailIngestImportsOnPartial(report ingestImportsReport) bool {
+	return report.FailOnPartial && report.Status == ingestImportsStatusPartial
 }
 
 func marshalIndented(value any) (string, error) {
