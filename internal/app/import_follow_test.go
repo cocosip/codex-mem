@@ -1229,6 +1229,58 @@ func TestFollowImportsRuntimeStateApply(t *testing.T) {
 	}
 }
 
+func TestFollowImportsRuntimeStateApplyAggregateIncludesWatchSummary(t *testing.T) {
+	state := &followImportsRuntimeState{
+		Requested:          followImportsWatchModeAuto,
+		Active:             followImportsWatchModePoll,
+		Fallbacks:          2,
+		Transitions:        3,
+		LastFallbackReason: "watcher_error",
+		PollCatchups:       1,
+		PollCatchupBytes:   84,
+		PendingEvents: []followImportsEvent{
+			{
+				At:                 time.Date(2026, 3, 16, 6, 30, 0, 0, time.UTC),
+				Kind:               "watch_fallback",
+				RequestedWatchMode: "auto",
+				PreviousWatchMode:  "notify",
+				ActiveWatchMode:    "poll",
+				Reason:             "watcher_error",
+				Fallbacks:          2,
+			},
+			{
+				At:                 time.Date(2026, 3, 16, 6, 31, 0, 0, time.UTC),
+				Kind:               "watch_poll_catchup",
+				RequestedWatchMode: "auto",
+				ActiveWatchMode:    "poll",
+				Reason:             "notify_safety_poll_consumed_bytes",
+				Fallbacks:          2,
+				ConsumedInputs:     1,
+				ConsumedBytes:      84,
+			},
+		},
+	}
+	report := followImportsAggregateReport{}
+
+	state.ApplyAggregate(&report)
+
+	if report.WatchSummary == nil {
+		t.Fatal("expected aggregate watch summary")
+	}
+	if got, want := report.WatchSummary.EventKinds["watch_fallback"], 1; got != want {
+		t.Fatalf("watch fallback summary mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.WatchSummary.EventKinds["watch_poll_catchup"], 1; got != want {
+		t.Fatalf("watch poll catchup summary mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.WatchSummary.ModeTransitions["notify_to_poll"], 1; got != want {
+		t.Fatalf("watch transition summary mismatch: got %d want %d", got, want)
+	}
+	if len(state.PendingEvents) != 0 {
+		t.Fatalf("expected pending events to drain after aggregate apply, got %+v", state.PendingEvents)
+	}
+}
+
 func TestFormatFollowImportsReportIncludesWatchState(t *testing.T) {
 	output := formatFollowImportsReport(followImportsReport{
 		Status:             "ok",
@@ -1516,6 +1568,16 @@ func TestShouldWriteFollowImportsAggregateReport(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "idle state summary writes",
+			report: followImportsAggregateReport{Status: "idle", StateSummary: &followImportsStateSummary{CheckpointResetInputs: 1}},
+			want:   true,
+		},
+		{
+			name:   "idle pending summary writes",
+			report: followImportsAggregateReport{Status: "idle", PendingSummary: &followImportsPendingSummary{InputsWithPending: 1, MaxPendingBytes: 7}},
+			want:   true,
+		},
+		{
 			name:   "plain idle skipped",
 			report: followImportsAggregateReport{Status: "idle"},
 			want:   false,
@@ -1646,23 +1708,8 @@ func TestRunFollowImportsPollingRecoveryLoopRecoversWatcher(t *testing.T) {
 	}
 }
 
-func TestNewFollowImportsAggregateReport(t *testing.T) {
-	report := newFollowImportsAggregateReport(followImportsWatcherSource, []followImportsReport{
-		{
-			Status:        "ok",
-			ConsumedBytes: 10,
-			PendingBytes:  1,
-		},
-		{
-			Status:        "partial",
-			ConsumedBytes: 20,
-			PendingBytes:  2,
-		},
-		{
-			Status:       "idle",
-			PendingBytes: 3,
-		},
-	})
+func assertFollowImportsAggregateCounts(t *testing.T, report followImportsAggregateReport) {
+	t.Helper()
 
 	if got, want := report.Status, "partial"; got != want {
 		t.Fatalf("aggregate status mismatch: got %q want %q", got, want)
@@ -1687,6 +1734,193 @@ func TestNewFollowImportsAggregateReport(t *testing.T) {
 	}
 }
 
+func assertFollowImportsAggregatePendingAndStateSummaries(t *testing.T, report followImportsAggregateReport) {
+	t.Helper()
+
+	if report.PendingSummary == nil {
+		t.Fatal("expected aggregate pending summary")
+	}
+	if got, want := report.PendingSummary.InputsWithPending, 3; got != want {
+		t.Fatalf("pending inputs_with_pending mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.PendingSummary.MaxPendingBytes, 3; got != want {
+		t.Fatalf("pending max_pending_bytes mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.PendingSummary.MaxPendingInput, "c.jsonl"; got != want {
+		t.Fatalf("pending max_pending_input mismatch: got %q want %q", got, want)
+	}
+	if report.StateSummary == nil {
+		t.Fatal("expected aggregate state summary")
+	}
+	if got, want := report.StateSummary.TruncatedInputs, 1; got != want {
+		t.Fatalf("state truncated_inputs mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.StateSummary.CheckpointResetInputs, 1; got != want {
+		t.Fatalf("state checkpoint_reset_inputs mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.StateSummary.ResetReasons["truncated"], 1; got != want {
+		t.Fatalf("state reset reason mismatch: got %d want %d", got, want)
+	}
+}
+
+func assertFollowImportsAggregateBatchAndRetrySummaries(t *testing.T, report followImportsAggregateReport) {
+	t.Helper()
+
+	if report.BatchSummary == nil {
+		t.Fatal("expected aggregate batch summary")
+	}
+	if got, want := report.BatchSummary.Attempted, 5; got != want {
+		t.Fatalf("batch attempted mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.Processed, 4; got != want {
+		t.Fatalf("batch processed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.Failed, 1; got != want {
+		t.Fatalf("batch failed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.Materialized, 1; got != want {
+		t.Fatalf("batch materialized mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.Suppressed, 2; got != want {
+		t.Fatalf("batch suppressed mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.WarningCount, 3; got != want {
+		t.Fatalf("batch warning_count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.WouldMaterialize, 1; got != want {
+		t.Fatalf("batch would_materialize mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.LinkedExistingNote, 1; got != want {
+		t.Fatalf("batch linked_existing_note mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.NoteDeduplicated, 1; got != want {
+		t.Fatalf("batch note_deduplicated mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.ImportDeduplicated, 1; got != want {
+		t.Fatalf("batch import_deduplicated mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.SuppressionReasons["explicit_memory_exists"], 1; got != want {
+		t.Fatalf("explicit_memory_exists suppression mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.SuppressionReasons["privacy_intent"], 1; got != want {
+		t.Fatalf("privacy_intent suppression mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.WarningCodes[common.WarnDedupeApplied], 1; got != want {
+		t.Fatalf("WARN_DEDUPE_APPLIED warning mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchSummary.WarningCodes[common.WarnImportSuppressed], 2; got != want {
+		t.Fatalf("WARN_IMPORT_SUPPRESSED warning mismatch: got %d want %d", got, want)
+	}
+	if report.BatchErrorSummary == nil {
+		t.Fatal("expected aggregate batch error summary")
+	}
+	if got, want := report.BatchErrorSummary.Count, 1; got != want {
+		t.Fatalf("batch error summary count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.BatchErrorSummary.Codes[common.ErrWriteFailed], 1; got != want {
+		t.Fatalf("batch error summary code mismatch: got %d want %d", got, want)
+	}
+	if report.RetrySummary == nil {
+		t.Fatal("expected aggregate retry summary")
+	}
+	if got, want := report.RetrySummary.FailedOutputWritten, 3; got != want {
+		t.Fatalf("retry failed_output_written mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.RetrySummary.FailedManifestCount, 3; got != want {
+		t.Fatalf("retry failed_manifest_count mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.RetrySummary.InputsWithFailedOutput, 2; got != want {
+		t.Fatalf("retry inputs_with_failed_output mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.RetrySummary.InputsWithFailedManifest, 2; got != want {
+		t.Fatalf("retry inputs_with_failed_manifest mismatch: got %d want %d", got, want)
+	}
+	if got, want := len(report.RetrySummary.FailedOutputPaths), 2; got != want {
+		t.Fatalf("retry failed_output_paths len mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.RetrySummary.FailedOutputPaths[0], "D:/tmp/failed-a.jsonl"; got != want {
+		t.Fatalf("retry failed_output_path[0] mismatch: got %q want %q", got, want)
+	}
+	if got, want := len(report.RetrySummary.FailedManifestPaths), 2; got != want {
+		t.Fatalf("retry failed_manifest_paths len mismatch: got %d want %d", got, want)
+	}
+	if got, want := report.RetrySummary.FailedManifestPaths[1], "D:/tmp/failed-b.json"; got != want {
+		t.Fatalf("retry failed_manifest_path[1] mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestNewFollowImportsAggregateReport(t *testing.T) {
+	report := newFollowImportsAggregateReport(followImportsWatcherSource, []followImportsReport{
+		{
+			Input:         "a.jsonl",
+			Status:        "ok",
+			ConsumedBytes: 10,
+			PendingBytes:  1,
+			Batch: &ingestImportsReport{
+				Attempted:          2,
+				Processed:          2,
+				Failed:             0,
+				Materialized:       1,
+				Suppressed:         1,
+				SuppressionReasons: map[string]int{"privacy_intent": 1},
+				Warnings: []common.Warning{
+					{Code: common.WarnDedupeApplied, Message: "matched an existing imported note and reused it"},
+					{Code: common.WarnImportSuppressed, Message: "import was suppressed by privacy policy"},
+				},
+				WouldMaterialize:    0,
+				LinkedExistingNote:  1,
+				NoteDeduplicated:    1,
+				ImportDeduplicated:  0,
+				FailedOutput:        "D:/tmp/failed-a.jsonl",
+				FailedOutputWritten: 1,
+				FailedManifest:      "D:/tmp/failed-a.json",
+				FailedManifestCount: 1,
+			},
+		},
+		{
+			Input:         "b.jsonl",
+			Status:        "partial",
+			ConsumedBytes: 20,
+			PendingBytes:  2,
+			BatchError: &common.ErrorPayload{
+				Code:    common.ErrWriteFailed,
+				Message: "follow-imports batch failed",
+			},
+			Truncated:       true,
+			CheckpointReset: true,
+			ResetReason:     "truncated",
+			Batch: &ingestImportsReport{
+				Attempted:          3,
+				Processed:          2,
+				Failed:             1,
+				Materialized:       0,
+				Suppressed:         1,
+				SuppressionReasons: map[string]int{"explicit_memory_exists": 1},
+				Warnings: []common.Warning{
+					{Code: common.WarnImportSuppressed, Message: "import was suppressed because stronger explicit memory already exists"},
+				},
+				WouldMaterialize:    1,
+				LinkedExistingNote:  0,
+				NoteDeduplicated:    0,
+				ImportDeduplicated:  1,
+				FailedOutput:        "D:/tmp/failed-b.jsonl",
+				FailedOutputWritten: 2,
+				FailedManifest:      "D:/tmp/failed-b.json",
+				FailedManifestCount: 2,
+			},
+		},
+		{
+			Input:        "c.jsonl",
+			Status:       "idle",
+			PendingBytes: 3,
+		},
+	})
+
+	assertFollowImportsAggregateCounts(t, report)
+	assertFollowImportsAggregatePendingAndStateSummaries(t, report)
+	assertFollowImportsAggregateBatchAndRetrySummaries(t, report)
+}
+
 func TestFormatFollowImportsAggregateReportIncludesInputSections(t *testing.T) {
 	output := formatFollowImportsAggregateReport(followImportsAggregateReport{
 		Status:             "ok",
@@ -1698,6 +1932,57 @@ func TestFormatFollowImportsAggregateReportIncludesInputSections(t *testing.T) {
 		ActiveWatchMode:    "notify",
 		TotalConsumedBytes: 42,
 		TotalPendingBytes:  3,
+		WatchSummary: &followImportsWatchSummary{
+			EventKinds: map[string]int{
+				"watch_fallback": 1,
+			},
+			ModeTransitions: map[string]int{
+				"notify_to_poll": 1,
+			},
+		},
+		PendingSummary: &followImportsPendingSummary{
+			InputsWithPending: 1,
+			MaxPendingBytes:   3,
+			MaxPendingInput:   "b.jsonl",
+		},
+		StateSummary: &followImportsStateSummary{
+			TruncatedInputs:       1,
+			CheckpointResetInputs: 1,
+			ResetReasons: map[string]int{
+				"truncated": 1,
+			},
+		},
+		BatchSummary: &followImportsBatchSummary{
+			Attempted:          2,
+			Processed:          2,
+			Failed:             0,
+			Materialized:       0,
+			Suppressed:         1,
+			SuppressionReasons: map[string]int{"import_policy": 1},
+			WarningCount:       2,
+			WarningCodes: map[string]int{
+				common.WarnDedupeApplied:    1,
+				common.WarnImportSuppressed: 1,
+			},
+			WouldMaterialize:   0,
+			LinkedExistingNote: 1,
+			NoteDeduplicated:   1,
+			ImportDeduplicated: 1,
+		},
+		BatchErrorSummary: &followImportsBatchErrorSummary{
+			Count: 1,
+			Codes: map[string]int{
+				common.ErrWriteFailed: 1,
+			},
+		},
+		RetrySummary: &followImportsRetrySummary{
+			FailedOutputWritten:      1,
+			FailedManifestCount:      1,
+			InputsWithFailedOutput:   1,
+			InputsWithFailedManifest: 1,
+			FailedOutputPaths:        []string{"D:/tmp/failed-a.jsonl"},
+			FailedManifestPaths:      []string{"D:/tmp/failed-a.json"},
+		},
 		Inputs: []followImportsReport{
 			{
 				Status:    "ok",
@@ -1716,6 +2001,24 @@ func TestFormatFollowImportsAggregateReportIncludesInputSections(t *testing.T) {
 
 	for _, fragment := range []string{
 		"input_count=2",
+		"watch_summary_event_kind_watch_fallback=1",
+		"watch_summary_mode_transition_notify_to_poll=1",
+		"pending_summary_inputs_with_pending=1",
+		"pending_summary_max_pending_bytes=3",
+		"pending_summary_max_pending_input=b.jsonl",
+		"state_summary_truncated_inputs=1",
+		"state_summary_checkpoint_reset_inputs=1",
+		"state_summary_reset_reason_truncated=1",
+		"batch_summary_attempted=2",
+		"batch_summary_warning_count=2",
+		"batch_summary_warning_code_WARN_IMPORT_SUPPRESSED=1",
+		"batch_summary_suppression_reason_import_policy=1",
+		"batch_error_summary_count=1",
+		"batch_error_summary_code_ERR_WRITE_FAILED=1",
+		"retry_summary_failed_output_written=1",
+		"retry_summary_inputs_with_failed_manifest=1",
+		"retry_summary_failed_output_path_1=D:/tmp/failed-a.jsonl",
+		"retry_summary_failed_manifest_path_1=D:/tmp/failed-a.json",
 		"input_1_input=a.jsonl",
 		"input_2_state_file=b.offset.json",
 	} {

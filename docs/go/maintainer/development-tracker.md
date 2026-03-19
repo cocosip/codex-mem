@@ -1,6 +1,6 @@
 ﻿# codex-mem Go Development Tracker
 
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 Status: active
 
 ## Purpose
@@ -148,6 +148,13 @@ Immediate next tasks:
 4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
+
+### 2026-03-19 Session Update
+
+- Completed: Extended multi-input `follow-imports` aggregate reports with a top-level `batch_summary` rollup so operators can see aggregate attempted, processed, failed, materialized, suppressed, dedupe, suppression-reason, and warning-by-code counts without manually summing each nested input batch. Added a companion `retry_summary` block that totals failed-output and failed-manifest activity across the consumed inputs in the same pass and now also surfaces aggregate retry artifact paths, added a compact `batch_error_summary` block so the aggregate report also shows how many inputs surfaced follow-level `batch_error` payloads and which error codes appeared, added a `state_summary` block that rolls up truncation and checkpoint-reset visibility plus reset-reason counts across inputs, added a `pending_summary` block that counts inputs with trailing pending bytes and highlights the largest pending backlog, and then added a compact `watch_summary` block that rolls up watch-event kind counts plus mode-transition pairs for the current emitted watch event batch. Idle aggregate reports with pending-summary-only or state-summary-only changes now still emit so backlog and reset/truncation events are not silently hidden. JSON fixtures, format coverage, and operator docs now describe all six summary blocks alongside the existing per-input reports.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether this aggregate reporting slice is now complete, or whether the better next maintenance step is to consolidate the aggregate-report fixture/test setup so future shape changes touch fewer duplicated literals.
 
 ### 2026-03-18 Session Update
 

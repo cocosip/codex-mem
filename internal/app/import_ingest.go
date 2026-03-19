@@ -636,6 +636,10 @@ func suppressionReasonBucket(reason string) string {
 }
 
 func sortedSuppressionReasonKeys(counts map[string]int) []string {
+	return sortedPositiveCountKeys(counts)
+}
+
+func sortedPositiveCountKeys(counts map[string]int) []string {
 	keys := make([]string, 0, len(counts))
 	for key, count := range counts {
 		if count <= 0 {

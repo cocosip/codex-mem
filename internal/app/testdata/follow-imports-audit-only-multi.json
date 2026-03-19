@@ -1,11 +1,12 @@
 {
-  "status": "ok",
+  "status": "partial",
   "source": "relay_import",
   "input_count": 2,
   "audit_only": true,
   "consumed_inputs": 1,
   "idle_inputs": 1,
   "failed_inputs": 0,
+  "partial_inputs": 1,
   "requested_watch_mode": "auto",
   "active_watch_mode": "notify",
   "watch_fallbacks": 1,
@@ -25,6 +26,14 @@
       "consumed_bytes": 84
     }
   ],
+  "watch_summary": {
+    "event_kinds": {
+      "watch_fallback": 1
+    },
+    "mode_transitions": {
+      "notify_to_poll": 1
+    }
+  },
   "watch_poll_catchups": 1,
   "watch_poll_catchup_bytes": 42,
   "warnings": [
@@ -35,9 +44,58 @@
   ],
   "total_consumed_bytes": 42,
   "total_pending_bytes": 7,
+  "pending_summary": {
+    "inputs_with_pending": 1,
+    "max_pending_bytes": 7,
+    "max_pending_input": "D:\\Ops\\follow\\events-b.jsonl"
+  },
+  "state_summary": {
+    "truncated_inputs": 1,
+    "checkpoint_reset_inputs": 1,
+    "reset_reasons": {
+      "truncated": 1
+    }
+  },
+  "batch_summary": {
+    "attempted": 3,
+    "processed": 2,
+    "failed": 1,
+    "materialized": 0,
+    "suppressed": 1,
+    "suppression_reasons": {
+      "import_policy": 1
+    },
+    "warning_count": 2,
+    "warning_codes": {
+      "WARN_DEDUPE_APPLIED": 1,
+      "WARN_IMPORT_SUPPRESSED": 1
+    },
+    "would_materialize": 0,
+    "linked_existing_note": 1,
+    "note_deduplicated": 1,
+    "import_deduplicated": 1
+  },
+  "batch_error_summary": {
+    "count": 1,
+    "codes": {
+      "ERR_WRITE_FAILED": 1
+    }
+  },
+  "retry_summary": {
+    "failed_output_written": 1,
+    "failed_manifest_count": 1,
+    "inputs_with_failed_output": 1,
+    "inputs_with_failed_manifest": 1,
+    "failed_output_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.jsonl"
+    ],
+    "failed_manifest_paths": [
+      "D:\\Ops\\follow\\failed\\failed.events-a.0-42.json"
+    ]
+  },
   "inputs": [
     {
-      "status": "ok",
+      "status": "partial",
       "source": "relay_import",
       "input": "D:\\Ops\\follow\\events-a.jsonl",
       "state_file": "D:\\Ops\\follow\\events-a.offset.json",
@@ -48,9 +106,13 @@
       "consumed_bytes": 42,
       "pending_bytes": 0,
       "batch": {
-        "status": "ok",
+        "status": "partial",
         "source": "relay_import",
         "input": "D:\\Ops\\follow\\events-a.jsonl",
+        "failed_output": "D:\\Ops\\follow\\failed\\failed.events-a.0-42.jsonl",
+        "failed_output_written": 1,
+        "failed_manifest": "D:\\Ops\\follow\\failed\\failed.events-a.0-42.json",
+        "failed_manifest_count": 1,
         "scope": {
           "system_id": "sys_codex_mem",
           "system_name": "codex-mem",
@@ -74,10 +136,10 @@
           "started_at": "2026-03-18T01:36:00Z"
         },
         "audit_only": true,
-        "continue_on_error": false,
-        "attempted": 2,
+        "continue_on_error": true,
+        "attempted": 3,
         "processed": 2,
-        "failed": 0,
+        "failed": 1,
         "materialized": 0,
         "suppressed": 1,
         "suppression_reasons": {
@@ -86,7 +148,21 @@
         "would_materialize": 0,
         "linked_existing_note": 1,
         "note_deduplicated": 1,
-        "import_deduplicated": 1
+        "import_deduplicated": 1,
+        "warnings": [
+          {
+            "code": "WARN_DEDUPE_APPLIED",
+            "message": "matched an existing imported note and reused it"
+          },
+          {
+            "code": "WARN_IMPORT_SUPPRESSED",
+            "message": "matched an existing import record and skipped duplicate import"
+          }
+        ]
+      },
+      "batch_error": {
+        "code": "ERR_WRITE_FAILED",
+        "message": "follow-imports batch failed"
       }
     },
     {
@@ -99,7 +175,10 @@
       "active_watch_mode": "notify",
       "offset": 0,
       "consumed_bytes": 0,
-      "pending_bytes": 7
+      "pending_bytes": 7,
+      "truncated": true,
+      "checkpoint_reset": true,
+      "reset_reason": "truncated"
     }
   ]
 }

@@ -135,27 +135,79 @@ type followImportsReport struct {
 }
 
 type followImportsAggregateReport struct {
-	Status             string                `json:"status"`
-	Source             string                `json:"source"`
-	InputCount         int                   `json:"input_count"`
-	AuditOnly          bool                  `json:"audit_only,omitempty"`
-	ConsumedInputs     int                   `json:"consumed_inputs"`
-	IdleInputs         int                   `json:"idle_inputs"`
-	FailedInputs       int                   `json:"failed_inputs"`
-	PartialInputs      int                   `json:"partial_inputs,omitempty"`
-	RequestedWatchMode string                `json:"requested_watch_mode,omitempty"`
-	ActiveWatchMode    string                `json:"active_watch_mode,omitempty"`
-	WatchFallbacks     int                   `json:"watch_fallbacks,omitempty"`
-	WatchTransitions   int                   `json:"watch_transitions,omitempty"`
-	LastFallbackReason string                `json:"last_fallback_reason,omitempty"`
-	WatchEventCount    int                   `json:"watch_event_count,omitempty"`
-	WatchEvents        []followImportsEvent  `json:"watch_events,omitempty"`
-	WatchPollCatchups  int                   `json:"watch_poll_catchups,omitempty"`
-	WatchCatchupBytes  int                   `json:"watch_poll_catchup_bytes,omitempty"`
-	Warnings           []common.Warning      `json:"warnings,omitempty"`
-	TotalConsumedBytes int                   `json:"total_consumed_bytes"`
-	TotalPendingBytes  int                   `json:"total_pending_bytes"`
-	Inputs             []followImportsReport `json:"inputs"`
+	Status             string                          `json:"status"`
+	Source             string                          `json:"source"`
+	InputCount         int                             `json:"input_count"`
+	AuditOnly          bool                            `json:"audit_only,omitempty"`
+	ConsumedInputs     int                             `json:"consumed_inputs"`
+	IdleInputs         int                             `json:"idle_inputs"`
+	FailedInputs       int                             `json:"failed_inputs"`
+	PartialInputs      int                             `json:"partial_inputs,omitempty"`
+	RequestedWatchMode string                          `json:"requested_watch_mode,omitempty"`
+	ActiveWatchMode    string                          `json:"active_watch_mode,omitempty"`
+	WatchFallbacks     int                             `json:"watch_fallbacks,omitempty"`
+	WatchTransitions   int                             `json:"watch_transitions,omitempty"`
+	LastFallbackReason string                          `json:"last_fallback_reason,omitempty"`
+	WatchEventCount    int                             `json:"watch_event_count,omitempty"`
+	WatchEvents        []followImportsEvent            `json:"watch_events,omitempty"`
+	WatchSummary       *followImportsWatchSummary      `json:"watch_summary,omitempty"`
+	WatchPollCatchups  int                             `json:"watch_poll_catchups,omitempty"`
+	WatchCatchupBytes  int                             `json:"watch_poll_catchup_bytes,omitempty"`
+	Warnings           []common.Warning                `json:"warnings,omitempty"`
+	TotalConsumedBytes int                             `json:"total_consumed_bytes"`
+	TotalPendingBytes  int                             `json:"total_pending_bytes"`
+	PendingSummary     *followImportsPendingSummary    `json:"pending_summary,omitempty"`
+	StateSummary       *followImportsStateSummary      `json:"state_summary,omitempty"`
+	BatchSummary       *followImportsBatchSummary      `json:"batch_summary,omitempty"`
+	BatchErrorSummary  *followImportsBatchErrorSummary `json:"batch_error_summary,omitempty"`
+	RetrySummary       *followImportsRetrySummary      `json:"retry_summary,omitempty"`
+	Inputs             []followImportsReport           `json:"inputs"`
+}
+
+type followImportsWatchSummary struct {
+	EventKinds      map[string]int `json:"event_kinds,omitempty"`
+	ModeTransitions map[string]int `json:"mode_transitions,omitempty"`
+}
+
+type followImportsPendingSummary struct {
+	InputsWithPending int    `json:"inputs_with_pending"`
+	MaxPendingBytes   int    `json:"max_pending_bytes"`
+	MaxPendingInput   string `json:"max_pending_input,omitempty"`
+}
+
+type followImportsStateSummary struct {
+	TruncatedInputs       int            `json:"truncated_inputs"`
+	CheckpointResetInputs int            `json:"checkpoint_reset_inputs"`
+	ResetReasons          map[string]int `json:"reset_reasons,omitempty"`
+}
+
+type followImportsBatchSummary struct {
+	Attempted          int            `json:"attempted"`
+	Processed          int            `json:"processed"`
+	Failed             int            `json:"failed"`
+	Materialized       int            `json:"materialized"`
+	Suppressed         int            `json:"suppressed"`
+	SuppressionReasons map[string]int `json:"suppression_reasons,omitempty"`
+	WarningCount       int            `json:"warning_count,omitempty"`
+	WarningCodes       map[string]int `json:"warning_codes,omitempty"`
+	WouldMaterialize   int            `json:"would_materialize"`
+	LinkedExistingNote int            `json:"linked_existing_note"`
+	NoteDeduplicated   int            `json:"note_deduplicated"`
+	ImportDeduplicated int            `json:"import_deduplicated"`
+}
+
+type followImportsBatchErrorSummary struct {
+	Count int            `json:"count"`
+	Codes map[string]int `json:"codes,omitempty"`
+}
+
+type followImportsRetrySummary struct {
+	FailedOutputWritten      int      `json:"failed_output_written"`
+	FailedManifestCount      int      `json:"failed_manifest_count"`
+	InputsWithFailedOutput   int      `json:"inputs_with_failed_output"`
+	InputsWithFailedManifest int      `json:"inputs_with_failed_manifest"`
+	FailedOutputPaths        []string `json:"failed_output_paths,omitempty"`
+	FailedManifestPaths      []string `json:"failed_manifest_paths,omitempty"`
 }
 
 type followImportsHealthSnapshot struct {
@@ -1484,6 +1536,7 @@ func (s *followImportsRuntimeState) ApplyAggregate(report *followImportsAggregat
 	report.Warnings = followImportsRuntimeWarnings(s)
 	if report.WatchEventCount > 0 {
 		report.WatchEvents = append([]followImportsEvent(nil), s.PendingEvents...)
+		report.WatchSummary = buildFollowImportsWatchSummary(report.WatchEvents)
 		s.PendingEvents = nil
 	}
 }
@@ -1660,7 +1713,7 @@ func shouldWriteFollowImportsReport(report followImportsReport, once bool) bool 
 }
 
 func shouldWriteFollowImportsAggregateReport(report followImportsAggregateReport, once bool) bool {
-	return once || report.Status != followImportsStatusIdle || report.WatchEventCount > 0
+	return once || report.Status != followImportsStatusIdle || report.WatchEventCount > 0 || report.PendingSummary != nil || report.StateSummary != nil
 }
 
 func formatFollowImportsReport(report followImportsReport) string {
@@ -1690,6 +1743,70 @@ func formatFollowImportsAggregateReport(report followImportsAggregateReport) str
 		fmt.Sprintf("warnings=%d", len(report.Warnings)),
 		fmt.Sprintf("total_consumed_bytes=%d", report.TotalConsumedBytes),
 		fmt.Sprintf("total_pending_bytes=%d", report.TotalPendingBytes),
+	}
+	if report.WatchSummary != nil {
+		for _, key := range sortedPositiveCountKeys(report.WatchSummary.EventKinds) {
+			lines = append(lines, fmt.Sprintf("watch_summary_event_kind_%s=%d", key, report.WatchSummary.EventKinds[key]))
+		}
+		for _, key := range sortedPositiveCountKeys(report.WatchSummary.ModeTransitions) {
+			lines = append(lines, fmt.Sprintf("watch_summary_mode_transition_%s=%d", key, report.WatchSummary.ModeTransitions[key]))
+		}
+	}
+	if report.PendingSummary != nil {
+		lines = append(lines,
+			fmt.Sprintf("pending_summary_inputs_with_pending=%d", report.PendingSummary.InputsWithPending),
+			fmt.Sprintf("pending_summary_max_pending_bytes=%d", report.PendingSummary.MaxPendingBytes),
+			fmt.Sprintf("pending_summary_max_pending_input=%s", fallbackString(report.PendingSummary.MaxPendingInput)),
+		)
+	}
+	if report.StateSummary != nil {
+		lines = append(lines,
+			fmt.Sprintf("state_summary_truncated_inputs=%d", report.StateSummary.TruncatedInputs),
+			fmt.Sprintf("state_summary_checkpoint_reset_inputs=%d", report.StateSummary.CheckpointResetInputs),
+		)
+		for _, key := range sortedSuppressionReasonKeys(report.StateSummary.ResetReasons) {
+			lines = append(lines, fmt.Sprintf("state_summary_reset_reason_%s=%d", key, report.StateSummary.ResetReasons[key]))
+		}
+	}
+	if report.BatchSummary != nil {
+		lines = append(lines,
+			fmt.Sprintf("batch_summary_attempted=%d", report.BatchSummary.Attempted),
+			fmt.Sprintf("batch_summary_processed=%d", report.BatchSummary.Processed),
+			fmt.Sprintf("batch_summary_failed=%d", report.BatchSummary.Failed),
+			fmt.Sprintf("batch_summary_materialized=%d", report.BatchSummary.Materialized),
+			fmt.Sprintf("batch_summary_suppressed=%d", report.BatchSummary.Suppressed),
+			fmt.Sprintf("batch_summary_warning_count=%d", report.BatchSummary.WarningCount),
+			fmt.Sprintf("batch_summary_would_materialize=%d", report.BatchSummary.WouldMaterialize),
+			fmt.Sprintf("batch_summary_linked_existing_note=%d", report.BatchSummary.LinkedExistingNote),
+			fmt.Sprintf("batch_summary_note_deduplicated=%d", report.BatchSummary.NoteDeduplicated),
+			fmt.Sprintf("batch_summary_import_deduplicated=%d", report.BatchSummary.ImportDeduplicated),
+		)
+		for _, key := range sortedSuppressionReasonKeys(report.BatchSummary.SuppressionReasons) {
+			lines = append(lines, fmt.Sprintf("batch_summary_suppression_reason_%s=%d", key, report.BatchSummary.SuppressionReasons[key]))
+		}
+		for _, key := range sortedPositiveCountKeys(report.BatchSummary.WarningCodes) {
+			lines = append(lines, fmt.Sprintf("batch_summary_warning_code_%s=%d", key, report.BatchSummary.WarningCodes[key]))
+		}
+	}
+	if report.BatchErrorSummary != nil {
+		lines = append(lines, fmt.Sprintf("batch_error_summary_count=%d", report.BatchErrorSummary.Count))
+		for _, key := range sortedPositiveCountKeys(report.BatchErrorSummary.Codes) {
+			lines = append(lines, fmt.Sprintf("batch_error_summary_code_%s=%d", key, report.BatchErrorSummary.Codes[key]))
+		}
+	}
+	if report.RetrySummary != nil {
+		lines = append(lines,
+			fmt.Sprintf("retry_summary_failed_output_written=%d", report.RetrySummary.FailedOutputWritten),
+			fmt.Sprintf("retry_summary_failed_manifest_count=%d", report.RetrySummary.FailedManifestCount),
+			fmt.Sprintf("retry_summary_inputs_with_failed_output=%d", report.RetrySummary.InputsWithFailedOutput),
+			fmt.Sprintf("retry_summary_inputs_with_failed_manifest=%d", report.RetrySummary.InputsWithFailedManifest),
+		)
+		for i, path := range report.RetrySummary.FailedOutputPaths {
+			lines = append(lines, fmt.Sprintf("retry_summary_failed_output_path_%d=%s", i+1, path))
+		}
+		for i, path := range report.RetrySummary.FailedManifestPaths {
+			lines = append(lines, fmt.Sprintf("retry_summary_failed_manifest_path_%d=%s", i+1, path))
+		}
 	}
 	for i, event := range report.WatchEvents {
 		prefix := fmt.Sprintf("watch_event_%d", i+1)
@@ -2796,6 +2913,11 @@ func newFollowImportsAggregateReport(source imports.Source, reports []followImpo
 		aggregate.AuditOnly = aggregate.AuditOnly || report.AuditOnly
 		aggregate.TotalConsumedBytes += report.ConsumedBytes
 		aggregate.TotalPendingBytes += report.PendingBytes
+		aggregate.PendingSummary = mergeFollowImportsPendingSummary(aggregate.PendingSummary, report)
+		aggregate.StateSummary = mergeFollowImportsStateSummary(aggregate.StateSummary, report)
+		aggregate.BatchSummary = mergeFollowImportsBatchSummary(aggregate.BatchSummary, report.Batch)
+		aggregate.BatchErrorSummary = mergeFollowImportsBatchErrorSummary(aggregate.BatchErrorSummary, report.BatchError)
+		aggregate.RetrySummary = mergeFollowImportsRetrySummary(aggregate.RetrySummary, report.Batch)
 		switch report.Status {
 		case followImportsStatusIdle:
 			aggregate.IdleInputs++
@@ -2822,6 +2944,173 @@ func newFollowImportsAggregateReport(source imports.Source, reports []followImpo
 		aggregate.Status = "ok"
 	}
 	return aggregate
+}
+
+func mergeFollowImportsPendingSummary(summary *followImportsPendingSummary, report followImportsReport) *followImportsPendingSummary {
+	if report.PendingBytes <= 0 {
+		return summary
+	}
+	if summary == nil {
+		summary = &followImportsPendingSummary{}
+	}
+	summary.InputsWithPending++
+	if report.PendingBytes > summary.MaxPendingBytes {
+		summary.MaxPendingBytes = report.PendingBytes
+		summary.MaxPendingInput = strings.TrimSpace(report.Input)
+	}
+	return summary
+}
+
+func buildFollowImportsWatchSummary(events []followImportsEvent) *followImportsWatchSummary {
+	if len(events) == 0 {
+		return nil
+	}
+	summary := &followImportsWatchSummary{}
+	for _, event := range events {
+		kind := strings.TrimSpace(event.Kind)
+		if kind != "" {
+			if summary.EventKinds == nil {
+				summary.EventKinds = make(map[string]int)
+			}
+			summary.EventKinds[kind]++
+		}
+		transition := followImportsWatchTransitionKey(event.PreviousWatchMode, event.ActiveWatchMode)
+		if transition == "" {
+			continue
+		}
+		if summary.ModeTransitions == nil {
+			summary.ModeTransitions = make(map[string]int)
+		}
+		summary.ModeTransitions[transition]++
+	}
+	return summary
+}
+
+func followImportsWatchTransitionKey(previous string, active string) string {
+	previous = strings.TrimSpace(previous)
+	active = strings.TrimSpace(active)
+	if previous == "" || active == "" || previous == active {
+		return ""
+	}
+	return previous + "_to_" + active
+}
+
+func mergeFollowImportsStateSummary(summary *followImportsStateSummary, report followImportsReport) *followImportsStateSummary {
+	if !report.Truncated && !report.CheckpointReset {
+		return summary
+	}
+	if summary == nil {
+		summary = &followImportsStateSummary{}
+	}
+	if report.Truncated {
+		summary.TruncatedInputs++
+	}
+	if report.CheckpointReset {
+		summary.CheckpointResetInputs++
+	}
+	reason := strings.TrimSpace(report.ResetReason)
+	if reason == "" {
+		return summary
+	}
+	if summary.ResetReasons == nil {
+		summary.ResetReasons = make(map[string]int)
+	}
+	summary.ResetReasons[reason]++
+	return summary
+}
+
+func mergeFollowImportsBatchSummary(summary *followImportsBatchSummary, batch *ingestImportsReport) *followImportsBatchSummary {
+	if batch == nil {
+		return summary
+	}
+	if summary == nil {
+		summary = &followImportsBatchSummary{}
+	}
+	summary.Attempted += batch.Attempted
+	summary.Processed += batch.Processed
+	summary.Failed += batch.Failed
+	summary.Materialized += batch.Materialized
+	summary.Suppressed += batch.Suppressed
+	summary.WouldMaterialize += batch.WouldMaterialize
+	summary.LinkedExistingNote += batch.LinkedExistingNote
+	summary.NoteDeduplicated += batch.NoteDeduplicated
+	summary.ImportDeduplicated += batch.ImportDeduplicated
+	summary.WarningCount += len(batch.Warnings)
+	for reason, count := range batch.SuppressionReasons {
+		if count <= 0 {
+			continue
+		}
+		if summary.SuppressionReasons == nil {
+			summary.SuppressionReasons = make(map[string]int)
+		}
+		summary.SuppressionReasons[reason] += count
+	}
+	for _, warning := range batch.Warnings {
+		code := strings.TrimSpace(warning.Code)
+		if code == "" {
+			continue
+		}
+		if summary.WarningCodes == nil {
+			summary.WarningCodes = make(map[string]int)
+		}
+		summary.WarningCodes[code]++
+	}
+	return summary
+}
+
+func mergeFollowImportsBatchErrorSummary(summary *followImportsBatchErrorSummary, payload *common.ErrorPayload) *followImportsBatchErrorSummary {
+	if payload == nil {
+		return summary
+	}
+	if summary == nil {
+		summary = &followImportsBatchErrorSummary{}
+	}
+	summary.Count++
+	code := strings.TrimSpace(payload.Code)
+	if code == "" {
+		return summary
+	}
+	if summary.Codes == nil {
+		summary.Codes = make(map[string]int)
+	}
+	summary.Codes[code]++
+	return summary
+}
+
+func mergeFollowImportsRetrySummary(summary *followImportsRetrySummary, batch *ingestImportsReport) *followImportsRetrySummary {
+	if batch == nil {
+		return summary
+	}
+	if batch.FailedOutputWritten <= 0 && batch.FailedManifestCount <= 0 {
+		return summary
+	}
+	if summary == nil {
+		summary = &followImportsRetrySummary{}
+	}
+	summary.FailedOutputWritten += batch.FailedOutputWritten
+	summary.FailedManifestCount += batch.FailedManifestCount
+	if batch.FailedOutputWritten > 0 {
+		summary.InputsWithFailedOutput++
+		summary.FailedOutputPaths = appendUniqueNonEmptyString(summary.FailedOutputPaths, batch.FailedOutput)
+	}
+	if batch.FailedManifestCount > 0 {
+		summary.InputsWithFailedManifest++
+		summary.FailedManifestPaths = appendUniqueNonEmptyString(summary.FailedManifestPaths, batch.FailedManifest)
+	}
+	return summary
+}
+
+func appendUniqueNonEmptyString(values []string, candidate string) []string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
 }
 
 func deriveFollowImportsInputBasePath(base string, inputPath string, inputCount int) string {
