@@ -53,6 +53,23 @@ This spec does not require:
 - web UI
 - team synchronization
 
+## Draft Future Work
+
+The following documents are exploratory and non-normative:
+
+- [v2-outline.md](./v2-outline.md)
+  Early draft direction for possible v2 hybrid retrieval work.
+- [v2-runtime-resurfacing.md](./v2-runtime-resurfacing.md)
+  Draft runtime algorithm and working-context shape for implicit memory resurfacing during active work.
+- [v2-config-draft.md](./v2-config-draft.md)
+  Draft configuration direction for hybrid retrieval and implicit runtime resurfacing gates.
+- [v2-embedding-storage-draft.md](./v2-embedding-storage-draft.md)
+  Draft storage and backfill direction for embeddings, semantic indexes, and degraded local-first operation.
+- [v2-conformance-scenarios-draft.md](./v2-conformance-scenarios-draft.md)
+  Draft verification matrix for lexical fallback, hybrid retrieval, degraded semantic states, and implicit resurfacing controls.
+- [v2-migration-sequencing-draft.md](./v2-migration-sequencing-draft.md)
+  Draft rollout order for additive metadata migration, sidecar bootstrap, hybrid retrieval gating, and later resurfacing.
+
 ## Appendices
 
 Supporting appendices are available under [appendices/](./appendices/README.md), including:

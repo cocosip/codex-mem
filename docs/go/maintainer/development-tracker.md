@@ -1,6 +1,6 @@
 ﻿# codex-mem Go Development Tracker
 
-Last updated: 2026-03-19
+Last updated: 2026-03-20
 Status: active
 
 ## Purpose
@@ -148,6 +148,34 @@ Immediate next tasks:
 4. Do not reintroduce a parallel in-tree MCP runtime, and only revisit transport internals if a real client compatibility issue appears.
 
 ## Decisions Log
+
+### 2026-03-20 Session Update
+
+- Completed: Continued the exploratory v2 documentation set by adding a maintainer-facing semantic-interfaces draft plus a migration-sequencing draft. The interface doc maps the v2 design into the current Go package boundaries, proposes additive retrieval, memory-domain, semantic-index, and runtime-resurfacing interfaces, and keeps `retrieval.Service` on a nil-safe lexical-first path. The migration doc then turns the same design into a rollout order: interfaces first, additive note-embedding metadata migration next, sidecar/backfill tooling after that, notes-only hybrid retrieval later, and implicit resurfacing only after hybrid retrieval itself is stable.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether to keep extending docs with an implementation-spike plan, or start the first Go slice for additive metadata fields and nil-safe semantic interfaces.
+
+### 2026-03-20 Session Update
+
+- Completed: Continued the exploratory v2 documentation set with two more design artifacts: a v2 conformance-scenarios draft and an operator-facing embedding backfill/health draft. The conformance doc defines the minimum scenario matrix for lexical-only baseline behavior, happy-path hybrid retrieval, degraded semantic states, runtime resurfacing controls, privacy/lifecycle guardrails, and sidecar rebuild recovery. The operator doc turns the storage draft into a rollout sequence, health-state model, expected summary fields, and repair-oriented workflows, while the roadmap and readmes now link both drafts.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next v2 design pass should sketch concrete Go interfaces and migration ordering, or stop design expansion and begin implementation spikes behind config gates.
+
+### 2026-03-20 Session Update
+
+- Completed: Continued the exploratory v2 documentation set by adding a dedicated embedding-storage and backfill draft. The new doc compares direct-in-SQLite, local sidecar, and external-backend shapes; recommends SQLite metadata plus a pluggable local sidecar index for the first rollout; defines minimal embedding lifecycle metadata, explicit one-shot backfill flow, repair semantics, and degraded retrieval rules; and links that design back into the v2 outline, roadmap, and doc indexes.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next v2 draft follow-up should add operator-facing backfill/health guidance or a conformance-scenarios draft for lexical-only, hybrid, and degraded retrieval modes.
+
+### 2026-03-20 Session Update
+
+- Completed: Continued the exploratory v2 documentation set by adding a dedicated runtime resurfacing draft plus a companion v2 config draft. The new docs define a suggested consult-scoring pipeline, prototype confidence thresholds, session-local suppression-cache cooling rules, a shaped working-context payload for implicit memory injection, and a notes-first early-v2 boundary that keeps handoffs lexical-only at first. The v2 outline, roadmap, and doc indexes now link to the new drafts so the design direction is easier to re-enter.
+- In progress: none.
+- Blockers: none.
+- Next step: decide whether the next v2 draft follow-up should focus on embedding storage/backfill design, conformance scenarios for hybrid retrieval, or pause until implementation work begins.
 
 ### 2026-03-19 Session Update
 

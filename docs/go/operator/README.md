@@ -8,6 +8,8 @@ Start here:
   Real MCP client registration examples for local stdio and remote HTTP.
 - [Import Ingestion](./import-ingestion.md)
   JSONL batch ingestion through `ingest-imports`, checkpointed follow-mode ingestion through `follow-imports`, hygiene commands such as `cleanup-follow-imports` and `audit-follow-imports`, and `list-command-examples` discovery.
+- [V2 Embedding Backfill And Health Draft](./v2-embedding-backfill-health-draft.md)
+  Early operator draft for semantic backfill, health checks, and rebuild workflows.
 - [Release Readiness](./release-readiness.md)
   Packaging, readiness, and release checklist.
 - [Troubleshooting](./troubleshooting.md)

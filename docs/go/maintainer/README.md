@@ -14,6 +14,18 @@ Start here:
   Language-neutral execution backlog used by the Go plan.
 - [MCP Integration](./mcp-integration.md)
   Source-tree MCP smoke tests and transport behavior.
+- [V2 Hybrid Retrieval Roadmap](./v2-hybrid-retrieval-roadmap.md)
+  Early maintainer roadmap for possible v2 retrieval work.
+- [V2 Semantic Interfaces Draft](./v2-semantic-interfaces-draft.md)
+  Draft package and interface boundaries for semantic retrieval implementation.
+- [Spec V2 Runtime Resurfacing Draft](../../spec/v2-runtime-resurfacing.md)
+  Draft trigger, threshold, and working-context rules for implicit memory resurfacing.
+- [Spec V2 Embedding Storage Draft](../../spec/v2-embedding-storage-draft.md)
+  Draft storage, sidecar-index, and backfill direction for semantic retrieval.
+- [Spec V2 Conformance Scenarios Draft](../../spec/v2-conformance-scenarios-draft.md)
+  Draft verification matrix for lexical fallback, hybrid retrieval, degraded semantic states, and resurfacing controls.
+- [Spec V2 Migration Sequencing Draft](../../spec/v2-migration-sequencing-draft.md)
+  Draft rollout order for embedding metadata migration and staged hybrid enablement.
 
 For packaged-binary usage and deployment, see [operator/](../operator/README.md).
 For end-user concepts and prompts, see [user/](../user/README.md).
